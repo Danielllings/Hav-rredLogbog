@@ -2002,6 +2002,7 @@ async function refreshYearsAndStats(
 
     // Kør gem i baggrunden; UI er allerede lukket
     (async () => {
+      let tripSaved = false;
       try {
         let evaluation: any = null;
 
@@ -2019,6 +2020,7 @@ async function refreshYearsAndStats(
 
         if (!evaluation) {
           await queueOfflineTrip({ ...basePayload, needs_dmi: true });
+          tripSaved = true;
         } else {
           try {
             await saveTrip({
@@ -2026,6 +2028,7 @@ async function refreshYearsAndStats(
               meta_json: JSON.stringify({ evaluation }),
               needs_dmi: false,
             } as any);
+            tripSaved = true;
           } catch (e) {
             console.log("Kunne ikke gemme tur online, køer til offline:", e);
             await queueOfflineTrip({
@@ -2033,6 +2036,7 @@ async function refreshYearsAndStats(
               meta_json: JSON.stringify({ evaluation }),
               needs_dmi: false,
             });
+            tripSaved = true;
           }
         }
 
@@ -2052,6 +2056,18 @@ async function refreshYearsAndStats(
           await refreshYearsAndStats(year);
         } catch (e) {
           console.log("Kunne ikke opdatere lister/stats efter gem:", e);
+        }
+      } catch (e) {
+        // Failsafe: Hvis alt andet fejler, prøv at køe turen en sidste gang
+        console.log("Kritisk fejl ved gem af tur, forsøger failsafe:", e);
+        if (!tripSaved) {
+          try {
+            await queueOfflineTrip({ ...basePayload, needs_dmi: true });
+            console.log("Failsafe: Tur køet til offline sync");
+          } catch (queueError) {
+            console.error("KRITISK: Kunne ikke gemme tur - hverken online eller offline!", queueError);
+            // Her kunne man evt. vise en alert til brugeren
+          }
         }
       } finally {
         setSavingTrip(false);

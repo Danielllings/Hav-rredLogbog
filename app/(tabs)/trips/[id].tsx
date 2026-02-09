@@ -632,6 +632,24 @@ export default function TripDetailScreen() {
                 )}
               </Pressable>
             </View>
+          ) : evaluation.note && !evaluation.airTempC && !evaluation.windMS ? (
+            <View style={styles.noWeatherContainer}>
+              <Text style={styles.body}>{evaluation.note}</Text>
+              <Pressable
+                style={styles.syncWeatherBtn}
+                onPress={handleSyncWeather}
+                disabled={syncingWeather}
+              >
+                {syncingWeather ? (
+                  <ActivityIndicator size="small" color="#000" />
+                ) : (
+                  <>
+                    <Ionicons name="sync" size={16} color="#000" />
+                    <Text style={styles.syncWeatherBtnText}>{t("syncWeather")}</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
           ) : (
             <View style={{ gap: 6 }}>
               {evaluation.note && (
@@ -706,9 +724,22 @@ export default function TripDetailScreen() {
               <View style={styles.sourceSection}>
                 <View style={styles.sourceHeader}>
                   <Text style={styles.sourceLabel}>{t("sourceDmi")}</Text>
-                  {dataTimeStr && (
-                    <Text style={styles.sourceTime}>{dataTimeStr}</Text>
-                  )}
+                  <View style={styles.sourceHeaderRight}>
+                    {dataTimeStr && (
+                      <Text style={styles.sourceTime}>{dataTimeStr}</Text>
+                    )}
+                    <Pressable
+                      style={styles.syncWeatherBtnSmall}
+                      onPress={handleSyncWeather}
+                      disabled={syncingWeather}
+                    >
+                      {syncingWeather ? (
+                        <ActivityIndicator size="small" color={THEME.graphYellow} />
+                      ) : (
+                        <Ionicons name="sync" size={16} color={THEME.graphYellow} />
+                      )}
+                    </Pressable>
+                  </View>
                 </View>
 
                 <View style={styles.sourceStatusRow}>
@@ -1677,6 +1708,16 @@ const styles = StyleSheet.create({
   sourceTime: {
     fontSize: 11,
     color: THEME.textSec,
+  },
+  sourceHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  syncWeatherBtnSmall: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
   },
   sourceStatusRow: {
     flexDirection: "row",

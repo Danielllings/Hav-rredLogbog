@@ -268,14 +268,6 @@ export async function fetchClimateForTrip(
       fetchStationValues(station.id, "mean_wind_dir", queryStartIso, queryEndIso),
     ]);
 
-    // console.log(
-      "DMI climate rows:",
-      station.id,
-      "temp", tempVals.length,
-      "wind", windSpeedVals.length,
-      "dir", windDirVals.length
-    );
-
     const map: { [ts: number]: ClimatePoint } = {};
 
     for (const p of tempVals) {

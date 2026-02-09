@@ -522,16 +522,6 @@ export async function fetchOceanForTrip(
         : Promise.resolve([]),
     ]);
 
-    // console.log(
-      "DMI ocean rows:",
-      tempStation
-        ? `${tempStation.id} tw ${tempVals.length}`
-        : "ingen tempStation med data",
-      levelStation
-        ? `${levelStation.id} dvr ${levelDvrVals.length} ln ${levelLnVals.length}`
-        : "ingen levelStation"
-    );
-
     // Saml vandstand fra både DVR og LN
     const combinedLevelVals: { ts: number; value: number }[] = [
       ...levelDvrVals,

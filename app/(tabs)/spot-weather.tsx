@@ -392,11 +392,6 @@ export default function SpotWeatherScreen() {
         const edr = await getSpotForecastEdr(pos.latitude, pos.longitude);
 
         if (edr) {
-          // console.log("Modtog EDR data:", {
-            air: edr.airTempSeries.length,
-            ocean: edr.waterLevelSeries.length,
-            waves: edr.waveHeightSeries.length,
-          });
           setEdrData(edr);
         } else {
           setErrorMsg(t("noWeatherDataAvailable"));

@@ -56,6 +56,7 @@ import {
 
 // BRUG trips-helper i stedet for catches
 import { getFishCountForSpot } from "../../lib/trips";
+import { useLanguage } from "../../lib/i18n";
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -217,11 +218,16 @@ function getWeatherIcon(
   return { name: isNight ? "snow" : "snow", color: THEME.blue };
 }
 
-const dayNames = ["Søn", "Man", "Tir", "Ons", "Tor", "Fre", "Lør"];
+type TranslateFn = (key: string) => string;
 
-function getForecastDays(edrData: EdrForecast | null) {
+function getForecastDays(edrData: EdrForecast | null, t?: TranslateFn) {
   if (!edrData || !edrData.airTempSeries || edrData.airTempSeries.length === 0)
     return [];
+
+  const dayNames = t
+    ? [t("sun"), t("mon"), t("tue"), t("wed"), t("thu"), t("fri"), t("sat")]
+    : ["Søn", "Man", "Tir", "Ons", "Tor", "Fre", "Lør"];
+  const todayLabel = t ? t("today") : "I dag";
 
   const days: { label: string; icon: any; temp: number }[] = [];
   const today = new Date();
@@ -249,7 +255,7 @@ function getForecastDays(edrData: EdrForecast | null) {
       checkDate.getHours() < 6 || checkDate.getHours() > 20;
 
     days.push({
-      label: i === 0 ? "I dag" : dayNames[checkDate.getDay()],
+      label: i === 0 ? todayLabel : dayNames[checkDate.getDay()],
       icon: getWeatherIcon(dataPoint.v, isNight).name,
       temp: dataPoint.v,
     });
@@ -275,6 +281,7 @@ function getSunTimes(lat: number, lon: number) {
 
 export default function SpotWeatherScreen() {
   const mapRef = useRef<MapView | null>(null);
+  const { t } = useLanguage();
 
   const [pos, setPos] = useState<LatLng | null>(null);
   const [showForecast, setShowForecast] = useState(false);
@@ -342,7 +349,7 @@ export default function SpotWeatherScreen() {
         const rows = await listSpots();
         setSpots(rows);
       } catch (e) {
-        console.log("Kunne ikke hente spots", e);
+        console.log("Could not load spots", e);
       }
     })();
   }, []);
@@ -366,7 +373,7 @@ export default function SpotWeatherScreen() {
         }
         setBestSpotId(bestId);
       } catch (e) {
-        console.log("Kunne ikke beregne bedste spot", e);
+        console.log("Could not calculate best spot", e);
         setBestSpotId(null);
       }
     })();
@@ -392,11 +399,11 @@ export default function SpotWeatherScreen() {
           });
           setEdrData(edr);
         } else {
-          setErrorMsg("Kunne ikke hente prognosedata.");
+          setErrorMsg(t("noWeatherDataAvailable"));
         }
       } catch (e) {
-        console.log("Fejl:", e);
-        setErrorMsg("Der skete en fejl.");
+        console.log("Error:", e);
+        setErrorMsg(t("error"));
       } finally {
         setLoading(false);
       }
@@ -453,13 +460,13 @@ export default function SpotWeatherScreen() {
       try {
         const edr = await getSpotForecastEdr(p.latitude, p.longitude);
         if (!edr) {
-          setSpotErrorMsg("Kunne ikke hente prognosedata for spottet.");
+          setSpotErrorMsg(t("noWeatherDataAvailable"));
         } else {
           setSpotEdrData(edr);
         }
       } catch (e) {
-        console.log("Fejl spot-EDR:", e);
-        setSpotErrorMsg("Der skete en fejl ved hentning af prognose.");
+        console.log("Error spot-EDR:", e);
+        setSpotErrorMsg(t("error"));
       } finally {
         setSpotLoading(false);
       }
@@ -470,7 +477,7 @@ export default function SpotWeatherScreen() {
         const count = await getFishCountForSpot(selectedSpot.id);
         setSpotFishCount(count);
       } catch (e) {
-        console.log("Kunne ikke hente antal fisk for spot", e);
+        console.log("Could not fetch fish count for spot", e);
         setSpotFishCount(0);
       }
     })();
@@ -484,10 +491,10 @@ export default function SpotWeatherScreen() {
       if (selectedSpot?.id === spot.id) setSelectedSpot(null);
       setSpotDeleteTarget(null);
     } catch (e: any) {
-      console.log("Kunne ikke slette spot:", e);
+      console.log("Could not delete spot:", e);
       Alert.alert(
-        "Fejl",
-        e?.message ?? "Kunne ikke slette spottet. Prøv igen."
+        t("error"),
+        e?.message ?? t("couldNotDeleteSpot")
       );
     } finally {
       setSpotDeleteLoading(false);
@@ -516,7 +523,7 @@ export default function SpotWeatherScreen() {
     if (!renameTarget) return;
     const newName = renameValue.trim();
     if (!newName) {
-      setRenameError("Navn skal udfyldes.");
+      setRenameError(t("nameRequired"));
       return;
     }
     setRenameLoading(true);
@@ -533,8 +540,8 @@ export default function SpotWeatherScreen() {
       );
       setRenameTarget(null);
     } catch (e) {
-      console.log("Kunne ikke omdøbe spot", e);
-      setRenameError("Kunne ikke omdøbe spot. Prøv igen.");
+      console.log("Could not rename spot", e);
+      setRenameError(t("couldNotRenameSpot"));
     } finally {
       setRenameLoading(false);
     }
@@ -634,7 +641,7 @@ export default function SpotWeatherScreen() {
       edrData.pressureSeries.length > 0 ||
       edrData.cloudCoverSeries.length > 0);
 
-  const forecastDays = getForecastDays(edrData);
+  const forecastDays = getForecastDays(edrData, t);
 
   const mapBackground = mapLayer === "orto" ? "#0b0b0f" : THEME.bg;
   const currentMapStyle = isAndroid
@@ -700,6 +707,7 @@ export default function SpotWeatherScreen() {
               spot={spot}
               isBestSpot={isBestSpot}
               useNativeMarker={hasGoogleMapsKey}
+              t={t}
               onPress={() => {
                 setShowLocationActions(false);
                 setShowForecast(false);
@@ -720,7 +728,7 @@ export default function SpotWeatherScreen() {
           {pos && !selectedSpot && (
             <Marker
               coordinate={pos}
-              title="Valgt punkt"
+              title={t("selectedPoint")}
               centerOffset={{ x: 0, y: -15 }}
             >
               <View style={styles.pinBody}>
@@ -787,7 +795,7 @@ export default function SpotWeatherScreen() {
                 <Ionicons name="location" size={18} color={THEME.graphYellow} />
               </View>
               <View style={styles.locationCardInfo}>
-                <Text style={styles.locationCardTitle}>Valgt lokation</Text>
+                <Text style={styles.locationCardTitle}>{t("selectedLocation")}</Text>
                 <Text style={styles.locationCardCoords}>
                   {pos.latitude.toFixed(5)}, {pos.longitude.toFixed(5)}
                 </Text>
@@ -803,7 +811,7 @@ export default function SpotWeatherScreen() {
                 }}
               >
                 <Ionicons name="cloud" size={16} color="#000" />
-                <Text style={styles.locationPrimaryBtnText}>Hent vejr</Text>
+                <Text style={styles.locationPrimaryBtnText}>{t("getWeather")}</Text>
               </Pressable>
 
               <Pressable
@@ -815,7 +823,7 @@ export default function SpotWeatherScreen() {
                 }}
               >
                 <Ionicons name="bookmark-outline" size={16} color={THEME.text} />
-                <Text style={styles.locationSecondaryBtnText}>Gem spot</Text>
+                <Text style={styles.locationSecondaryBtnText}>{t("saveSpot")}</Text>
               </Pressable>
             </View>
           </View>
@@ -860,7 +868,7 @@ export default function SpotWeatherScreen() {
                 <View style={styles.weatherTitleIcon}>
                   <Ionicons name="cloud" size={20} color={THEME.graphYellow} />
                 </View>
-                <Text style={styles.weatherTitle}>Vejr & Hav</Text>
+                <Text style={styles.weatherTitle}>{t("weatherAndSea")}</Text>
               </View>
 
               {/* Sun times */}
@@ -875,7 +883,7 @@ export default function SpotWeatherScreen() {
                       <View style={styles.horizonLine} />
                     </View>
                     <View>
-                      <Text style={styles.sunTimeLabel}>Solopgang</Text>
+                      <Text style={styles.sunTimeLabel}>{t("sunrise")}</Text>
                       <Text style={styles.sunTimeValue}>{sunTimes.sunrise}</Text>
                     </View>
                   </View>
@@ -888,7 +896,7 @@ export default function SpotWeatherScreen() {
                       <View style={[styles.horizonLine, { backgroundColor: "#FF6347" }]} />
                     </View>
                     <View>
-                      <Text style={styles.sunTimeLabel}>Solnedgang</Text>
+                      <Text style={styles.sunTimeLabel}>{t("sunset")}</Text>
                       <Text style={styles.sunTimeValue}>{sunTimes.sunset}</Text>
                     </View>
                   </View>
@@ -914,7 +922,7 @@ export default function SpotWeatherScreen() {
               {loading && (
                 <View style={styles.weatherLoadingRow}>
                   <ActivityIndicator color={THEME.graphYellow} />
-                  <Text style={styles.weatherLoadingText}>Henter prognoser…</Text>
+                  <Text style={styles.weatherLoadingText}>{t("loadingForecasts")}</Text>
                 </View>
               )}
 
@@ -929,7 +937,7 @@ export default function SpotWeatherScreen() {
               {!loading && edrData && !hasAnyData && (
                 <View style={styles.weatherEmptyBox}>
                   <Ionicons name="cloud-offline" size={24} color={THEME.textSec} />
-                  <Text style={styles.weatherEmptyText}>Ingen data tilgængelig</Text>
+                  <Text style={styles.weatherEmptyText}>{t("noDataAvailable")}</Text>
                 </View>
               )}
             </View>
@@ -943,7 +951,7 @@ export default function SpotWeatherScreen() {
                   {edrData.airTempSeries.length > 0 && (
                     <ScrollableGraph
                       series={edrData.airTempSeries}
-                      label="Lufttemperatur"
+                      label={t("airTemperature")}
                       unit="°C"
                       color={THEME.graphYellow}
                     />
@@ -952,7 +960,7 @@ export default function SpotWeatherScreen() {
                     <ScrollableGraph
                       series={edrData.windSpeedSeries}
                       dirSeries={edrData.windDirSeries}
-                      label="Vind & Retning"
+                      label={`${t("windSpeed")} & ${t("windDir")}`}
                       unit="m/s"
                       color={THEME.textSec}
                     />
@@ -960,7 +968,7 @@ export default function SpotWeatherScreen() {
                   {edrData.humiditySeries.length > 0 && (
                     <ScrollableGraph
                       series={edrData.humiditySeries}
-                      label="Luftfugtighed"
+                      label={t("humidity")}
                       unit="%"
                       color={THEME.cyan}
                     />
@@ -968,7 +976,7 @@ export default function SpotWeatherScreen() {
                   {edrData.pressureSeries.length > 0 && (
                     <ScrollableGraph
                       series={edrData.pressureSeries}
-                      label="Tryk"
+                      label={t("pressure")}
                       unit="hPa"
                       color={THEME.purple}
                     />
@@ -976,7 +984,7 @@ export default function SpotWeatherScreen() {
                   {edrData.cloudCoverSeries.length > 0 && (
                     <ScrollableGraph
                       series={edrData.cloudCoverSeries}
-                      label="Skydække"
+                      label={t("cloudCover")}
                       unit="%"
                       color={THEME.textSec}
                     />
@@ -984,7 +992,7 @@ export default function SpotWeatherScreen() {
                   {edrData.waveHeightSeries.length > 0 && (
                     <ScrollableGraph
                       series={edrData.waveHeightSeries}
-                      label="Bølgehøjde"
+                      label={t("waveHeight")}
                       unit="m"
                       color={THEME.blue}
                     />
@@ -992,7 +1000,7 @@ export default function SpotWeatherScreen() {
                   {edrData.waterLevelSeries.length > 0 && (
                     <ScrollableGraph
                       series={edrData.waterLevelSeries}
-                      label="Vandstand"
+                      label={t("waterLevel")}
                       unit="cm"
                       color={THEME.blue}
                       zeroLineAt={0}
@@ -1020,7 +1028,7 @@ export default function SpotWeatherScreen() {
                 <View style={styles.popupIconCircle}>
                   <Ionicons name="layers" size={20} color="#000" />
                 </View>
-                <Text style={styles.popupTitle}>Kortlag</Text>
+                <Text style={styles.popupTitle}>{t("mapLayer")}</Text>
               </View>
               <Pressable
                 style={styles.popupCloseBtn}
@@ -1044,7 +1052,7 @@ export default function SpotWeatherScreen() {
               >
                 <View style={styles.layerOptionLeft}>
                   <Ionicons name="map-outline" size={20} color={mapLayer === "standard" ? THEME.graphYellow : THEME.textSec} />
-                  <Text style={[styles.layerOptionLabel, mapLayer === "standard" && styles.layerOptionLabelActive]}>Standardkort</Text>
+                  <Text style={[styles.layerOptionLabel, mapLayer === "standard" && styles.layerOptionLabelActive]}>{t("standardMap")}</Text>
                 </View>
                 {mapLayer === "standard" && (
                   <Ionicons name="checkmark-circle" size={22} color={THEME.graphYellow} />
@@ -1063,7 +1071,7 @@ export default function SpotWeatherScreen() {
               >
                 <View style={styles.layerOptionLeft}>
                   <Ionicons name="earth" size={20} color={mapLayer === "orto" ? THEME.graphYellow : THEME.textSec} />
-                  <Text style={[styles.layerOptionLabel, mapLayer === "orto" && styles.layerOptionLabelActive]}>Ortokort</Text>
+                  <Text style={[styles.layerOptionLabel, mapLayer === "orto" && styles.layerOptionLabelActive]}>{t("orthoMap")}</Text>
                 </View>
                 {mapLayer === "orto" && (
                   <Ionicons name="checkmark-circle" size={22} color={THEME.graphYellow} />
@@ -1075,7 +1083,7 @@ export default function SpotWeatherScreen() {
             <View style={styles.popupToggleRow}>
               <View style={styles.popupToggleLeft}>
                 <Ionicons name="location" size={18} color={THEME.textSec} />
-                <Text style={styles.popupToggleLabel}>Vis dine spots</Text>
+                <Text style={styles.popupToggleLabel}>{t("showYourSpots")}</Text>
               </View>
               <Pressable
                 style={[
@@ -1111,7 +1119,7 @@ export default function SpotWeatherScreen() {
                 <View style={styles.popupIconCircle}>
                   <Ionicons name="search" size={20} color="#000" />
                 </View>
-                <Text style={styles.popupTitle}>Søg sted</Text>
+                <Text style={styles.popupTitle}>{t("searchPlace")}</Text>
               </View>
               <Pressable
                 style={styles.popupCloseBtn}
@@ -1126,7 +1134,7 @@ export default function SpotWeatherScreen() {
               <Ionicons name="location-outline" size={18} color={THEME.textSec} style={{ marginRight: 10 }} />
               <TextInput
                 style={styles.popupInput}
-                placeholder="By, kyststrækning, adresse..."
+                placeholder={t("searchPlaceholder")}
                 placeholderTextColor={THEME.textSec}
                 value={searchText}
                 onChangeText={setSearchText}
@@ -1145,7 +1153,7 @@ export default function SpotWeatherScreen() {
               ) : (
                 <>
                   <Ionicons name="search" size={18} color="#000" />
-                  <Text style={styles.popupPrimaryBtnText}>Søg</Text>
+                  <Text style={styles.popupPrimaryBtnText}>{t("search")}</Text>
                 </>
               )}
             </Pressable>
@@ -1169,7 +1177,7 @@ export default function SpotWeatherScreen() {
                   <View style={[styles.popupIconCircle, { backgroundColor: THEME.success }]}>
                     <Ionicons name="add" size={20} color="#000" />
                   </View>
-                  <Text style={styles.popupTitle}>Tilføj spot</Text>
+                  <Text style={styles.popupTitle}>{t("addSpot")}</Text>
                 </View>
                 <Pressable
                   style={styles.popupCloseBtn}
@@ -1192,7 +1200,7 @@ export default function SpotWeatherScreen() {
                 <Ionicons name="bookmark-outline" size={18} color={THEME.textSec} style={{ marginRight: 10 }} />
                 <TextInput
                   style={styles.popupInput}
-                  placeholder="Spotnavn"
+                  placeholder={t("spotName")}
                   placeholderTextColor={THEME.textSec}
                   value={newSpotName}
                   onChangeText={setNewSpotName}
@@ -1205,7 +1213,7 @@ export default function SpotWeatherScreen() {
                   style={styles.popupSecondaryBtn}
                   onPress={() => setAddSpotModalVisible(false)}
                 >
-                  <Text style={styles.popupSecondaryBtnText}>Annuller</Text>
+                  <Text style={styles.popupSecondaryBtnText}>{t("cancel")}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.popupPrimaryBtn, { flex: 1 }]}
@@ -1214,7 +1222,7 @@ export default function SpotWeatherScreen() {
                     try {
                       setAddingSpot(true);
                       const created = await createSpot({
-                        name: newSpotName.trim() || "Spot",
+                        name: newSpotName.trim() || t("spot"),
                         lat: pos.latitude,
                         lng: pos.longitude,
                       });
@@ -1222,7 +1230,7 @@ export default function SpotWeatherScreen() {
                       setAddSpotModalVisible(false);
                       setShowLocationActions(false);
                     } catch (e) {
-                      console.log("Kunne ikke oprette spot", e);
+                      console.log("Could not create spot", e);
                     } finally {
                       setAddingSpot(false);
                     }
@@ -1233,7 +1241,7 @@ export default function SpotWeatherScreen() {
                   ) : (
                     <>
                       <Ionicons name="checkmark" size={18} color="#000" />
-                      <Text style={styles.popupPrimaryBtnText}>Gem spot</Text>
+                      <Text style={styles.popupPrimaryBtnText}>{t("saveSpot")}</Text>
                     </>
                   )}
                 </Pressable>
@@ -1259,13 +1267,12 @@ export default function SpotWeatherScreen() {
                   <View style={[styles.popupIconCircle, { backgroundColor: THEME.blue }]}>
                     <Ionicons name="location" size={20} color="#fff" />
                   </View>
-                  <Text style={styles.popupTitle}>Lokation kræves</Text>
+                  <Text style={styles.popupTitle}>{t("locationRequired")}</Text>
                 </View>
               </View>
 
               <Text style={styles.popupDescription}>
-                Appen skal have adgang til din position for at centrere kortet
-                på din nuværende placering.
+                {t("locationPermissionDesc")}
               </Text>
 
               <Pressable
@@ -1299,7 +1306,7 @@ export default function SpotWeatherScreen() {
                   {bestSpotId != null && selectedSpot.id === bestSpotId && (
                     <View style={styles.bestSpotBadge}>
                       <Ionicons name="star" size={12} color="#000" />
-                      <Text style={styles.bestSpotBadgeText}>Bedste spot</Text>
+                      <Text style={styles.bestSpotBadgeText}>{t("bestSpot")}</Text>
                     </View>
                   )}
                   <Text style={styles.spotSheetTitle} numberOfLines={2}>
@@ -1336,7 +1343,7 @@ export default function SpotWeatherScreen() {
                   </View>
                   <View>
                     <Text style={styles.spotStatValue}>{spotFishCount ?? 0}</Text>
-                    <Text style={styles.spotStatLabel}>Fangster</Text>
+                    <Text style={styles.spotStatLabel}>{t("catches")}</Text>
                   </View>
                 </View>
                 <View style={styles.spotStatCard}>
@@ -1345,7 +1352,7 @@ export default function SpotWeatherScreen() {
                   </View>
                   <View>
                     <Text style={styles.spotStatValue}>{selectedSpot.lat.toFixed(2)}°</Text>
-                    <Text style={styles.spotStatLabel}>Breddegrad</Text>
+                    <Text style={styles.spotStatLabel}>{t("location")}</Text>
                   </View>
                 </View>
               </View>
@@ -1353,7 +1360,7 @@ export default function SpotWeatherScreen() {
               {spotLoading && (
                 <View style={styles.spotLoadingRow}>
                   <ActivityIndicator color={THEME.graphYellow} />
-                  <Text style={styles.spotLoadingText}>Henter prognoser…</Text>
+                  <Text style={styles.spotLoadingText}>{t("loadingWeather")}</Text>
                 </View>
               )}
 
@@ -1366,9 +1373,9 @@ export default function SpotWeatherScreen() {
 
               {!spotLoading && spotEdrData && (
                 <>
-                  {getForecastDays(spotEdrData).length > 0 && (
+                  {getForecastDays(spotEdrData, t).length > 0 && (
                     <View style={styles.spotDayForecast}>
-                      {getForecastDays(spotEdrData).map((day, index) => (
+                      {getForecastDays(spotEdrData, t).map((day, index) => (
                         <View key={index} style={styles.spotDayItem}>
                           <Text style={styles.spotDayLabel}>{day.label}</Text>
                           <View style={styles.spotDayIconWrap}>
@@ -1387,7 +1394,7 @@ export default function SpotWeatherScreen() {
                     {spotEdrData.airTempSeries.length > 0 && (
                       <ScrollableGraph
                         series={spotEdrData.airTempSeries}
-                        label="Lufttemperatur"
+                        label={t("airTemperature")}
                         unit="°C"
                         color={THEME.graphYellow}
                       />
@@ -1396,7 +1403,7 @@ export default function SpotWeatherScreen() {
                       <ScrollableGraph
                         series={spotEdrData.windSpeedSeries}
                         dirSeries={spotEdrData.windDirSeries}
-                        label="Vind & Retning"
+                        label={`${t("windSpeed")} & ${t("windDir")}`}
                         unit="m/s"
                         color={THEME.textSec}
                       />
@@ -1404,7 +1411,7 @@ export default function SpotWeatherScreen() {
                     {spotEdrData.humiditySeries.length > 0 && (
                       <ScrollableGraph
                         series={spotEdrData.humiditySeries}
-                        label="Luftfugtighed"
+                        label={t("humidity")}
                         unit="%"
                         color={THEME.cyan}
                       />
@@ -1412,7 +1419,7 @@ export default function SpotWeatherScreen() {
                     {spotEdrData.pressureSeries.length > 0 && (
                       <ScrollableGraph
                         series={spotEdrData.pressureSeries}
-                        label="Tryk"
+                        label={t("pressure")}
                         unit="hPa"
                         color={THEME.purple}
                       />
@@ -1420,7 +1427,7 @@ export default function SpotWeatherScreen() {
                     {spotEdrData.cloudCoverSeries.length > 0 && (
                       <ScrollableGraph
                         series={spotEdrData.cloudCoverSeries}
-                        label="Skydække"
+                        label={t("cloudCover")}
                         unit="%"
                         color={THEME.textSec}
                       />
@@ -1428,7 +1435,7 @@ export default function SpotWeatherScreen() {
                     {spotEdrData.waveHeightSeries.length > 0 && (
                       <ScrollableGraph
                         series={spotEdrData.waveHeightSeries}
-                        label="Bølgehøjde"
+                        label={t("waveHeight")}
                         unit="m"
                         color={THEME.blue}
                         pixelsPerPoint={40}
@@ -1440,7 +1447,7 @@ export default function SpotWeatherScreen() {
                     {spotEdrData.waterLevelSeries.length > 0 && (
                       <ScrollableGraph
                         series={spotEdrData.waterLevelSeries}
-                        label="Vandstand"
+                        label={t("waterLevel")}
                         unit="cm"
                         color={THEME.blue}
                         zeroLineAt={0}
@@ -1472,7 +1479,7 @@ export default function SpotWeatherScreen() {
                 <View style={[styles.popupIconCircle, { backgroundColor: THEME.blue }]}>
                   <Ionicons name="create" size={20} color="#fff" />
                 </View>
-                <Text style={styles.popupTitle}>Redigér spot</Text>
+                <Text style={styles.popupTitle}>{t("editSpot")}</Text>
               </View>
               <Pressable
                 style={styles.popupCloseBtn}
@@ -1484,7 +1491,7 @@ export default function SpotWeatherScreen() {
             </View>
 
             <Text style={styles.popupDescription}>
-              Ændrer kun navnet – ID bevares, så ture forbliver linket.
+              {t("renameSpotDesc")}
             </Text>
 
             {/* Input */}
@@ -1492,7 +1499,7 @@ export default function SpotWeatherScreen() {
               <Ionicons name="bookmark-outline" size={18} color={THEME.textSec} style={{ marginRight: 10 }} />
               <TextInput
                 style={styles.popupInput}
-                placeholder="Spot-navn"
+                placeholder={t("spotName")}
                 placeholderTextColor={THEME.textSec}
                 value={renameValue}
                 onChangeText={setRenameValue}
@@ -1514,7 +1521,7 @@ export default function SpotWeatherScreen() {
                 onPress={closeRenameModal}
                 disabled={renameLoading}
               >
-                <Text style={styles.popupSecondaryBtnText}>Annuller</Text>
+                <Text style={styles.popupSecondaryBtnText}>{t("cancel")}</Text>
               </Pressable>
               <Pressable
                 style={[styles.popupPrimaryBtn, { flex: 1 }]}
@@ -1526,7 +1533,7 @@ export default function SpotWeatherScreen() {
                 ) : (
                   <>
                     <Ionicons name="checkmark" size={18} color="#000" />
-                    <Text style={styles.popupPrimaryBtnText}>Gem navn</Text>
+                    <Text style={styles.popupPrimaryBtnText}>{t("saveName")}</Text>
                   </>
                 )}
               </Pressable>
@@ -1539,7 +1546,7 @@ export default function SpotWeatherScreen() {
               disabled={renameLoading}
             >
               <Ionicons name="trash-outline" size={18} color={THEME.danger} />
-              <Text style={styles.popupDangerBtnText}>Slet spot</Text>
+              <Text style={styles.popupDangerBtnText}>{t("deleteSpot")}</Text>
             </Pressable>
           </View>
         </View>
@@ -1562,14 +1569,14 @@ export default function SpotWeatherScreen() {
                 <View style={[styles.popupIconCircle, { backgroundColor: THEME.danger }]}>
                   <Ionicons name="trash" size={20} color="#fff" />
                 </View>
-                <Text style={styles.popupTitle}>Slet spot</Text>
+                <Text style={styles.popupTitle}>{t("deleteSpot")}</Text>
               </View>
             </View>
 
             <View style={styles.deleteSpotInfo}>
-              <Text style={styles.deleteSpotName}>{spotDeleteTarget?.name ?? "spot"}</Text>
+              <Text style={styles.deleteSpotName}>{spotDeleteTarget?.name ?? t("spot")}</Text>
               <Text style={styles.deleteSpotDesc}>
-                Vil du slette dette spot? Ture forbliver men mister spot-tilknytning.
+                {t("deleteSpotConfirmation")}
               </Text>
             </View>
 
@@ -1583,7 +1590,7 @@ export default function SpotWeatherScreen() {
                 }}
                 disabled={spotDeleteLoading}
               >
-                <Text style={styles.popupSecondaryBtnText}>Annuller</Text>
+                <Text style={styles.popupSecondaryBtnText}>{t("cancel")}</Text>
               </Pressable>
               <Pressable
                 style={styles.deleteConfirmBtn}
@@ -1598,7 +1605,7 @@ export default function SpotWeatherScreen() {
                 ) : (
                   <>
                     <Ionicons name="trash" size={18} color="#fff" />
-                    <Text style={styles.deleteConfirmBtnText}>Slet spot</Text>
+                    <Text style={styles.deleteConfirmBtnText}>{t("deleteSpot")}</Text>
                   </>
                 )}
               </Pressable>
@@ -1616,12 +1623,14 @@ function SpotMarker({
   onPress,
   onLongPress,
   useNativeMarker = true,
+  t,
 }: {
   spot: SpotRow;
   isBestSpot: boolean;
   onPress: () => void;
   onLongPress: () => void;
   useNativeMarker?: boolean;
+  t: TranslateFn;
 }) {
   const isAndroid = Platform.OS === "android";
   const defaultPin = "#FF3B30"; // Android default-rød
@@ -1635,7 +1644,7 @@ function SpotMarker({
         coordinate={{ latitude: spot.lat, longitude: spot.lng }}
         pinColor={isBestSpot ? BEST_SPOT_COLOR : defaultPin}
         title={spot.name}
-        description="Spot"
+        description={t("spot")}
         onPress={onPress}
         onCalloutPress={onLongPress} // klik på callout = samme som langtryk
         onLongPress={onLongPress}
@@ -1653,7 +1662,7 @@ function SpotMarker({
               {spot.name}
             </Text>
             <Text style={{ color: "#666", fontSize: 12 }}>
-              Tryk for detaljer • Hold inde for at slette/omdøbe
+              {t("tapToClose")}
             </Text>
           </View>
         </Callout>

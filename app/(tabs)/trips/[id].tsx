@@ -24,6 +24,7 @@ import MapView, {
 import Ionicons from "@expo/vector-icons/Ionicons";
 import Svg, { Path, Defs, LinearGradient, Stop, Circle } from "react-native-svg";
 import { getTrip, TripRow, deleteTrip, updateTrip } from "../../../lib/trips";
+import { evaluateTripWithDmi } from "../../../lib/dmi";
 
 // TILPAS DETTE IMPORT TIL DIT EKSISTERENDE spots-lib
 import { listSpots, type SpotRow } from "../../../lib/spots";
@@ -265,6 +266,9 @@ export default function TripDetailScreen() {
   const [spotsLoading, setSpotsLoading] = useState(false);
   const [spotSearch, setSpotSearch] = useState("");
 
+  // --- WEATHER SYNC ---
+  const [syncingWeather, setSyncingWeather] = useState(false);
+
   const loadTrip = useCallback(async () => {
     if (typeof id !== "string") return;
     setLoading(true);
@@ -294,6 +298,53 @@ export default function TripDetailScreen() {
   useEffect(() => {
     loadTrip();
   }, [loadTrip]);
+
+  // Synkroniser vejrdata for turen (bruges når offline-ture mangler vejr)
+  const handleSyncWeather = useCallback(async () => {
+    if (!trip || syncingWeather) return;
+
+    setSyncingWeather(true);
+    try {
+      // Parse path_json til punkter
+      let points: { latitude: number; longitude: number; t: number }[] = [];
+      if (trip.path_json) {
+        try {
+          const parsed = JSON.parse(trip.path_json);
+          if (Array.isArray(parsed)) {
+            points = parsed.map((p: any) => ({
+              latitude: p.latitude ?? p.lat,
+              longitude: p.longitude ?? p.lng,
+              t: p.t ?? new Date(trip.start_ts).getTime(),
+            }));
+          }
+        } catch {
+          console.log("Kunne ikke parse path_json");
+        }
+      }
+
+      // Kald DMI API
+      const evalResult = await evaluateTripWithDmi({
+        startIso: trip.start_ts,
+        endIso: trip.end_ts,
+        points,
+      });
+
+      if (evalResult) {
+        // Opdater turen med den nye vejrdata
+        const newMetaJson = JSON.stringify({ evaluation: evalResult });
+        await updateTrip(trip.id, { meta_json: newMetaJson });
+
+        // Genindlæs turen for at vise de nye data
+        await loadTrip();
+      } else {
+        console.log("Ingen vejrdata tilgængelig fra DMI");
+      }
+    } catch (e) {
+      console.log("Fejl ved synkronisering af vejrdata:", e);
+    } finally {
+      setSyncingWeather(false);
+    }
+  }, [trip, syncingWeather, loadTrip]);
 
   // hent spots til spot-picker (samme data som på spot-weather siden)
   useEffect(() => {
@@ -564,7 +615,23 @@ export default function TripDetailScreen() {
           <Text style={styles.title}>{t("weatherDuringFishing")}</Text>
 
           {!evaluation ? (
-            <Text style={styles.body}>{t("noWeatherForPeriod")}</Text>
+            <View style={styles.noWeatherContainer}>
+              <Text style={styles.body}>{t("noWeatherForPeriod")}</Text>
+              <Pressable
+                style={styles.syncWeatherBtn}
+                onPress={handleSyncWeather}
+                disabled={syncingWeather}
+              >
+                {syncingWeather ? (
+                  <ActivityIndicator size="small" color="#000" />
+                ) : (
+                  <>
+                    <Ionicons name="sync" size={16} color="#000" />
+                    <Text style={styles.syncWeatherBtnText}>{t("syncWeather")}</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
           ) : (
             <View style={{ gap: 6 }}>
               {evaluation.note && (
@@ -1555,6 +1622,26 @@ const styles = StyleSheet.create({
   body: {
     color: THEME.text,
     fontSize: 14,
+  },
+  noWeatherContainer: {
+    alignItems: "center",
+    gap: 16,
+  },
+  syncWeatherBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: THEME.graphYellow,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 160,
+  },
+  syncWeatherBtnText: {
+    color: "#000",
+    fontSize: 14,
+    fontWeight: "600",
   },
   periodSection: {
     marginTop: 16,

@@ -220,17 +220,35 @@ export async function evaluateTripWithDmi(
 
   const { lat, lon } = middleOfRoute(points);
 
+  // Beregn varighed og udvid til minimum 2 timer hvis nødvendigt
+  const startMs = new Date(startIso).getTime();
+  const endMs = new Date(endIso).getTime();
+  const durationMs = endMs - startMs;
+  const MIN_DURATION_MS = 2 * 60 * 60 * 1000; // 2 timer i ms
+
+  let effectiveStartIso = startIso;
+  let effectiveEndIso = endIso;
+
+  if (durationMs < MIN_DURATION_MS) {
+    // Udvid tidsintervallet til 2 timer, centreret omkring turen
+    const centerMs = startMs + durationMs / 2;
+    const halfMinDuration = MIN_DURATION_MS / 2;
+    effectiveStartIso = new Date(centerMs - halfMinDuration).toISOString();
+    effectiveEndIso = new Date(centerMs + halfMinDuration).toISOString();
+    console.log(`[DMI] Kort tur (${Math.round(durationMs / 1000)}s) - udvider til 2 timer`);
+  }
+
   let climate: ClimateStats | null = null;
   let ocean: OceanStats | null = null;
 
   try {
-    climate = await fetchClimateForTrip({ startIso, endIso, lat, lon });
+    climate = await fetchClimateForTrip({ startIso: effectiveStartIso, endIso: effectiveEndIso, lat, lon });
   } catch (e) {
     console.log("Fejl i fetchClimateForTrip:", e);
   }
 
   try {
-    ocean = await fetchOceanForTrip({ startIso, endIso, lat, lon });
+    ocean = await fetchOceanForTrip({ startIso: effectiveStartIso, endIso: effectiveEndIso, lat, lon });
   } catch (e) {
     console.log("Fejl i fetchOceanForTrip:", e);
   }

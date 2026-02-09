@@ -28,6 +28,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
+import { useLanguage } from "../../lib/i18n";
 
 // HENT TRACKED TURE (til vejrdata-link)
 import { getTrackedTrips, TrackedTrip } from "../../lib/trips";
@@ -226,6 +227,7 @@ function fmtDateTime(iso: string) {
 
 export default function NewCatch() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   // form state
   const [photo, setPhoto] = useState<string | undefined>();
@@ -322,7 +324,7 @@ export default function NewCatch() {
   async function pick() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Adgang nægtet", "Appen skal bruge adgang til billeder.");
+      Alert.alert(t("accessDenied"), t("appNeedsPhotoAccess"));
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -339,7 +341,7 @@ export default function NewCatch() {
   async function useCurrentLocation() {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Adgang nægtet", "Appen skal bruge adgang til din position.");
+      Alert.alert(t("accessDenied"), t("appNeedsLocationAccess"));
       return;
     }
     const loc = await Location.getCurrentPositionAsync({});
@@ -359,8 +361,8 @@ export default function NewCatch() {
       const results = await Location.geocodeAsync(q);
       if (!results || results.length === 0) {
         Alert.alert(
-          "Intet fundet",
-          "Kunne ikke finde en position for det søgeord."
+          t("nothingFound"),
+          t("couldNotFindLocation")
         );
         return;
       }
@@ -368,7 +370,7 @@ export default function NewCatch() {
       const newPos = { latitude: r.latitude, longitude: r.longitude };
       setPos(newPos);
     } catch (e: any) {
-      Alert.alert("Fejl", e?.message ?? "Kunne ikke slå sted/adresse op.");
+      Alert.alert(t("error"), e?.message ?? t("couldNotLookupLocation"));
     } finally {
       setSearchLoading(false);
     }
@@ -377,7 +379,7 @@ export default function NewCatch() {
   async function save() {
     try {
       if (!photo) {
-        Alert.alert("Foto mangler", "Vælg og crop et billede før du gemmer.");
+        Alert.alert(t("photoMissing"), t("selectPhotoBeforeSave"));
         return;
       }
 
@@ -405,7 +407,7 @@ export default function NewCatch() {
 
       router.push("/catches");
     } catch (e: any) {
-      Alert.alert("Fejl", e?.message ?? "Kunne ikke gemme fangst.");
+      Alert.alert(t("error"), e?.message ?? t("couldNotSaveCatch"));
     }
   }
 
@@ -431,7 +433,13 @@ export default function NewCatch() {
     setSpotModalVisible(false);
   }
 
-  const timeOptions = ["Morgen", "Formiddag", "Eftermiddag", "Aften", "Nat"];
+  const timeOptions = [
+    { key: "morning", label: t("morning") },
+    { key: "lateMorning", label: t("lateMorning") },
+    { key: "afternoon", label: t("afternoon") },
+    { key: "evening", label: t("evening") },
+    { key: "night", label: t("night") },
+  ];
 
   return (
     <>
@@ -446,10 +454,9 @@ export default function NewCatch() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBoxTall}>
-            <Text style={styles.modalTitle}>Vælg tracked tur</Text>
+            <Text style={styles.modalTitle}>{t("selectTrackedTrip")}</Text>
             <Text style={styles.modalText}>
-              Vælg en af dine trackede ture, hvis denne galleri-fangst skal
-              bruge vejrdata derfra. Dette er valgfrit.
+              {t("selectTrackedTripDesc")}
             </Text>
 
             <ScrollView
@@ -458,7 +465,7 @@ export default function NewCatch() {
             >
               {trackedTrips.length === 0 ? (
                 <Text style={{ color: THEME.textSec, fontSize: 14 }}>
-                  Ingen trackede ture fundet endnu.
+                  {t("noTrackedTrips")}
                 </Text>
               ) : (
                 trackedTrips.map((trip) => {
@@ -514,14 +521,14 @@ export default function NewCatch() {
                     setTrackedModalVisible(false);
                   }}
                 >
-                  <Text style={styles.ghostText}>Fjern valg</Text>
+                  <Text style={styles.ghostText}>{t("removeSelection")}</Text>
                 </Pressable>
               )}
               <Pressable
                 style={[styles.btn, styles.primaryYellow]}
                 onPress={() => setTrackedModalVisible(false)}
               >
-                <Text style={styles.primaryText}>Luk</Text>
+                <Text style={styles.primaryText}>{t("close")}</Text>
               </Pressable>
             </View>
           </View>
@@ -537,10 +544,9 @@ export default function NewCatch() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBoxTall}>
-            <Text style={styles.modalTitle}>Vælg spot</Text>
+            <Text style={styles.modalTitle}>{t("selectSpot")}</Text>
             <Text style={styles.modalText}>
-              Vælg et af dine gemte spots, så fangsten bliver koblet til samme
-              spot som på spot-oversigten.
+              {t("selectSpotDesc")}
             </Text>
 
             {/* søg-felt (samme stil som trips/id) */}
@@ -554,7 +560,7 @@ export default function NewCatch() {
               <TextInput
                 value={spotSearch}
                 onChangeText={setSpotSearch}
-                placeholder="Søg spot-navn"
+                placeholder={t("searchSpotName")}
                 placeholderTextColor={THEME.textSec}
                 style={styles.spotSearchInput}
                 returnKeyType="search"
@@ -571,7 +577,7 @@ export default function NewCatch() {
                 </View>
               ) : filteredSpots.length === 0 ? (
                 <Text style={{ color: THEME.textSec, fontSize: 14 }}>
-                  Ingen spots fundet.
+                  {t("noSpotsFound")}
                 </Text>
               ) : (
                 filteredSpots.map((s) => {
@@ -592,7 +598,7 @@ export default function NewCatch() {
                             : styles.spotItemText
                         }
                       >
-                        {s.name || "Uden navn"}
+                        {s.name || t("withoutName")}
                       </Text>
                       {active && (
                         <Ionicons
@@ -613,14 +619,14 @@ export default function NewCatch() {
                   style={[styles.btn, styles.ghost]}
                   onPress={clearSpotSelection}
                 >
-                  <Text style={styles.ghostText}>Fjern spot</Text>
+                  <Text style={styles.ghostText}>{t("removeSpot")}</Text>
                 </Pressable>
               )}
               <Pressable
                 style={[styles.btn, styles.primaryYellow]}
                 onPress={() => setSpotModalVisible(false)}
               >
-                <Text style={styles.primaryText}>Luk</Text>
+                <Text style={styles.primaryText}>{t("close")}</Text>
               </Pressable>
             </View>
           </View>
@@ -638,7 +644,7 @@ export default function NewCatch() {
               <Image source={{ uri: photo }} style={styles.heroImg} />
               <Pressable style={styles.changePhotoBtn} onPress={pick}>
                 <Ionicons name="image" size={16} color="#000" />
-                <Text style={styles.changePhotoBtnText}>Skift foto</Text>
+                <Text style={styles.changePhotoBtnText}>{t("changePhoto")}</Text>
               </Pressable>
             </>
           ) : (
@@ -646,9 +652,9 @@ export default function NewCatch() {
               <View style={styles.heroIconCircle}>
                 <Ionicons name="camera" size={32} color={THEME.calendarAccent} />
               </View>
-              <Text style={styles.heroEmptyTitle}>Tilføj foto</Text>
+              <Text style={styles.heroEmptyTitle}>{t("addPhoto")}</Text>
               <Text style={styles.heroEmptyText}>
-                Tryk for at vælge et billede fra dit galleri
+                {t("selectPhotoDesc")}
               </Text>
             </Pressable>
           )}
@@ -656,10 +662,10 @@ export default function NewCatch() {
 
         {/* KORT 1: DATA */}
         <View style={styles.card}>
-          <Text style={styles.title}>Ny fangst</Text>
+          <Text style={styles.title}>{t("newCatch")}</Text>
 
           {/* Dato */}
-          <Text style={styles.sectionLabel}>Dato</Text>
+          <Text style={styles.sectionLabel}>{t("date")}</Text>
           <Pressable
             style={styles.dateInput}
             onPress={() => setShowPicker((prev) => !prev)}
@@ -685,7 +691,7 @@ export default function NewCatch() {
 
           {/* TRACKET DATO / TUR TIL VEJRDATA */}
           <Text style={styles.sectionLabel}>
-            Tracket tur (vejrdata, valgfri)
+            {t("trackedTripOptional")}
           </Text>
           <Pressable
             style={styles.dateInput}
@@ -693,31 +699,30 @@ export default function NewCatch() {
           >
             <Ionicons name="time" size={18} color={THEME.textSec} />
             <Text style={styles.dateText}>
-              {selectedTripLabel ?? "Vælg tracked tur (valgfrit)"}
+              {selectedTripLabel ?? t("selectTrackedTripOptional")}
             </Text>
           </Pressable>
 
           <Text
             style={{ fontSize: 12, color: THEME.textSec, marginBottom: 12 }}
           >
-            Hvis du vælger en tracked tur her, kan fangsten bruge de samme
-            vejrdata som turen (via DMI).
+            {t("trackedTripHint")}
           </Text>
 
-          <Text style={styles.sectionLabel}>Tid på dagen</Text>
+          <Text style={styles.sectionLabel}>{t("timeOfDay")}</Text>
           <View style={styles.chipRow}>
-            {timeOptions.map((t) => {
-              const active = timeOfDay === t;
+            {timeOptions.map((option) => {
+              const active = timeOfDay === option.label;
               return (
                 <Pressable
-                  key={t}
-                  onPress={() => setTimeOfDay(active ? undefined : t)}
+                  key={option.key}
+                  onPress={() => setTimeOfDay(active ? undefined : option.label)}
                   style={[styles.chip, active && styles.chipActive]}
                 >
                   <Text
                     style={active ? styles.chipActiveText : styles.chipText}
                   >
-                    {t}
+                    {option.label}
                   </Text>
                 </Pressable>
               );
@@ -727,7 +732,7 @@ export default function NewCatch() {
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <LabeledInput
-                label="Længde (cm)"
+                label={t("lengthCm")}
                 value={len}
                 onChangeText={setLen}
                 keyboardType="decimal-pad"
@@ -736,7 +741,7 @@ export default function NewCatch() {
             </View>
             <View style={{ flex: 1 }}>
               <LabeledInput
-                label="Vægt (kg)"
+                label={t("weightKg")}
                 value={kg}
                 onChangeText={setKg}
                 keyboardType="decimal-pad"
@@ -746,21 +751,21 @@ export default function NewCatch() {
           </View>
 
           <LabeledInput
-            label="Agn / Flue"
+            label={t("baitFly")}
             value={bait}
             onChangeText={setBait}
             placeholder="fx Sandeel, Silling …"
           />
 
           {/* LOKATION VIA SPOTS */}
-          <Text style={styles.sectionLabel}>Lokation</Text>
+          <Text style={styles.sectionLabel}>{t("location")}</Text>
           <Pressable
             style={styles.dateInput}
             onPress={() => setSpotModalVisible(true)}
           >
             <Ionicons name="location" size={18} color={THEME.textSec} />
             <Text style={styles.dateText}>
-              {locationDesc ? locationDesc : "Tilføj lokation"}
+              {locationDesc ? locationDesc : t("addLocation")}
             </Text>
           </Pressable>
           <Text
@@ -771,23 +776,23 @@ export default function NewCatch() {
               marginBottom: 8,
             }}
           >
-            Lokationen sættes ud fra et gemt spot fra kortet.
+            {t("locationFromSpotHint")}
           </Text>
         </View>
 
         {/* KORT 2: FANGSTSTED */}
         <View style={styles.card}>
-          <Text style={styles.title}>Fangststed</Text>
+          <Text style={styles.title}>{t("catchLocation")}</Text>
 
           <View style={styles.locationBtnRow}>
             <Pressable onPress={useCurrentLocation} style={styles.locationBtn}>
               <Ionicons name="locate" size={16} color={THEME.text} />
-              <Text style={styles.locationBtnText}>Min position</Text>
+              <Text style={styles.locationBtnText}>{t("myPosition")}</Text>
             </Pressable>
             {pos && (
               <Pressable onPress={() => setPos(null)} style={styles.locationBtn}>
                 <Ionicons name="close" size={16} color={THEME.textSec} />
-                <Text style={styles.locationBtnText}>Ryd</Text>
+                <Text style={styles.locationBtnText}>{t("clear")}</Text>
               </Pressable>
             )}
           </View>
@@ -798,7 +803,7 @@ export default function NewCatch() {
             <TextInput
               value={searchText}
               onChangeText={setSearchText}
-              placeholder="Søg sted eller adresse"
+              placeholder={t("searchPlaceOrAddress")}
               placeholderTextColor={THEME.textSec}
               style={styles.mapSearchInput}
               returnKeyType="search"
@@ -810,7 +815,7 @@ export default function NewCatch() {
               style={styles.mapSearchBtn}
             >
               <Text style={styles.mapSearchBtnText}>
-                {searchLoading ? "..." : "Søg"}
+                {searchLoading ? "..." : t("search")}
               </Text>
             </Pressable>
           </View>
@@ -858,11 +863,11 @@ export default function NewCatch() {
         {/* KNAPPER */}
         <View style={styles.actionRow}>
           <Pressable style={styles.cancelBtn} onPress={cancel}>
-            <Text style={styles.cancelBtnText}>Annuller</Text>
+            <Text style={styles.cancelBtnText}>{t("cancel")}</Text>
           </Pressable>
           <Pressable style={styles.saveBtn} onPress={save}>
             <Ionicons name="checkmark" size={20} color="#000" />
-            <Text style={styles.saveBtnText}>Gem fangst</Text>
+            <Text style={styles.saveBtnText}>{t("saveCatch")}</Text>
           </Pressable>
         </View>
       </ScrollView>

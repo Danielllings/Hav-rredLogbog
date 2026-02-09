@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { saveTrip } from "../../lib/trips";
 import { listSpots, type SpotRow } from "../../lib/spots";
+import { useLanguage } from "../../lib/i18n";
 
 type TripPayload = Parameters<typeof saveTrip>[0];
 
@@ -33,20 +34,7 @@ const THEME = {
   inputBg: "#2C2C2E",
 };
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "Maj",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Okt",
-  "Nov",
-  "Dec",
-];
+// Months will be translated dynamically in component
 
 type MonthRow = {
   month: number;
@@ -101,6 +89,12 @@ function clampDay(d: number) {
 
 export default function ManualImportScreen() {
   const router = useRouter();
+  const { t, language } = useLanguage();
+
+  const months = [
+    t("jan"), t("feb"), t("mar"), t("apr"), t("may"), t("jun"),
+    t("jul"), t("aug"), t("sep"), t("oct"), t("nov"), t("dec"),
+  ];
 
   useEffect(() => {
     if (
@@ -320,23 +314,23 @@ export default function ManualImportScreen() {
     const errors: string[] = [];
 
     tripDrafts.forEach((draft, idx) => {
-      const fish = parseNonNegativeInt(draft.fish);
-      if (fish == null) return;
+      const fishCount = parseNonNegativeInt(draft.fish);
+      if (fishCount == null) return;
 
       const parts = draft.date.split("-").map((p) => parseInt(p, 10));
       if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
-        errors.push(`Tur ${idx + 1}: Ugyldig dato (${draft.date}).`);
+        errors.push(`${t("tripNumber")} ${idx + 1}: ${t("invalidDate")} (${draft.date}).`);
         return;
       }
 
       const [y, m, d] = parts;
       if (m < 1 || m > 12 || d < 1 || d > 31) {
-        errors.push(`Tur ${idx + 1}: Ugyldig dato (${draft.date}).`);
+        errors.push(`${t("tripNumber")} ${idx + 1}: ${t("invalidDate")} (${draft.date}).`);
         return;
       }
       const start = new Date(Date.UTC(y, m - 1, d, 8, 0, 0));
       if (isNaN(start.getTime())) {
-        errors.push(`Tur ${idx + 1}: Ugyldig dato (${draft.date}).`);
+        errors.push(`${t("tripNumber")} ${idx + 1}: ${t("invalidDate")} (${draft.date}).`);
         return;
       }
 
@@ -359,7 +353,7 @@ export default function ManualImportScreen() {
         end_ts: end.toISOString(),
         duration_sec: durationSec,
         distance_m: distanceM,
-        fish_count: fish,
+        fish_count: fishCount,
         spot_id: spot?.id ?? null,
         spot_name: spot?.name ?? null,
         spot_lat: spot?.lat ?? null,
@@ -381,36 +375,36 @@ export default function ManualImportScreen() {
     const detailed = buildDetailedTrips();
 
     if (detailed.errors.length) {
-      Alert.alert("Tjek dine ture", detailed.errors.join("\n"));
+      Alert.alert(t("checkYourTrips"), detailed.errors.join("\n"));
       return;
     }
 
     const payloads = [...monthlyTrips, ...detailed.trips];
     if (!payloads.length) {
       Alert.alert(
-        "Ingen data",
-        "Udfyld mindst én måned eller tilføj en detaljeret tur, før du importerer."
+        t("noDataToImport"),
+        t("noDataToImportDesc")
       );
       return;
     }
 
     setImporting(true);
     let created = 0;
-    let fishTotal = 0;
+    let totalFish = 0;
 
     try {
       for (const p of payloads) {
         await saveTrip(p);
         created += 1;
-        fishTotal += p.fish_count ?? 0;
+        totalFish += p.fish_count ?? 0;
       }
 
-      setImportSuccess({ trips: created, fish: fishTotal });
+      setImportSuccess({ trips: created, fish: totalFish });
     } catch (e: any) {
-      console.log("Fejl under manuel import:", e);
+      console.log("Error during manual import:", e);
       Alert.alert(
-        "Fejl under import",
-        e?.message ?? "Kunne ikke gemme alle ture. Prøv igen."
+        t("importFailed"),
+        e?.message ?? t("couldNotSaveTrips")
       );
     } finally {
       setImporting(false);
@@ -438,29 +432,26 @@ export default function ManualImportScreen() {
           >
             <Ionicons name="chevron-back" size={24} color={THEME.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>Manuel import</Text>
+          <Text style={styles.headerTitle}>{t("manualImportTitle")}</Text>
           <View style={{ width: 40 }} />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>KRAV & NOTE</Text>
+          <Text style={styles.sectionTitle}>{t("requirementsNote")}</Text>
           <View style={styles.card}>
             <Text style={styles.lead}>
-              Brug siden til at taste gamle logbøger ind, så de tæller i din
-              statistik. Vejr/fiskemønster kan ikke genskabes uden data.
+              {t("importLead")}
             </Text>
             <View style={styles.bulletRow}>
               <Ionicons name="checkmark-circle" size={16} color={THEME.primary} />
               <Text style={styles.bulletText}>
-                Opret spots i Vejr-kortet først, så du kan koble ture til
-                rigtige lokationer.
+                {t("createSpotsFirst")}
               </Text>
             </View>
             <View style={styles.bulletRow}>
               <Ionicons name="checkmark-circle" size={16} color={THEME.primary} />
               <Text style={styles.bulletText}>
-                Du kan importere både månedstal (fx fisk pr. måned) og detaljerede
-                ture med spotvalg.
+                {t("canImportBoth")}
               </Text>
             </View>
           </View>
@@ -476,7 +467,7 @@ export default function ManualImportScreen() {
               }}
             >
               <Text style={[styles.sectionTitle, styles.sectionTitleStrong]}>
-                MANUEL HURTIG IMPORT PR. MÅNED
+                {t("monthlyQuickImport")}
               </Text>
               <Ionicons
                 name={monthlyOpen ? "chevron-up" : "chevron-down"}
@@ -497,18 +488,16 @@ export default function ManualImportScreen() {
                   monthlyEnabled ? { color: "#000" } : null,
                 ]}
               >
-                {monthlyEnabled ? "Slå fra" : "Slå til"}
+                {monthlyEnabled ? t("turnOff") : t("turnOn")}
               </Text>
             </Pressable>
           </View>
           {monthlyOpen && (
             <View style={styles.card}>
               <Text style={styles.value}>
-                Fravælg hvis du kun bruger detaljerede ture. Månedstal fordeles
-                automatisk på simple ture. Brug “On/Off” pr. måned og felterne
-                Fisk / Ture med fisk / Nulture.
+                {t("monthlyImportDesc")}
               </Text>
-              <Text style={styles.label}>År</Text>
+              <Text style={styles.label}>{t("year")}</Text>
               <TextInput
                 value={monthlyYear}
                 onChangeText={setMonthlyYear}
@@ -520,7 +509,7 @@ export default function ManualImportScreen() {
 
               <View style={styles.rowWrap}>
                 <View style={styles.inputCol}>
-                  <Text style={styles.label}>Timer pr. tur (fælles)</Text>
+                  <Text style={styles.label}>{t("hoursPerTrip")}</Text>
                   <TextInput
                     value={monthHours}
                     onChangeText={setMonthHours}
@@ -531,7 +520,7 @@ export default function ManualImportScreen() {
                   />
                 </View>
                 <View style={styles.inputCol}>
-                  <Text style={styles.label}>Km pr. tur (fælles)</Text>
+                  <Text style={styles.label}>{t("kmPerTrip")}</Text>
                   <TextInput
                     value={monthDistance}
                     onChangeText={setMonthDistance}
@@ -547,7 +536,7 @@ export default function ManualImportScreen() {
                 {monthlyRows.map((row) => (
                   <View key={row.month} style={styles.monthCard}>
                     <View style={styles.monthHeader}>
-                      <Text style={styles.monthLabel}>{MONTHS[row.month]}</Text>
+                      <Text style={styles.monthLabel}>{months[row.month]}</Text>
                       <Pressable
                         onPress={() => toggleMonthEnabled(row.month)}
                       >
@@ -582,7 +571,7 @@ export default function ManualImportScreen() {
                         styles.input,
                         !row.enabled ? styles.inputDisabled : null,
                       ]}
-                      placeholder="Fisk"
+                      placeholder={t("fishLabel")}
                       placeholderTextColor={THEME.textSec}
                     />
                     <TextInput
@@ -596,7 +585,7 @@ export default function ManualImportScreen() {
                         styles.input,
                         !row.enabled ? styles.inputDisabled : null,
                       ]}
-                      placeholder="Ture med fisk"
+                      placeholder={t("tripsWithFishLabel")}
                       placeholderTextColor={THEME.textSec}
                     />
                     <TextInput
@@ -611,7 +600,7 @@ export default function ManualImportScreen() {
                         !row.enabled ? styles.inputDisabled : null,
                         { marginBottom: 0 },
                       ]}
-                      placeholder="Nulture"
+                      placeholder={t("nullTripsLabel")}
                       placeholderTextColor={THEME.textSec}
                     />
                   </View>
@@ -631,7 +620,7 @@ export default function ManualImportScreen() {
           >
             <View style={styles.sectionHeaderLeft}>
               <Text style={[styles.sectionTitle, styles.sectionTitleStrong]}>
-                DETALJERET IMPORT (TURE + SPOTS)
+                {t("detailedImport")}
               </Text>
               <Ionicons
                 name={detailedOpen ? "chevron-up" : "chevron-down"}
@@ -644,19 +633,17 @@ export default function ManualImportScreen() {
           {detailedOpen && (
             <View style={styles.card}>
               <Text style={styles.value}>
-                Tilføj gamle ture én for én med fisk, varighed, distance og
-                valgfrit spot. Sæt fisk = 0 for nulture. Giver mest præcis
-                statistik.
+                {t("detailedImportDesc")}
               </Text>
 
-              {tripDrafts.map((t, idx) => (
-                <View key={t.id} style={styles.tripCard}>
+              {tripDrafts.map((tripDraft, idx) => (
+                <View key={tripDraft.id} style={styles.tripCard}>
                   <View style={styles.tripHeader}>
-                    <Text style={styles.tripTitle}>Tur #{idx + 1}</Text>
+                    <Text style={styles.tripTitle}>{t("tripNumber")} #{idx + 1}</Text>
                     {tripDrafts.length > 1 && (
                       <Pressable
                         onPress={() =>
-                          setTripDrafts((prev) => prev.filter((p) => p.id !== t.id))
+                          setTripDrafts((prev) => prev.filter((p) => p.id !== tripDraft.id))
                         }
                       >
                         <Ionicons
@@ -670,20 +657,20 @@ export default function ManualImportScreen() {
 
                   <View style={styles.rowWrap}>
                     <View style={styles.inputCol}>
-                      <Text style={styles.label}>Dato (YYYY-MM-DD)</Text>
+                      <Text style={styles.label}>{t("dateFormat")}</Text>
                       <TextInput
-                        value={t.date}
-                        onChangeText={(v) => handleUpdateTrip(t.id, "date", v)}
+                        value={tripDraft.date}
+                        onChangeText={(v) => handleUpdateTrip(tripDraft.id, "date", v)}
                         style={styles.input}
                         placeholder="2020-05-12"
                         placeholderTextColor={THEME.textSec}
                       />
                     </View>
                     <View style={styles.inputCol}>
-                      <Text style={styles.label}>Fisk</Text>
+                      <Text style={styles.label}>{t("fishLabel")}</Text>
                       <TextInput
-                        value={t.fish}
-                        onChangeText={(v) => handleUpdateTrip(t.id, "fish", v)}
+                        value={tripDraft.fish}
+                        onChangeText={(v) => handleUpdateTrip(tripDraft.id, "fish", v)}
                         keyboardType="numeric"
                         style={styles.input}
                         placeholder="3"
@@ -694,10 +681,10 @@ export default function ManualImportScreen() {
 
                   <View style={styles.rowWrap}>
                     <View style={styles.inputCol}>
-                      <Text style={styles.label}>Timer</Text>
+                      <Text style={styles.label}>{t("hoursInputLabel")}</Text>
                       <TextInput
-                        value={t.hours}
-                        onChangeText={(v) => handleUpdateTrip(t.id, "hours", v)}
+                        value={tripDraft.hours}
+                        onChangeText={(v) => handleUpdateTrip(tripDraft.id, "hours", v)}
                         keyboardType="decimal-pad"
                         style={styles.input}
                         placeholder="2"
@@ -705,11 +692,11 @@ export default function ManualImportScreen() {
                       />
                     </View>
                     <View style={styles.inputCol}>
-                      <Text style={styles.label}>Kilometer</Text>
+                      <Text style={styles.label}>{t("kmLabel")}</Text>
                       <TextInput
-                        value={t.distance}
+                        value={tripDraft.distance}
                         onChangeText={(v) =>
-                          handleUpdateTrip(t.id, "distance", v)
+                          handleUpdateTrip(tripDraft.id, "distance", v)
                         }
                         keyboardType="decimal-pad"
                         style={styles.input}
@@ -723,22 +710,22 @@ export default function ManualImportScreen() {
                     <Pressable
                       style={[
                         styles.spotBtn,
-                        t.spotId ? styles.spotBtnActive : null,
+                        tripDraft.spotId ? styles.spotBtnActive : null,
                       ]}
-                      onPress={() => setSpotModalTripId(t.id)}
+                      onPress={() => setSpotModalTripId(tripDraft.id)}
                     >
                       <Ionicons
                         name="location-outline"
                         size={16}
-                        color={t.spotId ? "#000" : THEME.text}
+                        color={tripDraft.spotId ? "#000" : THEME.text}
                       />
                       <Text
                         style={[
                           styles.spotBtnText,
-                          t.spotId ? { color: "#000" } : null,
+                          tripDraft.spotId ? { color: "#000" } : null,
                         ]}
                       >
-                        {t.spotName ? t.spotName : "Vælg spot"}
+                        {tripDraft.spotName ? tripDraft.spotName : t("selectSpot")}
                       </Text>
                     </Pressable>
                   </View>
@@ -758,21 +745,21 @@ export default function ManualImportScreen() {
                 }}
               >
                 <Ionicons name="add-circle-outline" size={18} color="#000" />
-                <Text style={styles.addBtnText}>Tilføj tur</Text>
+                <Text style={styles.addBtnText}>{t("addTripBtn")}</Text>
               </Pressable>
             </View>
           )}
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>OPSUMMERING</Text>
+          <Text style={styles.sectionTitle}>{t("summary")}</Text>
           <View style={styles.card}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Ture klar til import</Text>
+              <Text style={styles.summaryLabel}>{t("tripsReadyToImport")}</Text>
               <Text style={styles.summaryValue}>{totals.trips}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Fisk i alt</Text>
+              <Text style={styles.summaryLabel}>{t("fishTotal")}</Text>
               <Text style={styles.summaryValue}>{totals.fish}</Text>
             </View>
 
@@ -789,7 +776,7 @@ export default function ManualImportScreen() {
               ) : (
                 <View style={styles.primaryBtnContent}>
                   <Ionicons name="cloud-upload" size={18} color="#000" />
-                  <Text style={styles.primaryBtnText}>Importér data</Text>
+                  <Text style={styles.primaryBtnText}>{t("importData")}</Text>
                 </View>
               )}
             </Pressable>
@@ -805,10 +792,9 @@ export default function ManualImportScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBoxTall}>
-            <Text style={styles.modalTitle}>Vælg spot</Text>
+            <Text style={styles.modalTitle}>{t("selectSpot")}</Text>
             <Text style={styles.modalText}>
-              Brug dine gemte spots fra Vejr-kortet, så importen lander på de
-              rigtige lokationer.
+              {t("selectSpotImportDesc")}
             </Text>
 
             <View style={styles.spotSearchRow}>
@@ -821,7 +807,7 @@ export default function ManualImportScreen() {
               <TextInput
                 value={spotSearch}
                 onChangeText={setSpotSearch}
-                placeholder="Søg spot-navn"
+                placeholder={t("searchSpotName")}
                 placeholderTextColor={THEME.textSec}
                 style={styles.spotSearchInput}
                 returnKeyType="search"
@@ -838,7 +824,7 @@ export default function ManualImportScreen() {
                 </View>
               ) : filteredSpots.length === 0 ? (
                 <Text style={{ color: THEME.textSec, fontSize: 14 }}>
-                  Ingen spots fundet.
+                  {t("noSpotsFound")}
                 </Text>
               ) : (
                 filteredSpots.map((s) => {
@@ -859,7 +845,7 @@ export default function ManualImportScreen() {
                           active ? styles.spotItemTextActive : styles.spotItemText
                         }
                       >
-                        {s.name || "Uden navn"}
+                        {s.name || t("withoutName")}
                       </Text>
                       {active && (
                         <Ionicons
@@ -882,14 +868,14 @@ export default function ManualImportScreen() {
                     if (activeTrip) handleSelectSpot(activeTrip.id, null);
                   }}
                 >
-                  <Text style={styles.ghostText}>Fjern spot</Text>
+                  <Text style={styles.ghostText}>{t("removeSpot")}</Text>
                 </Pressable>
               )}
               <Pressable
                 style={[styles.btn, styles.primaryBtn]}
                 onPress={() => setSpotModalTripId(null)}
               >
-                <Text style={styles.primaryText}>Luk</Text>
+                <Text style={styles.primaryText}>{t("close")}</Text>
               </Pressable>
             </View>
           </View>
@@ -904,16 +890,16 @@ export default function ManualImportScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBoxTall}>
-            <Text style={styles.modalTitle}>Import gennemført</Text>
+            <Text style={styles.modalTitle}>{t("importComplete")}</Text>
             <Text style={styles.modalText}>
-              {`Tilføjede ${importSuccess?.trips ?? 0} ture med ${importSuccess?.fish ?? 0} fisk.\nStatistikken opdateres automatisk.`}
+              {t("importCompleteDesc").replace("{trips}", String(importSuccess?.trips ?? 0)).replace("{fish}", String(importSuccess?.fish ?? 0))}
             </Text>
             <View style={styles.modalBtnRow}>
               <Pressable
                 onPress={() => setImportSuccess(null)}
                 style={[styles.btn, styles.ghost]}
               >
-                <Text style={styles.ghostText}>Bliv her</Text>
+                <Text style={styles.ghostText}>{t("stayHere")}</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -922,7 +908,7 @@ export default function ManualImportScreen() {
                 }}
                 style={[styles.btn, { backgroundColor: THEME.primary }]}
               >
-                <Text style={styles.primaryText}>Tilbage</Text>
+                <Text style={styles.primaryText}>{t("back")}</Text>
               </Pressable>
             </View>
           </View>

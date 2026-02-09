@@ -39,6 +39,7 @@ import {
 import { uploadCatchImageAsync } from "../../../lib/storage";
 import { ORTO_FORAAR_URL } from "../../../lib/maps";
 import { listSpots, type Spot } from "../../../lib/spots";
+import { useLanguage } from "../../../lib/i18n";
 
 type LatLng = { latitude: number; longitude: number };
 type Stat = { avg: number; min: number; max: number };
@@ -241,6 +242,7 @@ function degToCompass(deg?: number) {
 export default function CatchDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [row, setRow] = useState<any | null>(null);
   const [edit, setEdit] = useState(false);
@@ -495,9 +497,7 @@ export default function CatchDetail() {
   async function useCurrentLocation() {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
-      setPermissionMessage(
-        "Appen skal bruge adgang til din position. Gå til indstillinger for at give adgang."
-      );
+      setPermissionMessage(t("appNeedsLocationAccess"));
       setPermissionModalVisible(true);
       return;
     }
@@ -513,9 +513,7 @@ export default function CatchDetail() {
   async function pickImage() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      setPermissionMessage(
-        "Appen skal bruge adgang til dine billeder. Gå til indstillinger for at give adgang."
-      );
+      setPermissionMessage(t("appNeedsPhotoAccess"));
       setPermissionModalVisible(true);
       return;
     }
@@ -534,7 +532,13 @@ export default function CatchDetail() {
     await loadTripEvaluation(tripId);
   }
 
-  const timeOptions = ["Morgen", "Formiddag", "Eftermiddag", "Aften", "Nat"];
+  const timeOptions = [
+    { key: "morning", label: t("morning") },
+    { key: "lateMorning", label: t("lateMorning") },
+    { key: "afternoon", label: t("afternoon") },
+    { key: "evening", label: t("evening") },
+    { key: "night", label: t("night") },
+  ];
 
   const hasClimate = !!(evaluation?.stationName || evaluation?.stationId);
   const hasOcean = !!(
@@ -554,19 +558,19 @@ export default function CatchDetail() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Slet fangst</Text>
+            <Text style={styles.modalTitle}>{t("deleteCatch")}</Text>
             <Text style={styles.modalText}>
-              Er du sikker på at du vil slette denne fangst permanent?
+              {t("deleteCatchConfirm")}
             </Text>
             <View style={styles.modalBtnRow}>
               <Pressable
                 style={[styles.btn, styles.ghost]}
                 onPress={() => setDeleteModalVisible(false)}
               >
-                <Text style={styles.ghostText}>Annuller</Text>
+                <Text style={styles.ghostText}>{t("cancel")}</Text>
               </Pressable>
               <Pressable style={[styles.btn, styles.danger]} onPress={confirmDelete}>
-                <Text style={styles.dangerText}>Slet</Text>
+                <Text style={styles.dangerText}>{t("delete")}</Text>
               </Pressable>
             </View>
           </View>
@@ -582,14 +586,14 @@ export default function CatchDetail() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Adgang nægtet</Text>
+            <Text style={styles.modalTitle}>{t("accessDenied")}</Text>
             <Text style={styles.modalText}>{permissionMessage}</Text>
             <View style={styles.modalBtnRow}>
               <Pressable
                 style={[styles.btn, styles.primary]}
                 onPress={() => setPermissionModalVisible(false)}
               >
-                <Text style={styles.primaryText}>OK</Text>
+                <Text style={styles.primaryText}>{t("ok")}</Text>
               </Pressable>
             </View>
           </View>
@@ -605,10 +609,9 @@ export default function CatchDetail() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBoxTall}>
-            <Text style={styles.modalTitle}>Vælg tracked tur</Text>
+            <Text style={styles.modalTitle}>{t("selectTrackedTrip")}</Text>
             <Text style={styles.modalText}>
-              Vælg en af dine trackede ture, hvis denne fangst skal bruge
-              vejrdata derfra. Dette er valgfrit.
+              {t("selectTrackedTripDesc")}
             </Text>
 
             <ScrollView
@@ -617,7 +620,7 @@ export default function CatchDetail() {
             >
               {trackedTrips.length === 0 ? (
                 <Text style={{ color: THEME.textSec, fontSize: 14 }}>
-                  Ingen trackede ture fundet endnu.
+                  {t("noTrackedTrips")}
                 </Text>
               ) : (
                 trackedTrips.map((trip) => {
@@ -667,14 +670,14 @@ export default function CatchDetail() {
                     setTrackedModalVisible(false);
                   }}
                 >
-                  <Text style={styles.ghostText}>Fjern valg</Text>
+                  <Text style={styles.ghostText}>{t("removeSelection")}</Text>
                 </Pressable>
               )}
               <Pressable
                 style={[styles.btn, styles.primaryYellow]}
                 onPress={() => setTrackedModalVisible(false)}
               >
-                <Text style={styles.primaryText}>Luk</Text>
+                <Text style={styles.primaryText}>{t("close")}</Text>
               </Pressable>
             </View>
           </View>
@@ -690,10 +693,9 @@ export default function CatchDetail() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBoxTall}>
-            <Text style={styles.modalTitle}>Vælg lokation</Text>
+            <Text style={styles.modalTitle}>{t("selectSpot")}</Text>
             <Text style={styles.modalText}>
-              Vælg et af dine gemte spots fra kortet som fangststed. Du kan
-              også søge.
+              {t("selectSpotDesc")}
             </Text>
 
             <View style={styles.spotSearchRow}>
@@ -705,7 +707,7 @@ export default function CatchDetail() {
               />
               <TextInput
                 style={styles.spotSearchInput}
-                placeholder="Søg spot-navn"
+                placeholder={t("searchSpotName")}
                 placeholderTextColor={THEME.textSec}
                 value={spotSearch}
                 onChangeText={setSpotSearch}
@@ -719,7 +721,7 @@ export default function CatchDetail() {
             >
               {filteredSpots.length === 0 ? (
                 <Text style={{ color: THEME.textSec, fontSize: 14 }}>
-                  Ingen spots fundet. Opret spots via kortet.
+                  {t("noSpotsFound")}
                 </Text>
               ) : (
                 filteredSpots.map((spot) => {
@@ -741,7 +743,7 @@ export default function CatchDetail() {
                               : styles.tripItemText
                           }
                         >
-                          {spot.name || "Uden navn"}
+                          {spot.name || t("withoutName")}
                         </Text>
                       </View>
                       {active && (
@@ -767,14 +769,14 @@ export default function CatchDetail() {
                     setSpotModalVisible(false);
                   }}
                 >
-                  <Text style={styles.ghostText}>Fjern spot</Text>
+                  <Text style={styles.ghostText}>{t("removeSpot")}</Text>
                 </Pressable>
               )}
               <Pressable
                 style={[styles.btn, styles.primaryYellow]}
                 onPress={() => setSpotModalVisible(false)}
               >
-                <Text style={styles.primaryText}>Luk</Text>
+                <Text style={styles.primaryText}>{t("close")}</Text>
               </Pressable>
             </View>
           </View>
@@ -801,7 +803,7 @@ export default function CatchDetail() {
             <Pressable style={styles.changePhotoBtn} onPress={pickImage}>
               <Ionicons name="image" size={16} color="#000" />
               <Text style={{ color: "#000", fontWeight: "700", marginLeft: 6 }}>
-                Skift foto
+                {t("changePhoto")}
               </Text>
             </Pressable>
           )}
@@ -832,28 +834,28 @@ export default function CatchDetail() {
               {/* Symmetrisk grid */}
               <View style={styles.infoGrid}>
                 <Info
-                  label="Mål"
+                  label={t("measure")}
                   value={row.length_cm ? `${row.length_cm} cm` : "—"}
                   highlight
                 />
                 <Info
-                  label="Vægt"
+                  label={t("weight")}
                   value={row.weight_kg ? `${row.weight_kg} kg` : "—"}
                   highlight
                 />
-                <Info label="Tid" value={row.time_of_day || "—"} />
+                <Info label={t("timeOfDay")} value={row.time_of_day || "—"} />
               </View>
 
               {/* Ekstra info */}
               <View style={styles.detailSection}>
                 <View style={styles.detailItem}>
                   <Ionicons name="fish-outline" size={16} color={THEME.graphYellow} />
-                  <Text style={styles.detailLabel}>Agn / Flue</Text>
+                  <Text style={styles.detailLabel}>{t("baitFly")}</Text>
                   <Text style={styles.detailValue}>{row.bait || "—"}</Text>
                 </View>
                 <View style={styles.detailItem}>
                   <Ionicons name="calendar-outline" size={16} color={THEME.textSec} />
-                  <Text style={styles.detailLabel}>Registreret</Text>
+                  <Text style={styles.detailLabel}>{t("registered")}</Text>
                   <Text style={styles.detailValue}>{fmtDateOnly(row.created_at)}</Text>
                 </View>
               </View>
@@ -861,23 +863,23 @@ export default function CatchDetail() {
 
             {/* VEJRFORHOLD (View Mode) */}
             <View style={styles.card}>
-              <Text style={styles.title}>Vejrforhold under fiskeri</Text>
+              <Text style={styles.title}>{t("weatherDuringFishing")}</Text>
 
               {!evaluation ? (
                 <Text style={styles.body}>
-                  Ingen vejrdata tilknyttet denne fangst.
+                  {t("noWeatherData")}
                 </Text>
               ) : (
                 <View style={{ gap: 6 }}>
                   {evaluation.note && (
                     <Text style={styles.noteText}>
-                      Bemærk: {evaluation.note}
+                      {t("note")}: {evaluation.note}
                     </Text>
                   )}
 
                   {evaluation.airTempC && (
                     <StatLine
-                      label="Luft temp. (°C)"
+                      label={t("airTempLabel")}
                       stat={evaluation.airTempC}
                       fmt={(v) => `${v.toFixed(1)}°C`}
                     />
@@ -885,7 +887,7 @@ export default function CatchDetail() {
 
                   {evaluation.windMS && (
                     <StatLine
-                      label="Vind (m/s)"
+                      label={t("windLabel")}
                       stat={evaluation.windMS}
                       fmt={(v) => `${v.toFixed(1)} m/s`}
                       direction={evaluation.windDirDeg?.avg}
@@ -894,7 +896,7 @@ export default function CatchDetail() {
 
                   {evaluation.waterTempC && (
                     <StatLine
-                      label="Havtemp. (°C)"
+                      label={t("seaTempLabel")}
                       stat={evaluation.waterTempC}
                       fmt={(v) => `${v.toFixed(1)}°C`}
                     />
@@ -902,7 +904,7 @@ export default function CatchDetail() {
 
                   {evaluation.waterLevelCM && (
                     <StatLine
-                      label="Vandstand (cm)"
+                      label={t("waterLevelLabel")}
                       stat={evaluation.waterLevelCM}
                       fmt={(v) => `${v.toFixed(0)} cm`}
                     />
@@ -911,7 +913,7 @@ export default function CatchDetail() {
                   {evaluation.airTempSeries?.length > 0 && (
                     <StatGraph
                       series={evaluation.airTempSeries}
-                      label="Lufttemperatur"
+                      label={t("airTemp")}
                       unit="°C"
                     />
                   )}
@@ -919,7 +921,7 @@ export default function CatchDetail() {
                   {evaluation.windSpeedSeries?.length > 0 && (
                     <StatGraph
                       series={evaluation.windSpeedSeries}
-                      label="Vind"
+                      label={t("windSpeed")}
                       unit="m/s"
                     />
                   )}
@@ -927,7 +929,7 @@ export default function CatchDetail() {
                   {evaluation.waterTempSeries?.length > 0 && (
                     <StatGraph
                       series={evaluation.waterTempSeries}
-                      label="Havtemperatur"
+                      label={t("waterTemp")}
                       unit="°C"
                     />
                   )}
@@ -935,14 +937,14 @@ export default function CatchDetail() {
                   {evaluation.waterLevelSeries?.length > 0 && (
                     <StatGraph
                       series={evaluation.waterLevelSeries}
-                      label="Vandstand"
+                      label={t("waterLevel")}
                       unit="cm"
                     />
                   )}
 
                   <View style={styles.sourceSection}>
                     <View style={styles.sourceHeader}>
-                      <Text style={styles.sourceLabel}>Kilde: DMI</Text>
+                      <Text style={styles.sourceLabel}>{t("sourceDmi")}</Text>
                       {dataTimeStr && (
                         <Text style={styles.sourceTime}>{dataTimeStr}</Text>
                       )}
@@ -955,7 +957,7 @@ export default function CatchDetail() {
                           size={16}
                           color={hasClimate ? THEME.startGreen : THEME.danger}
                         />
-                        <Text style={styles.sourceStatusText}>Vejrdata</Text>
+                        <Text style={styles.sourceStatusText}>{t("weatherDataLabel")}</Text>
                       </View>
 
                       <View style={styles.sourceStatus}>
@@ -964,7 +966,7 @@ export default function CatchDetail() {
                           size={16}
                           color={hasOcean ? THEME.startGreen : THEME.danger}
                         />
-                        <Text style={styles.sourceStatusText}>Havdata</Text>
+                        <Text style={styles.sourceStatusText}>{t("oceanDataLabel")}</Text>
                       </View>
                     </View>
                   </View>
@@ -975,7 +977,7 @@ export default function CatchDetail() {
             {/* KORT – VISNING */}
             {pos && (
               <View style={styles.card}>
-                <Text style={styles.title}>Fangststed</Text>
+                <Text style={styles.title}>{t("catchLocation")}</Text>
                 <View style={styles.mapContainer}>
                   <MapView
                     style={{ flex: 1 }}
@@ -1012,14 +1014,14 @@ export default function CatchDetail() {
                 onPress={() => setEdit(true)}
               >
                 <Ionicons name="create-outline" size={18} color="#000" />
-                <Text style={styles.editBtnText}>Redigér</Text>
+                <Text style={styles.editBtnText}>{t("edit")}</Text>
               </Pressable>
               <Pressable
                 style={styles.deleteBtn}
                 onPress={onDelete}
               >
                 <Ionicons name="trash-outline" size={18} color={THEME.danger} />
-                <Text style={styles.deleteBtnText}>Slet</Text>
+                <Text style={styles.deleteBtnText}>{t("delete")}</Text>
               </Pressable>
             </View>
           </>
@@ -1027,15 +1029,15 @@ export default function CatchDetail() {
           <>
             {/* REDIGERING */}
             <View style={styles.card}>
-              <Text style={styles.title}>Redigér fangst</Text>
+              <Text style={styles.title}>{t("editCatch")}</Text>
 
-              <Text style={styles.sectionLabel}>Dato</Text>
+              <Text style={styles.sectionLabel}>{t("date")}</Text>
               <Pressable
                 style={styles.dateInput}
                 onPress={() => setShowPicker((prev) => !prev)}
               >
                 <Ionicons name="calendar" size={18} color={THEME.textSec} />
-                <Text style={styles.dateText}>{date || "Vælg dato"}</Text>
+                <Text style={styles.dateText}>{date || t("selectDate")}</Text>
               </Pressable>
 
               {showPicker && (
@@ -1053,14 +1055,14 @@ export default function CatchDetail() {
                 />
               )}
 
-              <Text style={styles.sectionLabel}>Tid på dagen</Text>
+              <Text style={styles.sectionLabel}>{t("timeOfDay")}</Text>
               <View style={styles.chipRow}>
-                {timeOptions.map((t) => {
-                  const active = timeOfDay === t;
+                {timeOptions.map((opt) => {
+                  const active = timeOfDay === opt.key;
                   return (
                     <Pressable
-                      key={t}
-                      onPress={() => setTimeOfDay(active ? undefined : t)}
+                      key={opt.key}
+                      onPress={() => setTimeOfDay(active ? undefined : opt.key)}
                       style={[styles.chip, active && styles.chipActive]}
                     >
                       <Text
@@ -1068,7 +1070,7 @@ export default function CatchDetail() {
                           active ? styles.chipActiveText : styles.chipText
                         }
                       >
-                        {t}
+                        {opt.label}
                       </Text>
                     </Pressable>
                   );
@@ -1077,7 +1079,7 @@ export default function CatchDetail() {
 
               {/* VALG AF TRACKED TUR TIL VEJRDATA */}
               <Text style={[styles.sectionLabel, { marginTop: 8 }]}>
-                Tracked tur (vejrdata, valgfri)
+                {t("trackedTripOptional")}
               </Text>
               <Pressable
                 style={styles.dateInput}
@@ -1085,7 +1087,7 @@ export default function CatchDetail() {
               >
                 <Ionicons name="time" size={18} color={THEME.textSec} />
                 <Text style={styles.dateText}>
-                  {selectedTripLabel ?? "Vælg tracked tur (valgfrit)"}
+                  {selectedTripLabel ?? t("selectTrackedTripOptional")}
                 </Text>
               </Pressable>
               <Text
@@ -1095,14 +1097,13 @@ export default function CatchDetail() {
                   marginBottom: 10,
                 }}
               >
-                Hvis du vælger en tracked tur her, kan fangsten bruge de samme
-                vejrdata som turen (via DMI).
+                {t("trackedTripHint")}
               </Text>
 
               <View style={styles.row}>
                 <View style={{ flex: 1 }}>
                   <LabeledInput
-                    label="Længde (cm)"
+                    label={t("lengthCm")}
                     value={len}
                     onChangeText={setLen}
                     keyboardType="numeric"
@@ -1111,7 +1112,7 @@ export default function CatchDetail() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <LabeledInput
-                    label="Vægt (kg)"
+                    label={t("weightKg")}
                     value={kg}
                     onChangeText={setKg}
                     keyboardType="numeric"
@@ -1121,21 +1122,21 @@ export default function CatchDetail() {
               </View>
 
               <LabeledInput
-                label="Agn / Flue"
+                label={t("baitFly")}
                 value={bait}
                 onChangeText={setBait}
                 placeholder="fx Sandeel …"
               />
 
               {/* LOKATION VIA SPOTS */}
-              <Text style={styles.sectionLabel}>Lokation</Text>
+              <Text style={styles.sectionLabel}>{t("location")}</Text>
               <Pressable
                 style={styles.dateInput}
                 onPress={() => setSpotModalVisible(true)}
               >
                 <Ionicons name="location" size={18} color={THEME.textSec} />
                 <Text style={styles.dateText}>
-                  {notes ? notes : "Tilføj lokation"}
+                  {notes ? notes : t("addLocation")}
                 </Text>
               </Pressable>
               <Text
@@ -1146,12 +1147,12 @@ export default function CatchDetail() {
                   marginBottom: 8,
                 }}
               >
-                Lokationen sættes ud fra et gemt spot fra kortet.
+                {t("locationFromSpotHint")}
               </Text>
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.title}>Fangststed på kort</Text>
+              <Text style={styles.title}>{t("locationOnMap")}</Text>
 
               <View
                 style={{
@@ -1171,7 +1172,7 @@ export default function CatchDetail() {
                       fontWeight: "600",
                     }}
                   >
-                    Brug min position
+                    {t("useMyPosition")}
                   </Text>
                 </Pressable>
                 {pos && (
@@ -1185,7 +1186,7 @@ export default function CatchDetail() {
                         fontWeight: "600",
                       }}
                     >
-                      Ryd
+                      {t("clear")}
                     </Text>
                   </Pressable>
                 )}
@@ -1235,11 +1236,11 @@ export default function CatchDetail() {
                 style={styles.editCancelBtn}
                 onPress={() => setEdit(false)}
               >
-                <Text style={styles.editCancelBtnText}>Annuller</Text>
+                <Text style={styles.editCancelBtnText}>{t("cancel")}</Text>
               </Pressable>
               <Pressable style={styles.editSaveBtn} onPress={onSave}>
                 <Ionicons name="checkmark" size={20} color="#000" />
-                <Text style={styles.editSaveBtnText}>Gem ændringer</Text>
+                <Text style={styles.editSaveBtnText}>{t("saveChanges")}</Text>
               </Pressable>
             </View>
           </>

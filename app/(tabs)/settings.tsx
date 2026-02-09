@@ -1545,23 +1545,23 @@ export default function SettingsScreen() {
           </Pressable>
           <View style={styles.headerCenter}>
             <Ionicons name="settings-outline" size={20} color={THEME.accent} />
-            <Text style={styles.headerTitle}>Indstillinger</Text>
+            <Text style={styles.headerTitle}>{t("settings")}</Text>
           </View>
           <View style={{ width: 44 }} />
         </View>
 
         {/* Profil Sektion */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Konto</Text>
+          <Text style={styles.sectionTitle}>{t("account")}</Text>
           <View style={styles.card}>
             <View style={styles.row}>
               <View style={[styles.iconContainer, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
                 <Ionicons name="person" size={18} color={THEME.accent} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>{t("email")}</Text>
                 <Text style={styles.value}>
-                  {userEmail || "Ikke logget ind"}
+                  {userEmail || t("notLoggedIn")}
                 </Text>
               </View>
               <Ionicons name="checkmark-circle" size={20} color={THEME.success} />
@@ -1571,13 +1571,13 @@ export default function SettingsScreen() {
 
         {/* Info Sektion */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Om appen</Text>
+          <Text style={styles.sectionTitle}>{t("aboutApp")}</Text>
           <View style={styles.card}>
             <View style={styles.row}>
               <View style={[styles.iconContainer, { backgroundColor: "rgba(161, 161, 170, 0.15)" }]}>
                 <Ionicons name="information" size={18} color={THEME.textSec} />
               </View>
-              <Text style={[styles.label, { flex: 1 }]}>Version</Text>
+              <Text style={[styles.label, { flex: 1 }]}>{t("version")}</Text>
               <View style={styles.versionBadge}>
                 <Text style={styles.versionText}>v1.0.0</Text>
               </View>
@@ -1594,9 +1594,9 @@ export default function SettingsScreen() {
                 <Ionicons name="shield-checkmark" size={18} color={THEME.success} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Privatlivspolitik</Text>
+                <Text style={styles.label}>{t("privacyPolicy")}</Text>
                 <Text style={styles.value}>
-                  Læs hvordan dine data behandles
+                  {t("privacyDesc")}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
@@ -1629,16 +1629,16 @@ export default function SettingsScreen() {
 
         {/* Rapport / logbog */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Eksporter</Text>
+          <Text style={styles.sectionTitle}>{t("export")}</Text>
           <View style={styles.card}>
             <View style={styles.row}>
               <View style={[styles.iconContainer, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
                 <Ionicons name="document-text" size={18} color={THEME.accent} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>PDF-statistik</Text>
+                <Text style={styles.label}>{t("pdfStats")}</Text>
                 <Text style={styles.value}>
-                  Download en personlig rapport med alle dine fangstdata
+                  {t("pdfDesc")}
                 </Text>
               </View>
             </View>
@@ -1657,7 +1657,7 @@ export default function SettingsScreen() {
                 ) : (
                   <>
                     <Ionicons name="download" size={18} color="#000" />
-                    <Text style={styles.actionBtnText}>Download rapport</Text>
+                    <Text style={styles.actionBtnText}>{t("downloadReport")}</Text>
                   </>
                 )}
               </Pressable>
@@ -1667,16 +1667,16 @@ export default function SettingsScreen() {
 
         {/* Import sektion */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Importer</Text>
+          <Text style={styles.sectionTitle}>{t("import")}</Text>
           <View style={styles.card}>
             <View style={styles.row}>
               <View style={[styles.iconContainer, { backgroundColor: "rgba(96, 165, 250, 0.15)" }]}>
                 <Ionicons name="cloud-upload" size={18} color="#60A5FA" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Manuel import</Text>
+                <Text style={styles.label}>{t("manualImport")}</Text>
                 <Text style={styles.value}>
-                  Tilføj gamle data til din statistik fra tidligere sæsoner
+                  {t("manualImportDesc")}
                 </Text>
               </View>
             </View>
@@ -1690,7 +1690,7 @@ export default function SettingsScreen() {
                 ]}
               >
                 <Ionicons name="add-circle" size={18} color={THEME.text} />
-                <Text style={styles.secondaryBtnText}>Åbn import</Text>
+                <Text style={styles.secondaryBtnText}>{t("openImport")}</Text>
               </Pressable>
             </View>
           </View>
@@ -1698,16 +1698,16 @@ export default function SettingsScreen() {
 
         {/* DATA / Slet data */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data</Text>
+          <Text style={styles.sectionTitle}>{t("data")}</Text>
           <View style={styles.card}>
             <View style={styles.row}>
               <View style={[styles.iconContainer, { backgroundColor: "rgba(255, 69, 58, 0.15)" }]}>
                 <Ionicons name="trash" size={18} color={THEME.danger} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Slet alle data</Text>
+                <Text style={styles.label}>{t("deleteAllData")}</Text>
                 <Text style={styles.value}>
-                  Fjern alle ture, fangster og spots permanent
+                  {t("deleteAllDataDesc")}
                 </Text>
               </View>
             </View>
@@ -1723,7 +1723,7 @@ export default function SettingsScreen() {
                 ]}
               >
                 <Ionicons name="warning" size={18} color={THEME.danger} />
-                <Text style={styles.dangerActionBtnText}>Slet data</Text>
+                <Text style={styles.dangerActionBtnText}>{t("deleteData")}</Text>
               </Pressable>
             </View>
           </View>
@@ -1738,7 +1738,7 @@ export default function SettingsScreen() {
           onPress={handleSignOut}
         >
           <Ionicons name="log-out-outline" size={20} color={THEME.danger} />
-          <Text style={styles.logoutText}>Log ud</Text>
+          <Text style={styles.logoutText}>{t("logout")}</Text>
         </Pressable>
 
       </ScrollView>
@@ -1824,7 +1824,7 @@ export default function SettingsScreen() {
                 { marginTop: 4, opacity: pressed ? 0.9 : 1 },
               ]}
             >
-              <Text style={styles.choiceBtnText}>Luk</Text>
+              <Text style={styles.choiceBtnText}>{t("close")}</Text>
             </Pressable>
           </View>
         </View>
@@ -1844,24 +1844,23 @@ export default function SettingsScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Slet alle dine data</Text>
+            <Text style={styles.modalTitle}>{t("deleteTitle")}</Text>
             <Text style={styles.modalText}>
-              Denne handling kan ikke fortrydes. Alle dine ture, fangster,
-              spots og offline-data bliver slettet permanent.
+              {t("deleteWarning")}
             </Text>
             <Text style={[styles.modalText, { marginTop: 8 }]}>
-              Skriv{" "}
+              {t("deleteConfirmPrompt")}{" "}
               <Text style={{ fontWeight: "700", color: THEME.text }}>
-                Bekræft
+                {t("deleteConfirmWord")}
               </Text>{" "}
-              herunder for at fortsætte.
+              {t("deleteConfirmEnd")}
             </Text>
 
             <TextInput
               style={styles.confirmInput}
               value={deleteConfirmText}
               onChangeText={setDeleteConfirmText}
-              placeholder="Bekræft"
+              placeholder={t("deleteConfirmWord")}
               placeholderTextColor={THEME.textSec}
               autoCapitalize="none"
               autoCorrect={false}
@@ -1871,19 +1870,19 @@ export default function SettingsScreen() {
               style={({ pressed }) => [
                 styles.deleteConfirmBtn,
                 { opacity: pressed || deleteLoading ? 0.9 : 1 },
-                deleteConfirmText.trim() !== "Bekræft" || deleteLoading
+                deleteConfirmText.trim() !== t("deleteConfirmWord") || deleteLoading
                   ? { opacity: 0.4 }
                   : null,
               ]}
               disabled={
-                deleteConfirmText.trim() !== "Bekræft" || deleteLoading
+                deleteConfirmText.trim() !== t("deleteConfirmWord") || deleteLoading
               }
               onPress={handleConfirmDeleteData}
             >
               {deleteLoading ? (
                 <ActivityIndicator color="#FFF" />
               ) : (
-                <Text style={styles.deleteConfirmText}>Slet alle data</Text>
+                <Text style={styles.deleteConfirmText}>{t("deleteAllData")}</Text>
               )}
             </Pressable>
 
@@ -1895,7 +1894,7 @@ export default function SettingsScreen() {
                 setDeleteConfirmText("");
               }}
             >
-              <Text style={styles.modalCancelText}>Annullér</Text>
+              <Text style={styles.modalCancelText}>{t("cancel")}</Text>
             </Pressable>
           </View>
         </View>
@@ -1924,10 +1923,9 @@ export default function SettingsScreen() {
             >
               <Ionicons name="checkmark" size={26} color="#22C55E" />
             </View>
-            <Text style={styles.modalTitle}>Dine data er slettet</Text>
+            <Text style={styles.modalTitle}>{t("deleteSuccess")}</Text>
             <Text style={styles.modalText}>
-              Alle dine ture, fangster, spots og offline-data i appen er nu
-              fjernet. Du kan stadig bruge appen og begynde forfra med nye ture.
+              {t("deleteSuccessMsg")}
             </Text>
             <Pressable
               style={({ pressed }) => [
@@ -1936,7 +1934,7 @@ export default function SettingsScreen() {
               ]}
               onPress={() => setDeleteDoneModalVisible(false)}
             >
-              <Text style={styles.choiceBtnText}>OK</Text>
+              <Text style={styles.choiceBtnText}>{t("ok")}</Text>
             </Pressable>
           </View>
         </View>
@@ -1951,9 +1949,9 @@ export default function SettingsScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Download statistik</Text>
+            <Text style={styles.modalTitle}>{t("downloadStats")}</Text>
             <Text style={styles.modalText}>
-              Vælg hvilken statistik du vil eksportere som PDF-logbog.
+              {t("downloadStatsDesc")}
             </Text>
 
             <Pressable
@@ -1964,7 +1962,7 @@ export default function SettingsScreen() {
               onPress={() => handleReportChoice("year")}
             >
               <Text style={styles.choiceBtnText}>
-                {thisYear} – indeværende år
+                {thisYear} – {t("currentYear")}
               </Text>
             </Pressable>
 
@@ -1975,7 +1973,7 @@ export default function SettingsScreen() {
               ]}
               onPress={() => handleReportChoice("all")}
             >
-              <Text style={styles.choiceBtnText}>All Time</Text>
+              <Text style={styles.choiceBtnText}>{t("allTime")}</Text>
             </Pressable>
 
             <Pressable
@@ -1986,7 +1984,7 @@ export default function SettingsScreen() {
               onPress={() => handleReportChoice("both")}
             >
               <Text style={styles.choiceBtnText}>
-                {thisYear} + All Time
+                {thisYear} + {t("allTime")}
               </Text>
             </Pressable>
 

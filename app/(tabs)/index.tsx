@@ -44,6 +44,7 @@ import {
   type SaveTripPayload,
 } from "../../lib/offlineTrips";
 import { isRunningInExpoGo } from "expo";
+import { useLanguage } from "../../lib/i18n";
 
 const { width } = Dimensions.get("window");
 
@@ -365,40 +366,41 @@ function fmtTime(sec: number) {
     .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-function formatTripName(t: any): string {
-  const dt = t?.start_ts ? new Date(t.start_ts) : null;
+function formatTripName(trip: any, translate?: TranslateFn): string {
+  const dt = trip?.start_ts ? new Date(trip.start_ts) : null;
   const dateStr =
     dt && !Number.isNaN(dt.getTime())
-      ? dt.toLocaleDateString("da-DK")
-      : "Ukendt dato";
+      ? dt.toLocaleDateString()
+      : (translate ? translate("unknownDate") : "Ukendt dato");
 
   const spotName =
-    typeof t?.spot_name === "string" && t.spot_name.trim()
-      ? t.spot_name.trim()
+    typeof trip?.spot_name === "string" && trip.spot_name.trim()
+      ? trip.spot_name.trim()
       : null;
 
   return spotName ? `${dateStr} · ${spotName}` : dateStr;
 }
 
 function getTripTitleParts(
-  t: any
+  trip: any,
+  translate?: TranslateFn
 ): { dateStr: string; spotName: string | null } {
-  const dt = t?.start_ts ? new Date(t.start_ts) : null;
+  const dt = trip?.start_ts ? new Date(trip.start_ts) : null;
   const dateStr: string =
     dt && !Number.isNaN(dt.getTime())
-      ? dt.toLocaleDateString("da-DK")
-      : "Ukendt dato";
+      ? dt.toLocaleDateString()
+      : (translate ? translate("unknownDate") : "Ukendt dato");
 
   const spotName: string | null =
-    typeof t?.spot_name === "string" && t.spot_name.trim()
-      ? t.spot_name.trim()
+    typeof trip?.spot_name === "string" && trip.spot_name.trim()
+      ? trip.spot_name.trim()
       : null;
 
   return { dateStr, spotName };
 }
 
-function TripTitle({ trip }: { trip: any }) {
-  const { dateStr, spotName } = getTripTitleParts(trip);
+function TripTitle({ trip, t }: { trip: any; t?: TranslateFn }) {
+  const { dateStr, spotName } = getTripTitleParts(trip, t);
   return (
     <View style={styles.tripTitleRow}>
       {spotName ? (
@@ -419,11 +421,12 @@ function TripTitle({ trip }: { trip: any }) {
   );
 }
 
-const filterOptions = [
-  { label: "14 dage", days: 14 },
-  { label: "30 dage", days: 30 },
-  { label: "60 dage", days: 60 },
-  { label: "Alle", days: 0 },
+// Filter options - will use translation function
+const getFilterOptions = (t: (key: string) => string) => [
+  { label: t("days14"), days: 14 },
+  { label: t("days30"), days: 30 },
+  { label: t("days60"), days: 60 },
+  { label: t("all"), days: 0 },
 ];
 
 function pickNearest<T extends { ts: number }>(
@@ -459,18 +462,20 @@ type BestBucket = {
   trips: number;
 };
 
-function waterLevelBucket(cm?: number | null): string {
-  if (cm == null || !Number.isFinite(cm)) return "ukendt";
-  if (cm < -20) return "Lavvande";
-  if (cm > 20) return "Højvande";
-  return "Middel vandstand";
+type TranslateFn = (key: string) => string;
+
+function waterLevelBucket(cm?: number | null, t?: TranslateFn): string {
+  if (cm == null || !Number.isFinite(cm)) return t ? t("unknown") : "ukendt";
+  if (cm < -20) return t ? t("lowWater") : "Lavvande";
+  if (cm > 20) return t ? t("highWater") : "Højvande";
+  return t ? t("midWater") : "Middel vandstand";
 }
 
-function seasonFromMonth(month: number): string {
-  if (month >= 2 && month <= 4) return "Foråret";
-  if (month >= 5 && month <= 7) return "Sommeren";
-  if (month >= 8 && month <= 10) return "Efteråret";
-  return "Vinteren";
+function seasonFromMonth(month: number, t?: TranslateFn): string {
+  if (month >= 2 && month <= 4) return t ? t("spring") : "Foråret";
+  if (month >= 5 && month <= 7) return t ? t("summer") : "Sommeren";
+  if (month >= 8 && month <= 10) return t ? t("autumn") : "Efteråret";
+  return t ? t("winter") : "Vinteren";
 }
 
 function filterTripsBySeason(trips: any[], seasonKey: string): any[] {
@@ -492,12 +497,12 @@ function filterTripsBySeason(trips: any[], seasonKey: string): any[] {
   });
 }
 
-function timeOfDayBucket(h: number): string {
-  if (h >= 5 && h < 9) return "Morgenen";
-  if (h >= 9 && h < 12) return "Formiddagen";
-  if (h >= 12 && h < 17) return "Eftermiddagen";
-  if (h >= 17 && h < 22) return "Aftenen";
-  return "Natten";
+function timeOfDayBucket(h: number, t?: TranslateFn): string {
+  if (h >= 5 && h < 9) return t ? t("theMorning") : "Morgenen";
+  if (h >= 9 && h < 12) return t ? t("theLateMorning") : "Formiddagen";
+  if (h >= 12 && h < 17) return t ? t("theAfternoon") : "Eftermiddagen";
+  if (h >= 17 && h < 22) return t ? t("theEvening") : "Aftenen";
+  return t ? t("theNight") : "Natten";
 }
 
 type TempBand = {
@@ -514,47 +519,47 @@ const TEMP_BANDS: TempBand[] = [
   { label: "16°C+", min: 16, max: 100 },
 ];
 
-function tempBucketLabel(t?: number | null): string {
-  if (t == null || !Number.isFinite(t)) return "ukendt";
-  const band = TEMP_BANDS.find((b) => t >= b.min && t < b.max);
-  return band ? band.label : "ukendt";
+function tempBucketLabel(temp?: number | null, t?: TranslateFn): string {
+  if (temp == null || !Number.isFinite(temp)) return t ? t("unknown") : "ukendt";
+  const band = TEMP_BANDS.find((b) => temp >= b.min && temp < b.max);
+  return band ? band.label : (t ? t("unknown") : "ukendt");
 }
 
-function windSpeedBucketLabel(ms?: number | null): string {
-  if (ms == null || !Number.isFinite(ms)) return "ukendt";
-  if (ms < 4) return "svag vind";
-  if (ms < 8) return "mild vind";
-  if (ms < 12) return "frisk vind";
-  return "hård vind";
+function windSpeedBucketLabel(ms?: number | null, t?: TranslateFn): string {
+  if (ms == null || !Number.isFinite(ms)) return t ? t("unknown") : "ukendt";
+  if (ms < 4) return t ? t("weakWind") : "svag vind";
+  if (ms < 8) return t ? t("mildWind") : "mild vind";
+  if (ms < 12) return t ? t("freshWind") : "frisk vind";
+  return t ? t("hardWind") : "hård vind";
 }
 
-function coastWindLabel(raw?: string | null): string | null {
+function coastWindLabel(raw?: string | null, t?: TranslateFn): string | null {
   if (!raw) return null;
   const v = raw.toLowerCase();
 
-  if (v.includes("fraland")) return "fralandsvind";
-  if (v.includes("påland") || v.includes("på-land")) return "pålandsvind";
+  if (v.includes("fraland")) return t ? t("offshoreWind") : "fralandsvind";
+  if (v.includes("påland") || v.includes("på-land")) return t ? t("onshoreWind") : "pålandsvind";
   if (v.includes("side") || v.includes("langs") || v.includes("tvaers"))
-    return "sidevind";
-  if (v.includes("offshore")) return "fralandsvind";
-  if (v.includes("onshore")) return "pålandsvind";
+    return t ? t("sideWind") : "sidevind";
+  if (v.includes("offshore")) return t ? t("offshoreWind") : "fralandsvind";
+  if (v.includes("onshore")) return t ? t("onshoreWind") : "pålandsvind";
 
   if (v === "ukendt") return null;
   return raw;
 }
 
 // Vindretning fra grader -> Nord / Nordøst / ... / Nordvest
-function windDirLabelFromDeg(deg: number): string {
+function windDirLabelFromDeg(deg: number, t?: TranslateFn): string {
   const d = ((deg % 360) + 360) % 360;
 
-  if (d >= 337.5 || d < 22.5) return "Nord";
-  if (d >= 22.5 && d < 67.5) return "Nordøst";
-  if (d >= 67.5 && d < 112.5) return "Øst";
-  if (d >= 112.5 && d < 157.5) return "Sydøst";
-  if (d >= 157.5 && d < 202.5) return "Syd";
-  if (d >= 202.5 && d < 247.5) return "Sydvest";
-  if (d >= 247.5 && d < 292.5) return "Vest";
-  return "Nordvest";
+  if (d >= 337.5 || d < 22.5) return t ? t("north") : "Nord";
+  if (d >= 22.5 && d < 67.5) return t ? t("northEast") : "Nordøst";
+  if (d >= 67.5 && d < 112.5) return t ? t("east") : "Øst";
+  if (d >= 112.5 && d < 157.5) return t ? t("southEast") : "Sydøst";
+  if (d >= 157.5 && d < 202.5) return t ? t("south") : "Syd";
+  if (d >= 202.5 && d < 247.5) return t ? t("southWest") : "Sydvest";
+  if (d >= 247.5 && d < 292.5) return t ? t("west") : "Vest";
+  return t ? t("northWest") : "Nordvest";
 }
 
 // Nu vælger vi bøtten med flest fisk (fangster),
@@ -586,29 +591,29 @@ function pickBestBucket(
   };
 }
 
-function durationBucketLabel(durationSec?: number | null): string | null {
+function durationBucketLabel(durationSec?: number | null, t?: TranslateFn): string | null {
   if (!Number.isFinite(durationSec ?? null)) return null;
   const hrs = (durationSec as number) / 3600;
-  if (hrs < 2) return "<2 timer";
-  if (hrs < 4) return "2-4 timer";
-  if (hrs < 6) return "4-6 timer";
-  return "6+ timer";
+  if (hrs < 2) return t ? t("lessThan2Hours") : "<2 timer";
+  if (hrs < 4) return t ? t("hours2to4") : "2-4 timer";
+  if (hrs < 6) return t ? t("hours4to6") : "4-6 timer";
+  return t ? t("hours6plus") : "6+ timer";
 }
 
-function movementLabel(distanceM?: number | null, durationSec?: number | null): string | null {
+function movementLabel(distanceM?: number | null, durationSec?: number | null, t?: TranslateFn): string | null {
   if (!Number.isFinite(distanceM ?? null) || !Number.isFinite(durationSec ?? null)) return null;
   const dist = distanceM as number;
   const dur = durationSec as number;
   if (dur <= 0) return null;
   const speed = dist / dur; // m/s
-  if (dist <= 300) return "Stillestående/let bevægelse";
-  if (dist >= 1500 || speed >= 0.35) return "Affiskning af vand";
-  return "Roligt tempo";
+  if (dist <= 300) return t ? t("standingLightMovement") : "Stillestående/let bevægelse";
+  if (dist >= 1500 || speed >= 0.35) return t ? t("fishingTheWater") : "Affiskning af vand";
+  return t ? t("calmPace") : "Roligt tempo";
 }
 
 // VIGTIG DEL: nu bruger vi fangst-timestamps fra fish_events_json
 // i kombination med vejr-evaluation pr. tur
-function buildWeatherSummary(allTrips: any[]): string | null {
+function buildWeatherSummary(allTrips: any[], t?: TranslateFn): string | null {
   const tripsWithFish = allTrips.filter((t) => (t.fish_count ?? 0) > 0);
   if (!tripsWithFish.length) return null;
 
@@ -665,14 +670,14 @@ function buildWeatherSummary(allTrips: any[]): string | null {
     return null;
   };
 
-  for (const t of tripsWithFish) {
-    const fishCount = t.fish_count ?? 0;
+  for (const trip of tripsWithFish) {
+    const fishCount = trip.fish_count ?? 0;
 
     let meta: any = {};
     let evaluation: any = null;
 
     try {
-      meta = t.meta_json ? JSON.parse(t.meta_json) : {};
+      meta = trip.meta_json ? JSON.parse(trip.meta_json) : {};
     } catch {
       meta = {};
     }
@@ -719,36 +724,37 @@ function buildWeatherSummary(allTrips: any[]): string | null {
 
     const windDirKey =
       windDirDeg != null && Number.isFinite(windDirDeg)
-        ? windDirLabelFromDeg(windDirDeg)
+        ? windDirLabelFromDeg(windDirDeg, t)
         : null;
 
-    const tideKey = waterLevelBucket(wl);
-    const airKey = tempBucketLabel(airT);
-    const waterKey = tempBucketLabel(waterT);
-    const windSpeedKey = windSpeedBucketLabel(windMs);
+    const tideKey = waterLevelBucket(wl, t);
+    const airKey = tempBucketLabel(airT, t);
+    const waterKey = tempBucketLabel(waterT, t);
+    const windSpeedKey = windSpeedBucketLabel(windMs, t);
     const durationLabel =
       durationBucketLabel(
-        Number.isFinite(t.duration_sec)
-          ? t.duration_sec
-          : t.start_ts && t.end_ts
+        Number.isFinite(trip.duration_sec)
+          ? trip.duration_sec
+          : trip.start_ts && trip.end_ts
           ? Math.max(
               0,
-              (new Date(t.end_ts).getTime() - new Date(t.start_ts).getTime()) /
+              (new Date(trip.end_ts).getTime() - new Date(trip.start_ts).getTime()) /
                 1000
             )
-          : null
+          : null,
+        t
       ) ?? null;
-    const moveLabel = movementLabel(t.distance_m, t.duration_sec);
-    const tripLocation = getTripLocation(t);
+    const moveLabel = movementLabel(trip.distance_m, trip.duration_sec, t);
+    const tripLocation = getTripLocation(trip);
 
     // Fangst-timestamps:
     // 1) Prøver fish_events_json (ISO-strenge eller ms)
     // 2) Hvis ikke, falder vi tilbage til start_ts og fordeler fishCount dér
     let catchMs: number[] = [];
 
-    if (t.fish_events_json) {
+    if (trip.fish_events_json) {
       try {
-        const raw = JSON.parse(t.fish_events_json);
+        const raw = JSON.parse(trip.fish_events_json);
         if (Array.isArray(raw)) {
           for (const ev of raw) {
             if (typeof ev === "string") {
@@ -764,8 +770,8 @@ function buildWeatherSummary(allTrips: any[]): string | null {
       }
     }
 
-    if (!catchMs.length && fishCount > 0 && t.start_ts) {
-      const base = new Date(t.start_ts).getTime();
+    if (!catchMs.length && fishCount > 0 && trip.start_ts) {
+      const base = new Date(trip.start_ts).getTime();
       for (let i = 0; i < fishCount; i++) {
         catchMs.push(base);
       }
@@ -776,7 +782,7 @@ function buildWeatherSummary(allTrips: any[]): string | null {
     }
 
     // Spotnavn til statistik
-    const spotName: string | null = t.spot_name ?? null;
+    const spotName: string | null = trip.spot_name ?? null;
 
     // Nu kører vi én gang pr. fangst-event
     for (const ts of catchMs) {
@@ -788,7 +794,7 @@ function buildWeatherSummary(allTrips: any[]): string | null {
 
       // Årstid fra fangst-tid
       if (month != null && Number.isFinite(month)) {
-        const seasonKey = seasonFromMonth(month);
+        const seasonKey = seasonFromMonth(month, t);
         if (!seasonStats[seasonKey]) {
           seasonStats[seasonKey] = { trips: 0, fish: 0 };
         }
@@ -798,7 +804,7 @@ function buildWeatherSummary(allTrips: any[]): string | null {
 
       // Tid på dagen fra fangst-tid
       if (hour != null && Number.isFinite(hour)) {
-        const todKey = timeOfDayBucket(hour);
+        const todKey = timeOfDayBucket(hour, t);
         if (!todStats[todKey]) {
           todStats[todKey] = { trips: 0, fish: 0 };
         }
@@ -921,91 +927,91 @@ function buildWeatherSummary(allTrips: any[]): string | null {
   const bestWindDir = pickBestBucket(windDirStats, MIN_TRIPS);
 
   const lines: string[] = [];
+  const unknown = t ? t("unknown") : "ukendt";
 
   // ØVERST: Spot-navn
-  if (bestSpot && bestSpot.label !== "ukendt") {
-    lines.push(`Spot: ${bestSpot.label}`);
+  if (bestSpot && bestSpot.label !== unknown) {
+    lines.push(`${t ? t("spotLabel") : "Spot"}: ${bestSpot.label}`);
   }
 
   // Vejr (samlet tæt)
-  if (bestTide && bestTide.label !== "ukendt") {
+  if (bestTide && bestTide.label !== unknown) {
     lines.push(bestTide.label);
   }
-  if (bestWindSpeed && bestWindSpeed.label !== "ukendt") {
+  if (bestWindSpeed && bestWindSpeed.label !== unknown) {
     const ws = bestWindSpeed.label;
-    lines.push(
-      ws.endsWith("vind") ? `${ws[0].toUpperCase()}${ws.slice(1)}styrke` : ws
-    );
+    // Capitalize first letter and add "styrke" for wind
+    lines.push(ws.charAt(0).toUpperCase() + ws.slice(1));
   }
-  if (bestWindDir && bestWindDir.label !== "ukendt") {
-    lines.push(`Vindretning: ${bestWindDir.label}`);
+  if (bestWindDir && bestWindDir.label !== unknown) {
+    lines.push(`${t ? t("windDirection") : "Vindretning"}: ${bestWindDir.label}`);
   }
   if (bestCoastWind) {
     const key = bestCoastWind.label.toLowerCase();
-    if (key.includes("fraland")) {
-      lines.push("Ved fralandsvind");
-    } else if (key.includes("påland") || key.includes("på-land")) {
-      lines.push("Ved pålandsvind");
+    if (key.includes("fraland") || key.includes("offshore")) {
+      lines.push(t ? t("atOffshoreWind") : "Ved fralandsvind");
+    } else if (key.includes("påland") || key.includes("på-land") || key.includes("onshore")) {
+      lines.push(t ? t("atOnshoreWind") : "Ved pålandsvind");
     } else if (key.includes("side") || key.includes("langs") || key.includes("tvaers")) {
-      lines.push("Ved sidevind");
+      lines.push(t ? t("atSideWind") : "Ved sidevind");
     } else {
-      lines.push(`Vind ift. kyst: ${bestCoastWind.label}`);
+      lines.push(`${t ? t("windRelativeToCoast") : "Vind ift. kyst"}: ${bestCoastWind.label}`);
     }
   }
-  if (bestWater && bestWater.label !== "ukendt") {
-    lines.push(`Havtemperatur: ${bestWater.label}`);
+  if (bestWater && bestWater.label !== unknown) {
+    lines.push(`${t ? t("seaTemp") : "Havtemperatur"}: ${bestWater.label}`);
   }
-  if (bestAir && bestAir.label !== "ukendt") {
-    lines.push(`Lufttemperatur: ${bestAir.label}`);
+  if (bestAir && bestAir.label !== unknown) {
+    lines.push(`${t ? t("airTemp") : "Lufttemperatur"}: ${bestAir.label}`);
   }
 
   // Tid på dagen + årstid + solrelation
   if (bestTod) {
-    lines.push(`Om ${bestTod.label.toLowerCase()}`);
+    lines.push(`${t ? t("inThe") : "Om"} ${bestTod.label.toLowerCase()}`);
   }
   if (bestSeason) {
-    lines.push(`Om ${bestSeason.label.toLowerCase()}`);
+    lines.push(`${t ? t("inThe") : "Om"} ${bestSeason.label.toLowerCase()}`);
   }
   if (sunOffset.count > 0) {
     const avg = sunOffset.sumMinutes / sunOffset.count;
     const event =
       sunOffset.sunriseCount >= sunOffset.sunsetCount
-        ? "solopgang"
-        : "solnedgang";
-    const dir = avg < 0 ? "før" : "efter";
+        ? (t ? t("sunrise") : "solopgang")
+        : (t ? t("sunset") : "solnedgang");
+    const dir = avg < 0 ? (t ? t("minBefore") : "min før") : (t ? t("minAfter") : "min efter");
     const minutes = Math.round(Math.abs(avg));
-    lines.push(`Typisk ${minutes} min ${dir} ${event}`);
+    lines.push(`${t ? t("typicalMinutes") : "Typisk"} ${minutes} ${dir} ${event}`);
   }
 
   // Tur-setup
   if (bestDuration) {
-    lines.push(`Turlængde: ${bestDuration.label} giver flest fisk`);
+    lines.push(`${t ? t("tripLength") : "Turlængde"}: ${bestDuration.label} ${t ? t("givesMostFish") : "giver flest fisk"}`);
   }
   if (bestMovement) {
     const mv = bestMovement.label.toLowerCase();
-    if (mv.includes("affiskning")) {
-      lines.push("Flest fisk ved affiskning af vand");
-    } else if (mv.includes("still")) {
-      lines.push("Flest fisk ved stillestående/rolig placering");
+    if (mv.includes("affiskning") || mv.includes("fishing")) {
+      lines.push(`${t ? t("mostFishAt") : "Flest fisk ved"} ${t ? t("fishingWater") : "affiskning af vand"}`);
+    } else if (mv.includes("still") || mv.includes("standing")) {
+      lines.push(`${t ? t("mostFishAt") : "Flest fisk ved"} ${t ? t("standingStill") : "stillestående/rolig placering"}`);
     } else {
-      lines.push(`Flest fisk ved ${bestMovement.label.toLowerCase()}`);
+      lines.push(`${t ? t("mostFishAt") : "Flest fisk ved"} ${bestMovement.label.toLowerCase()}`);
     }
   }
 
   // Prognose-match guide (hint til brugeren)
   const forecastHints: string[] = [];
-  if (bestWindSpeed && bestWindSpeed.label !== "ukendt") {
+  if (bestWindSpeed && bestWindSpeed.label !== unknown) {
     forecastHints.push(bestWindSpeed.label);
   }
-  if (bestTide && bestTide.label !== "ukendt") {
+  if (bestTide && bestTide.label !== unknown) {
     forecastHints.push(bestTide.label);
   }
-  if (bestWater && bestWater.label !== "ukendt") {
-    forecastHints.push(`Havtemp ${bestWater.label}`);
+  if (bestWater && bestWater.label !== unknown) {
+    forecastHints.push(`${t ? t("seaTemp") : "Havtemp"} ${bestWater.label}`);
   }
   if (forecastHints.length) {
     lines.push(
-      `Prognose: kig efter ${forecastHints.slice(0, 3).join(", ")} for bedste match`
+      `${t ? t("forecastLookFor") : "Prognose: kig efter"} ${forecastHints.slice(0, 3).join(", ")} ${t ? t("forBestMatch") : "for bedste match"}`
     );
   }
 
@@ -1070,6 +1076,7 @@ function patternIcon(line: string): string {
 // ============================================================================
 
 export default function Track() {
+  const { t } = useLanguage();
   const [running, setRunning] = useState(false);
   const [points, setPoints] = useState<Pt[]>([]);
   const [distanceM, setDistanceM] = useState(0);
@@ -1279,14 +1286,15 @@ export default function Track() {
     );
   };
   const seasonOptions = [
-    { key: "all", label: "Hele året" },
-    { key: "spring", label: "Foråret" },
-    { key: "summer", label: "Sommeren" },
-    { key: "autumn", label: "Efteråret" },
-    { key: "winter", label: "Vinteren" },
+    { key: "all", label: t("wholeYear") },
+    { key: "spring", label: t("spring") },
+    { key: "summer", label: t("summer") },
+    { key: "autumn", label: t("autumn") },
+    { key: "winter", label: t("winter") },
   ];
   const getSeasonLabel = (key: string) =>
-    seasonOptions.find((s) => s.key === key)?.label ?? "Hele året";
+    seasonOptions.find((s) => s.key === key)?.label ?? t("wholeYear");
+  const filterOptions = getFilterOptions(t);
 
   const reminderIdRef = useRef<string | null>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
@@ -1462,18 +1470,18 @@ export default function Track() {
 
   function buildGraphs(allTrips: any[], selectedYear: number) {
     const monthNames = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "Maj",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Okt",
-      "Nov",
-      "Dec",
+      t("jan"),
+      t("feb"),
+      t("mar"),
+      t("apr"),
+      t("may"),
+      t("jun"),
+      t("jul"),
+      t("aug"),
+      t("sep"),
+      t("oct"),
+      t("nov"),
+      t("dec"),
     ];
     const months: number[] = new Array(12).fill(0);
 
@@ -1538,8 +1546,8 @@ async function refreshYearsAndStats(
     const filteredYearTrips = filterTripsBySeason(yearTrips, seasonKey);
     const filteredAllTrips = filterTripsBySeason(allTrips, seasonKey);
 
-    const yearSummary = buildWeatherSummary(filteredYearTrips);
-    const allSummary = buildWeatherSummary(filteredAllTrips);
+    const yearSummary = buildWeatherSummary(filteredYearTrips, t);
+    const allSummary = buildWeatherSummary(filteredAllTrips, t);
 
     setYearWeatherSummary(yearSummary);
     setAllTimeWeatherSummary(allSummary);
@@ -2119,7 +2127,7 @@ async function refreshYearsAndStats(
             <View style={styles.toastIcon}>
               <Ionicons name="checkmark" size={18} color={THEME.bg} />
             </View>
-            <Text style={styles.toastText}>Fangst registreret</Text>
+            <Text style={styles.toastText}>{t("catchRegistered")}</Text>
           </View>
         </View>
       )}
@@ -2135,12 +2143,12 @@ async function refreshYearsAndStats(
               <View style={[styles.statusIndicator, running && styles.statusIndicatorActive]}>
                 <View style={[styles.statusDot, running && styles.statusDotActive]} />
               </View>
-              <Text style={styles.heroTitle}>Live Tracking</Text>
+              <Text style={styles.heroTitle}>{t("liveTracking")}</Text>
             </View>
             {running && (
               <View style={styles.activeBadge}>
                 <View style={styles.activePulse} />
-                <Text style={styles.activeBadgeText}>AKTIV</Text>
+                <Text style={styles.activeBadgeText}>{t("active")}</Text>
               </View>
             )}
           </View>
@@ -2191,14 +2199,14 @@ async function refreshYearsAndStats(
               <View style={styles.overlayStatBox}>
                 <Ionicons name="time-outline" size={14} color={THEME.graphYellow} />
                 <View>
-                  <Text style={styles.overlayLabel}>TID</Text>
+                  <Text style={styles.overlayLabel}>{t("time")}</Text>
                   <Text style={styles.overlayValue}>{fmtTime(sec)}</Text>
                 </View>
               </View>
               <View style={styles.overlayStatBox}>
                 <Ionicons name="navigate-outline" size={14} color={THEME.graphYellow} />
                 <View>
-                  <Text style={styles.overlayLabel}>DISTANCE</Text>
+                  <Text style={styles.overlayLabel}>{t("distance").toUpperCase()}</Text>
                   <Text style={styles.overlayValue}>
                     {(distanceM / 1000).toFixed(2)} km
                   </Text>
@@ -2208,7 +2216,7 @@ async function refreshYearsAndStats(
                 <View style={styles.overlayStatBox}>
                   <Ionicons name="fish" size={14} color={THEME.graphYellow} />
                   <View>
-                    <Text style={styles.overlayLabel}>FANGST</Text>
+                    <Text style={styles.overlayLabel}>{t("catch")}</Text>
                     <Text style={styles.overlayValue}>{catchMarks.length}</Text>
                   </View>
                 </View>
@@ -2233,10 +2241,10 @@ async function refreshYearsAndStats(
                   </View>
                   <View style={styles.startTextContainer}>
                     <Text style={styles.startButtonText}>
-                      {starting ? "Starter..." : "Start fisketur"}
+                      {starting ? t("starting") : t("startFishingTrip")}
                     </Text>
                     <Text style={styles.startButtonSubtext}>
-                      Tryk for at begynde tracking
+                      {t("tapToStartTracking")}
                     </Text>
                   </View>
                 </View>
@@ -2248,7 +2256,7 @@ async function refreshYearsAndStats(
                   <View style={styles.catchIconCircle}>
                     <Ionicons name="fish" size={24} color="#000" />
                   </View>
-                  <Text style={styles.catchButtonLargeText}>Fangst!</Text>
+                  <Text style={styles.catchButtonLargeText}>{t("catchBtn")}</Text>
                 </Pressable>
 
                 {/* Stop knap */}
@@ -2258,7 +2266,7 @@ async function refreshYearsAndStats(
                   disabled={savingTrip}
                 >
                   <Ionicons name="stop-circle" size={22} color={THEME.danger} />
-                  <Text style={styles.stopButtonNewText}>Afslut</Text>
+                  <Text style={styles.stopButtonNewText}>{t("finish")}</Text>
                 </Pressable>
               </View>
             )}
@@ -2268,7 +2276,7 @@ async function refreshYearsAndStats(
         {/* === GRID STATS (Year) + FISKEMØNSTER === */}
         <View style={styles.sectionHeader}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={styles.sectionTitle}>Statistik</Text>
+            <Text style={styles.sectionTitle}>{t("statistics")}</Text>
             <View style={styles.yearPill}>
               <Text style={styles.yearPillText}>{year}</Text>
             </View>
@@ -2278,7 +2286,7 @@ async function refreshYearsAndStats(
             onPress={() => setYearPickerVisible(true)}
           >
             <Ionicons name="calendar-outline" size={14} color={THEME.textSec} />
-            <Text style={styles.yearPickerBtnText}>Skift år</Text>
+            <Text style={styles.yearPickerBtnText}>{t("changeYear")}</Text>
           </Pressable>
         </View>
 
@@ -2288,54 +2296,54 @@ async function refreshYearsAndStats(
             <View style={styles.statsGridSymmetric}>
               <View style={styles.statCell}>
                 <Text style={styles.statCellValue}>{yearStats.trips}</Text>
-                <Text style={styles.statCellLabel}>Ture</Text>
+                <Text style={styles.statCellLabel}>{t("trips")}</Text>
               </View>
               <View style={styles.statCell}>
                 <Text style={styles.statCellValue}>{yearStats.total_fish}</Text>
-                <Text style={styles.statCellLabel}>Fisk</Text>
+                <Text style={styles.statCellLabel}>{t("fish")}</Text>
               </View>
               <View style={styles.statCell}>
                 <Text style={styles.statCellValue}>{yearStats.fangstrate}%</Text>
-                <Text style={styles.statCellLabel}>Fangstrate</Text>
+                <Text style={styles.statCellLabel}>{t("catchRate")}</Text>
               </View>
               <View style={styles.statCell}>
                 <Text style={styles.statCellValue}>{yearStats.catch_trips}</Text>
-                <Text style={styles.statCellLabel}>Fangstture</Text>
+                <Text style={styles.statCellLabel}>{t("catchTrips")}</Text>
               </View>
               <View style={styles.statCell}>
                 <Text style={styles.statCellValue}>{yearStats.null_trips}</Text>
-                <Text style={styles.statCellLabel}>Nulture</Text>
+                <Text style={styles.statCellLabel}>{t("nullTrips")}</Text>
               </View>
               <View style={styles.statCell}>
                 <Text style={styles.statCellValue}>
                   {(yearStats.total_sec / 3600).toFixed(0)}
                 </Text>
-                <Text style={styles.statCellLabel}>Timer</Text>
+                <Text style={styles.statCellLabel}>{t("hoursLabel")}</Text>
               </View>
               <View style={styles.statCell}>
                 <Text style={styles.statCellValue}>
                   {(yearStats.total_m / 1000).toFixed(1)}
                 </Text>
-                <Text style={styles.statCellLabel}>Km fisket</Text>
+                <Text style={styles.statCellLabel}>{t("kmFished")}</Text>
               </View>
               <View style={styles.statCell}>
                 <Text style={styles.statCellValue}>
                   {yearStats.fish_per_hour ?? "0"}
                 </Text>
-                <Text style={styles.statCellLabel}>Fisk/time</Text>
+                <Text style={styles.statCellLabel}>{t("fishPerHour")}</Text>
               </View>
               <View style={styles.statCell}>
                 <Text style={styles.statCellValue}>
                   {yearStats.multi_fish_rate ?? "0"}%
                 </Text>
-                <Text style={styles.statCellLabel}>Multi-fisk</Text>
+                <Text style={styles.statCellLabel}>{t("multiFish")}</Text>
               </View>
             </View>
 
             {/* Fiskemønster */}
             <View style={styles.fishPatternCard}>
               <View style={styles.fishPatternHeader}>
-                <Text style={styles.fishPatternTitle}>Fiskemønster</Text>
+                <Text style={styles.fishPatternTitle}>{t("fishingPattern")}</Text>
                 <Pressable
                   style={styles.seasonBtn}
                   onPress={() => setSeasonPickerVisible(true)}
@@ -2360,13 +2368,13 @@ async function refreshYearsAndStats(
               }}
             >
               <Ionicons name="location" size={18} color={THEME.graphYellow} />
-              <Text style={styles.spotsButtonTitle}>Mine Fiskepladser</Text>
+              <Text style={styles.spotsButtonTitle}>{t("myFishingSpots")}</Text>
               <Ionicons name="chevron-forward" size={16} color={THEME.textTertiary} />
             </Pressable>
           </View>
         ) : (
           <Text style={{ color: THEME.textSec, marginBottom: 16 }}>
-            Ingen data.
+            {t("noData")}
           </Text>
         )}
 
@@ -2375,7 +2383,7 @@ async function refreshYearsAndStats(
           <View style={styles.cardHeader}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Ionicons name="bar-chart-outline" size={16} color={THEME.textSec} />
-              <Text style={styles.cardTitle}>Månedsoversigt</Text>
+              <Text style={styles.cardTitle}>{t("monthlyOverview")}</Text>
             </View>
           </View>
           <TripGraph label="Årsfangster" unit="" data={yearGraphData} />
@@ -2404,60 +2412,60 @@ async function refreshYearsAndStats(
               <View style={styles.statsGridSymmetric}>
                 <View style={styles.statCell}>
                   <Text style={styles.statCellValue}>{allStats.trips}</Text>
-                  <Text style={styles.statCellLabel}>Ture</Text>
+                  <Text style={styles.statCellLabel}>{t("trips")}</Text>
                 </View>
                 <View style={styles.statCell}>
                   <Text style={styles.statCellValue}>{allStats.total_fish}</Text>
-                  <Text style={styles.statCellLabel}>Fisk</Text>
+                  <Text style={styles.statCellLabel}>{t("fish")}</Text>
                 </View>
                 <View style={styles.statCell}>
                   <Text style={styles.statCellValue}>{allStats.fangstrate}%</Text>
-                  <Text style={styles.statCellLabel}>Fangstrate</Text>
+                  <Text style={styles.statCellLabel}>{t("catchRate")}</Text>
                 </View>
                 <View style={styles.statCell}>
                   <Text style={styles.statCellValue}>{allStats.catch_trips}</Text>
-                  <Text style={styles.statCellLabel}>Fangstture</Text>
+                  <Text style={styles.statCellLabel}>{t("catchTrips")}</Text>
                 </View>
                 <View style={styles.statCell}>
                   <Text style={styles.statCellValue}>{allStats.null_trips}</Text>
-                  <Text style={styles.statCellLabel}>Nulture</Text>
+                  <Text style={styles.statCellLabel}>{t("nullTrips")}</Text>
                 </View>
                 <View style={styles.statCell}>
                   <Text style={styles.statCellValue}>
                     {(allStats.total_sec / 3600).toFixed(0)}
                   </Text>
-                  <Text style={styles.statCellLabel}>Timer</Text>
+                  <Text style={styles.statCellLabel}>{t("hoursLabel")}</Text>
                 </View>
                 <View style={styles.statCell}>
                   <Text style={styles.statCellValue}>
                     {(allStats.total_m / 1000).toFixed(0)}
                   </Text>
-                  <Text style={styles.statCellLabel}>Km fisket</Text>
+                  <Text style={styles.statCellLabel}>{t("kmFished")}</Text>
                 </View>
                 <View style={styles.statCell}>
                   <Text style={styles.statCellValue}>
                     {allStats.fish_per_hour ?? "0"}
                   </Text>
-                  <Text style={styles.statCellLabel}>Fisk/time</Text>
+                  <Text style={styles.statCellLabel}>{t("fishPerHour")}</Text>
                 </View>
                 <View style={styles.statCell}>
                   <Text style={styles.statCellValue}>
                     {allStats.multi_fish_rate ?? "0"}%
                   </Text>
-                  <Text style={styles.statCellLabel}>Multi-fisk</Text>
+                  <Text style={styles.statCellLabel}>{t("multiFish")}</Text>
                 </View>
               </View>
 
               {/* Graf */}
               <View style={styles.allTimeGraphSection}>
-                <Text style={styles.allTimeGraphTitle}>Fangster pr. år</Text>
+                <Text style={styles.allTimeGraphTitle}>{t("catchesPerYear")}</Text>
                 <TripGraph label="All-time" unit="" data={allTimeGraphData} />
               </View>
 
               {/* Fiskemønster */}
               <View style={styles.fishPatternCard}>
                 <View style={styles.fishPatternHeader}>
-                  <Text style={styles.fishPatternTitle}>Fiskemønster</Text>
+                  <Text style={styles.fishPatternTitle}>{t("fishingPattern")}</Text>
                   <Pressable
                     style={styles.seasonBtn}
                     onPress={() => setSeasonPickerVisible(true)}
@@ -2480,7 +2488,7 @@ async function refreshYearsAndStats(
         <View
           style={[styles.sectionHeader, { marginTop: 24, paddingRight: 8 }]}
         >
-          <Text style={styles.sectionTitle}>Seneste ture</Text>
+          <Text style={styles.sectionTitle}>{t("recentTrips")}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -2521,7 +2529,7 @@ async function refreshYearsAndStats(
           <View style={styles.modalBackdrop}>
             <View style={styles.modalBox}>
               <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalTitle}>Vælg år</Text>
+                <Text style={styles.modalTitle}>{t("selectYear")}</Text>
                 <Pressable
                   onPress={() => setYearPickerVisible(false)}
                   style={styles.modalCloseBtn}
@@ -2570,8 +2578,8 @@ async function refreshYearsAndStats(
         </Modal>
 
         <View style={{ gap: 12 }}>
-          {recent.map((t) => (
-            <Link key={t.id} href={`/trips/${t.id}`} asChild>
+          {recent.map((tripItem) => (
+            <Link key={tripItem.id} href={`/trips/${tripItem.id}`} asChild>
               <Pressable style={styles.tripCard}>
                 <View
                   style={{
@@ -2589,13 +2597,13 @@ async function refreshYearsAndStats(
                     />
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <TripTitle trip={t} />
+                    <TripTitle trip={tripItem} t={t} />
                     <Text style={styles.tripSub} numberOfLines={1} ellipsizeMode="tail">
-                      {(t.distance_m / 1000).toFixed(2)} km •{" "}
-                      {fmtTime(t.duration_sec)}
+                      {(tripItem.distance_m / 1000).toFixed(2)} km •{" "}
+                      {fmtTime(tripItem.duration_sec)}
                     </Text>
                     <View style={[styles.tripBadge, { marginTop: 8 }]}>
-                      {t.fish_count > 0 ? (
+                      {tripItem.fish_count > 0 ? (
                         <>
                           <Ionicons
                             name="fish"
@@ -2605,14 +2613,14 @@ async function refreshYearsAndStats(
                           <Text
                             style={[styles.tripBadgeText, { color: THEME.bg }]}
                           >
-                            {t.fish_count}
+                            {tripItem.fish_count}
                           </Text>
                         </>
                       ) : (
                         <Text
                           style={[styles.tripBadgeText, { color: "#000" }]}
                         >
-                          Ingen fisk
+                          {t("noFish")}
                         </Text>
                       )}
                     </View>
@@ -2629,7 +2637,7 @@ async function refreshYearsAndStats(
                 marginTop: 10,
               }}
             >
-              Ingen ture fundet.
+              {t("noTripsFound")}
             </Text>
           )}
         </View>
@@ -2637,7 +2645,7 @@ async function refreshYearsAndStats(
         {savingTrip && (
           <View style={styles.savingOverlay}>
             <ActivityIndicator color="#FFF" />
-            <Text style={styles.savingText}>Gemmer tur...</Text>
+            <Text style={styles.savingText}>{t("savingTrip")}</Text>
           </View>
         )}
 
@@ -2649,7 +2657,7 @@ async function refreshYearsAndStats(
               <View style={styles.endTripHeader}>
                 <View style={styles.endTripTitleRow}>
                   <Ionicons name="flag" size={24} color={THEME.graphYellow} />
-                  <Text style={styles.endTripTitle}>Afslut tur</Text>
+                  <Text style={styles.endTripTitle}>{t("finishTrip")}</Text>
                 </View>
                 <View style={styles.endTripCountBadge}>
                   <Text style={styles.endTripCountText}>{catchMarks.length}</Text>
@@ -2659,7 +2667,7 @@ async function refreshYearsAndStats(
               {/* Tidsvælger */}
               <View style={styles.endTripTimeSelector}>
                 <View style={styles.endTripTimeCurrent}>
-                  <Text style={styles.endTripTimeCurrentLabel}>Valgt tidspunkt</Text>
+                  <Text style={styles.endTripTimeCurrentLabel}>{t("selectedTime")}</Text>
                   <Text style={styles.endTripTimeCurrentValue}>
                     {effectiveCursorMs
                       ? new Date(effectiveCursorMs).toLocaleTimeString([], {
@@ -2775,7 +2783,7 @@ async function refreshYearsAndStats(
               <View style={styles.endTripActions}>
                 <Pressable style={styles.endTripAddBtn} onPress={addCatchAtCursor}>
                   <Ionicons name="add" size={20} color="#000" />
-                  <Text style={styles.endTripAddBtnText}>Tilføj fangst</Text>
+                  <Text style={styles.endTripAddBtnText}>{t("addCatch")}</Text>
                 </Pressable>
 
                 <Pressable
@@ -2797,14 +2805,14 @@ async function refreshYearsAndStats(
                       selectedCatchIndex == null && styles.endTripDeleteBtnTextDisabled,
                     ]}
                   >
-                    Slet valgt
+                    {t("deleteSelected")}
                   </Text>
                 </Pressable>
               </View>
 
               {/* Hint tekst */}
               <Text style={styles.endTripHint}>
-                Kør fingeren over tidslinjen for at vælge tidspunkt
+                {t("timelineHint")}
               </Text>
 
               {/* Footer buttons */}
@@ -2816,11 +2824,11 @@ async function refreshYearsAndStats(
                     setCancelConfirmVisible(true);
                   }}
                 >
-                  <Text style={styles.endTripCancelBtnText}>Annullér</Text>
+                  <Text style={styles.endTripCancelBtnText}>{t("cancel")}</Text>
                 </Pressable>
                 <Pressable style={styles.endTripSaveBtn} onPress={confirmFish}>
                   <Ionicons name="checkmark" size={20} color="#000" />
-                  <Text style={styles.endTripSaveBtnText}>Gem tur</Text>
+                  <Text style={styles.endTripSaveBtnText}>{t("saveTrip")}</Text>
                 </Pressable>
               </View>
             </View>
@@ -2835,16 +2843,16 @@ async function refreshYearsAndStats(
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>Afslut tur?</Text>
+              <Text style={styles.modalTitle}>{t("finishTripQuestion")}</Text>
               <Text style={styles.modalText}>
-                Er du sikker på, at du vil stoppe tracking nu?
+                {t("stopTrackingConfirm")}
               </Text>
               <View style={styles.modalBtnRow}>
                 <Pressable
                   style={[styles.btn, styles.ghost]}
                   onPress={() => setStopConfirmVisible(false)}
                 >
-                  <Text style={styles.ghostText}>Fortsæt</Text>
+                  <Text style={styles.ghostText}>{t("continueTrip")}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.btn, styles.stopButton]}
@@ -2853,7 +2861,7 @@ async function refreshYearsAndStats(
                     stop();
                   }}
                 >
-                  <Text style={styles.stopButtonText}>Ja, stop</Text>
+                  <Text style={styles.stopButtonText}>{t("yesStop")}</Text>
                 </Pressable>
               </View>
             </View>
@@ -2864,7 +2872,7 @@ async function refreshYearsAndStats(
         <Modal visible={seasonPickerVisible} transparent animationType="fade">
           <View style={styles.modalBackdrop}>
             <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>Vælg årstid</Text>
+              <Text style={styles.modalTitle}>{t("selectSeason")}</Text>
               <View style={{ gap: 10, marginTop: 6 }}>
                 {seasonOptions.map((opt) => {
                   const active = opt.key === selectedSeasonKey;

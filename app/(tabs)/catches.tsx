@@ -17,6 +17,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { listCatches } from "../../lib/catches";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
+import { useLanguage } from "../../lib/i18n";
 
 // --- TEMAFARVER ---
 const THEME = {
@@ -47,16 +48,17 @@ function isoDay(d: Date) {
     .slice(0, 10);
 }
 
-// Mulige størrelsesfiltre
+// Size filters - labels will be translated in component
 const sizeFilters = [
-  { label: "Alle", cm: 0 },
-  { label: "40 cm+", cm: 40 },
-  { label: "50 cm+", cm: 50 },
-  { label: "60 cm+", cm: 60 },
-  { label: "70 cm+", cm: 70 },
+  { labelKey: "all", cm: 0 },
+  { labelKey: "40cm", cm: 40 },
+  { labelKey: "50cm", cm: 50 },
+  { labelKey: "60cm", cm: 60 },
+  { labelKey: "70cm", cm: 70 },
 ];
 
 export default function Catches() {
+  const { t } = useLanguage();
   const [rows, setRows] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [minLen, setMinLen] = useState<number>(0); // Minimumslængde (cm)
@@ -103,7 +105,7 @@ export default function Catches() {
                 size={18}
                 color={THEME.primaryText}
               />
-              <Text style={styles.filterToggleText}>Filtre</Text>
+              <Text style={styles.filterToggleText}>{t("filters")}</Text>
               <Ionicons
                 name={showFilters ? "chevron-up" : "chevron-down"}
                 size={16}
@@ -111,14 +113,14 @@ export default function Catches() {
               />
             </Pressable>
             <Text style={styles.headerSub}>
-              Se dine fangster, filtrér på dato og længde.
+              {t("viewCatchesDesc")}
             </Text>
           </View>
 
           <Link href="/new-catch" asChild>
             <Pressable style={styles.addButton}>
               <Ionicons name="add" size={18} color={THEME.primaryText} />
-              <Text style={styles.addButtonText}>Ny fangst</Text>
+              <Text style={styles.addButtonText}>{t("newCatch")}</Text>
             </Pressable>
           </Link>
         </View>
@@ -127,7 +129,7 @@ export default function Catches() {
         {showFilters && (
           <View style={styles.filterCard}>
             {/* Dato + længde i samme kort */}
-            <Text style={styles.filterTitle}>Filtre</Text>
+            <Text style={styles.filterTitle}>{t("filters")}</Text>
 
             {/* Dato-filter */}
             <View style={styles.filterRow}>
@@ -141,11 +143,11 @@ export default function Catches() {
                   color={THEME.textSec}
                 />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.filterLabel}>Dato</Text>
+                  <Text style={styles.filterLabel}>{t("date")}</Text>
                   <Text style={styles.filterValue}>
                     {selectedDate
                       ? fmtDate(isoDay(selectedDate))
-                      : "Alle datoer"}
+                      : t("allDates")}
                   </Text>
                 </View>
                 <Ionicons
@@ -181,7 +183,7 @@ export default function Catches() {
 
             {/* Størrelsesfilter (chips) */}
             <View style={styles.sizeFilterHeader}>
-              <Text style={styles.filterTitleSmall}>Minimumslængde</Text>
+              <Text style={styles.filterTitleSmall}>{t("minLength")}</Text>
               {minLen > 0 && (
                 <Text style={styles.filterActiveInfo}>{minLen} cm+</Text>
               )}
@@ -208,7 +210,7 @@ export default function Catches() {
                         : styles.chipText
                     }
                   >
-                    {filter.label}
+                    {filter.labelKey === "all" ? t("all") : `${filter.cm} cm+`}
                   </Text>
                 </Pressable>
               ))}
@@ -217,13 +219,13 @@ export default function Catches() {
             {/* LILLE OPSUMMERING */}
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Fangster</Text>
+                <Text style={styles.summaryLabel}>{t("catches")}</Text>
                 <Text style={styles.summaryValue}>{rows.length}</Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Filter</Text>
+                <Text style={styles.summaryLabel}>{t("filter")}</Text>
                 <Text style={styles.summaryValue}>
-                  {minLen > 0 ? `${minLen} cm+` : "Alle størrelser"}
+                  {minLen > 0 ? `${minLen} cm+` : t("allSizes")}
                 </Text>
               </View>
             </View>
@@ -240,9 +242,9 @@ export default function Catches() {
               <View style={styles.emptyIconCircle}>
                 <Ionicons name="fish-outline" size={36} color={THEME.calendarAccent} />
               </View>
-              <Text style={styles.emptyTitle}>Ingen fangster endnu</Text>
+              <Text style={styles.emptyTitle}>{t("noCatches")}</Text>
               <Text style={styles.emptyText}>
-                Tryk på "Ny fangst" for at registrere din første havørred.
+                {t("noCatchesDesc")}
               </Text>
             </View>
           }
@@ -316,7 +318,7 @@ export default function Catches() {
                     {item.bait && (
                       <View style={styles.cardDetailRow}>
                         <View style={styles.agnBadge}>
-                          <Text style={styles.agnBadgeText}>Agn</Text>
+                          <Text style={styles.agnBadgeText}>{t("bait").split("/")[0]}</Text>
                         </View>
                         <Text numberOfLines={1} style={styles.cardDetailText}>
                           {item.bait}

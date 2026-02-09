@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useLanguage } from "../../lib/i18n";
 
 // --- TEMA (Dark Mode + Gul Midterknap) ---
 const THEME = {
@@ -144,6 +145,7 @@ export default function TabsLayout() {
 
 function CustomBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const isFocused = (name: string) =>
     state.routes[state.index]?.name === name;
 
@@ -180,7 +182,7 @@ function CustomBar({ state, navigation }: any) {
             letterSpacing: 0.2,
           }}
         >
-          Fisketur
+          {t("tabTrip")}
         </Text>
       </Pressable>
 
@@ -230,7 +232,7 @@ function CustomBar({ state, navigation }: any) {
             letterSpacing: 0.2,
           }}
         >
-          Galleri
+          {t("tabGallery")}
         </Text>
       </Pressable>
     </View>

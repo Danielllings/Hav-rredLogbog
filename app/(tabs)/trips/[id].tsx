@@ -27,6 +27,7 @@ import { getTrip, TripRow, deleteTrip, updateTrip } from "../../../lib/trips";
 
 // TILPAS DETTE IMPORT TIL DIT EKSISTERENDE spots-lib
 import { listSpots, type SpotRow } from "../../../lib/spots";
+import { useLanguage } from "../../../lib/i18n";
 
 const { width } = Dimensions.get("window");
 
@@ -242,6 +243,7 @@ function degToCompass(deg?: number) {
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [trip, setTrip] = useState<TripRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -415,7 +417,7 @@ export default function TripDetailScreen() {
   if (!trip) {
     return (
       <View style={[styles.container, { padding: 16 }]}>
-        <Text style={styles.title}>Tur ikke fundet</Text>
+        <Text style={styles.title}>{t("tripNotFound")}</Text>
       </View>
     );
   }
@@ -521,9 +523,9 @@ export default function TripDetailScreen() {
 
           {/* Symmetrisk 3x2 grid */}
           <View style={styles.infoGrid}>
-            <Info label="Fisk fanget" value={`${fishCountDisplay}`} highlight />
-            <Info label="Varighed" value={fmtTime(trip.duration_sec)} />
-            <Info label="Distance" value={`${(trip.distance_m / 1000).toFixed(1)} km`} />
+            <Info label={t("fishCaughtLabel")} value={`${fishCountDisplay}`} highlight />
+            <Info label={t("duration")} value={fmtTime(trip.duration_sec)} />
+            <Info label={t("distance")} value={`${(trip.distance_m / 1000).toFixed(1)} km`} />
           </View>
 
           {/* Spot redigér */}
@@ -533,7 +535,7 @@ export default function TripDetailScreen() {
           >
             <Ionicons name="location-outline" size={14} color={THEME.textSec} />
             <Text style={styles.spotEditText}>
-              {(trip as any).spot_name ? "Skift lokation" : "Tilføj lokation"}
+              {(trip as any).spot_name ? t("changeLocation") : t("addLocation")}
             </Text>
           </Pressable>
 
@@ -542,6 +544,7 @@ export default function TripDetailScreen() {
             endIso={trip.end_ts}
             fishEventsMs={fishEventsMs}
             onEdit={() => setEditModalVisible(true)}
+            t={t}
           />
 
           <View style={styles.periodSection}>
@@ -558,19 +561,19 @@ export default function TripDetailScreen() {
 
         {/* VEJRDATA (over kortet) */}
         <View style={styles.card}>
-          <Text style={styles.title}>Vejrforhold under fiskeri</Text>
+          <Text style={styles.title}>{t("weatherDuringFishing")}</Text>
 
           {!evaluation ? (
-            <Text style={styles.body}>Ingen vejrdata fundet for denne periode.</Text>
+            <Text style={styles.body}>{t("noWeatherForPeriod")}</Text>
           ) : (
             <View style={{ gap: 6 }}>
               {evaluation.note && (
-                <Text style={styles.noteText}>Bemærk: {evaluation.note}</Text>
+                <Text style={styles.noteText}>{t("note")}: {evaluation.note}</Text>
               )}
 
               {evaluation.airTempC && (
                 <StatLine
-                  label="Luft temp. (°C)"
+                  label={t("airTempLabel")}
                   stat={evaluation.airTempC}
                   fmt={(v) => `${v.toFixed(1)}°C`}
                 />
@@ -578,7 +581,7 @@ export default function TripDetailScreen() {
 
               {evaluation.windMS && (
                 <StatLine
-                  label="Vind (m/s)"
+                  label={t("windLabel")}
                   stat={evaluation.windMS}
                   fmt={(v) => `${v.toFixed(1)} m/s`}
                   direction={evaluation.windDirDeg?.avg}
@@ -587,7 +590,7 @@ export default function TripDetailScreen() {
 
               {evaluation.waterTempC && (
                 <StatLine
-                  label="Havtemp. (°C)"
+                  label={t("seaTempLabel")}
                   stat={evaluation.waterTempC}
                   fmt={(v) => `${v.toFixed(1)}°C`}
                 />
@@ -595,7 +598,7 @@ export default function TripDetailScreen() {
 
               {evaluation.waterLevelCM && (
                 <StatLine
-                  label="Vandstand (cm)"
+                  label={t("waterLevelLabel")}
                   stat={evaluation.waterLevelCM}
                   fmt={(v) => `${v.toFixed(0)} cm`}
                 />
@@ -604,7 +607,7 @@ export default function TripDetailScreen() {
               {evaluation.airTempSeries?.length > 0 && (
                 <StatGraph
                   series={evaluation.airTempSeries}
-                  label="Lufttemperatur"
+                  label={t("airTemp")}
                   unit="°C"
                 />
               )}
@@ -612,7 +615,7 @@ export default function TripDetailScreen() {
               {evaluation.windSpeedSeries?.length > 0 && (
                 <StatGraph
                   series={evaluation.windSpeedSeries}
-                  label="Vind"
+                  label={t("windSpeed")}
                   unit="m/s"
                 />
               )}
@@ -620,7 +623,7 @@ export default function TripDetailScreen() {
               {evaluation.waterTempSeries?.length > 0 && (
                 <StatGraph
                   series={evaluation.waterTempSeries}
-                  label="Havtemperatur"
+                  label={t("waterTemp")}
                   unit="°C"
                 />
               )}
@@ -628,14 +631,14 @@ export default function TripDetailScreen() {
               {evaluation.waterLevelSeries?.length > 0 && (
                 <StatGraph
                   series={evaluation.waterLevelSeries}
-                  label="Vandstand"
+                  label={t("waterLevel")}
                   unit="cm"
                 />
               )}
 
               <View style={styles.sourceSection}>
                 <View style={styles.sourceHeader}>
-                  <Text style={styles.sourceLabel}>Kilde: DMI</Text>
+                  <Text style={styles.sourceLabel}>{t("sourceDmi")}</Text>
                   {dataTimeStr && (
                     <Text style={styles.sourceTime}>{dataTimeStr}</Text>
                   )}
@@ -648,7 +651,7 @@ export default function TripDetailScreen() {
                       size={16}
                       color={hasClimate ? THEME.startGreen : THEME.danger}
                     />
-                    <Text style={styles.sourceStatusText}>Vejrdata</Text>
+                    <Text style={styles.sourceStatusText}>{t("weatherDataLabel")}</Text>
                   </View>
 
                   <View style={styles.sourceStatus}>
@@ -657,7 +660,7 @@ export default function TripDetailScreen() {
                       size={16}
                       color={hasOcean ? THEME.startGreen : THEME.danger}
                     />
-                    <Text style={styles.sourceStatusText}>Havdata</Text>
+                    <Text style={styles.sourceStatusText}>{t("oceanDataLabel")}</Text>
                   </View>
                 </View>
               </View>
@@ -667,7 +670,7 @@ export default function TripDetailScreen() {
 
         {/* KORTET NEDERST */}
         <View style={styles.card}>
-          <Text style={styles.title}>Rute</Text>
+          <Text style={styles.title}>{t("route")}</Text>
           <View style={styles.mapContainer}>
             {initialRegion ? (
               <MapView
@@ -715,7 +718,7 @@ export default function TripDetailScreen() {
             ) : (
               <View style={styles.noMap}>
                 <Text style={styles.noMapText}>
-                  Ingen GPS-data for denne tur.
+                  {t("noGpsData")}
                 </Text>
               </View>
             )}
@@ -729,13 +732,13 @@ export default function TripDetailScreen() {
               style={[styles.btn, styles.danger]}
               onPress={handleDelete}
             >
-              <Text style={styles.dangerText}>Slet tur</Text>
+              <Text style={styles.dangerText}>{t("deleteTrip")}</Text>
             </Pressable>
           </View>
         ) : (
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: THEME.textSec }]}>
-              Turen kan ikke slettes
+              {t("tripCannotBeDeleted")}
             </Text>
             <Text
               style={[
@@ -743,7 +746,7 @@ export default function TripDetailScreen() {
                 { color: THEME.danger, fontWeight: "500", fontSize: 14 },
               ]}
             >
-              Varighed over 30 min.
+              {t("durationOver30Min")}
             </Text>
           </View>
         )}
@@ -752,22 +755,22 @@ export default function TripDetailScreen() {
         <Modal visible={deleteConfirmVisible} transparent animationType="fade">
           <View style={styles.modalBackdrop}>
             <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>Slet tur</Text>
+              <Text style={styles.modalTitle}>{t("deleteTrip")}</Text>
               <Text style={styles.modalText}>
-                Er du sikker på at du vil slette denne tur permanent?
+                {t("deleteTripConfirm")}
               </Text>
               <View style={styles.modalBtnRow}>
                 <Pressable
                   style={[styles.btn, styles.ghost]}
                   onPress={() => setDeleteConfirmVisible(false)}
                 >
-                  <Text style={styles.ghostText}>Tilbage</Text>
+                  <Text style={styles.ghostText}>{t("back")}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.btn, styles.danger]}
                   onPress={confirmDelete}
                 >
-                  <Text style={styles.dangerText}>Ja, slet</Text>
+                  <Text style={styles.dangerText}>{t("yesStop")}</Text>
                 </Pressable>
               </View>
             </View>
@@ -787,7 +790,7 @@ export default function TripDetailScreen() {
               <View style={styles.editModalHeader}>
                 <View style={styles.editModalTitleRow}>
                   <Ionicons name="fish" size={24} color={THEME.graphYellow} />
-                  <Text style={styles.editModalTitle}>Redigér fangster</Text>
+                  <Text style={styles.editModalTitle}>{t("editCatches")}</Text>
                 </View>
                 <View style={styles.editModalCountBadge}>
                   <Text style={styles.editModalCountText}>{fishEventsMs.length}</Text>
@@ -797,7 +800,7 @@ export default function TripDetailScreen() {
               {/* Tidsvælger */}
               <View style={styles.editTimeSelector}>
                 <View style={styles.editTimeCurrent}>
-                  <Text style={styles.editTimeCurrentLabel}>Valgt tidspunkt</Text>
+                  <Text style={styles.editTimeCurrentLabel}>{t("selectedTime")}</Text>
                   <Text style={styles.editTimeCurrentValue}>
                     {effectiveCursorMs ? fmtClock(effectiveCursorMs) : "--:--"}
                   </Text>
@@ -888,7 +891,7 @@ export default function TripDetailScreen() {
               <View style={styles.editActions}>
                 <Pressable style={styles.editAddBtn} onPress={addCatchAtCursor}>
                   <Ionicons name="add" size={20} color="#000" />
-                  <Text style={styles.editAddBtnText}>Tilføj fangst</Text>
+                  <Text style={styles.editAddBtnText}>{t("addCatchLabel")}</Text>
                 </Pressable>
 
                 <Pressable
@@ -907,13 +910,13 @@ export default function TripDetailScreen() {
                   <Text style={[
                     styles.editDeleteBtnText,
                     selectedCatchIndex == null && styles.editDeleteBtnTextDisabled,
-                  ]}>Slet valgt</Text>
+                  ]}>{t("deleteSelected")}</Text>
                 </Pressable>
               </View>
 
               {/* Hint tekst */}
               <Text style={styles.editHint}>
-                Kør fingeren over tidslinjen for at vælge tidspunkt
+                {t("timelineHint")}
               </Text>
 
               {/* Footer buttons */}
@@ -922,7 +925,7 @@ export default function TripDetailScreen() {
                   style={styles.editCancelBtn}
                   onPress={() => setEditModalVisible(false)}
                 >
-                  <Text style={styles.editCancelBtnText}>Annuller</Text>
+                  <Text style={styles.editCancelBtnText}>{t("cancel")}</Text>
                 </Pressable>
                 <Pressable
                   style={styles.editSaveBtn}
@@ -958,7 +961,7 @@ export default function TripDetailScreen() {
                   }}
                 >
                   <Ionicons name="checkmark" size={20} color="#000" />
-                  <Text style={styles.editSaveBtnText}>Gem ændringer</Text>
+                  <Text style={styles.editSaveBtnText}>{t("saveChanges")}</Text>
                 </Pressable>
               </View>
             </View>
@@ -974,10 +977,9 @@ export default function TripDetailScreen() {
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalBoxTall}>
-              <Text style={styles.modalTitle}>Vælg spot</Text>
+              <Text style={styles.modalTitle}>{t("selectSpot")}</Text>
               <Text style={styles.modalText}>
-                Vælg et af dine gemte spots, så turen bliver koblet til det
-                samme spot som på spot-oversigten.
+                {t("selectSpotForTrip")}
               </Text>
 
               {/* søg-felt */}
@@ -991,7 +993,7 @@ export default function TripDetailScreen() {
                 <TextInput
                   value={spotSearch}
                   onChangeText={setSpotSearch}
-                  placeholder="Søg spot-navn"
+                  placeholder={t("searchSpotName")}
                   placeholderTextColor={THEME.textSec}
                   style={styles.spotSearchInput}
                   returnKeyType="search"
@@ -1008,7 +1010,7 @@ export default function TripDetailScreen() {
                   </View>
                 ) : filteredSpots.length === 0 ? (
                   <Text style={{ color: THEME.textSec, fontSize: 14 }}>
-                    Ingen spots fundet.
+                    {t("noSpotsFound")}
                   </Text>
                 ) : (
                   filteredSpots.map((s) => {
@@ -1029,7 +1031,7 @@ export default function TripDetailScreen() {
                               : styles.spotItemText
                           }
                         >
-                          {s.name || "Uden navn"}
+                          {s.name || t("withoutName")}
                         </Text>
                         {active && (
                           <Ionicons
@@ -1050,14 +1052,14 @@ export default function TripDetailScreen() {
                     style={[styles.btn, styles.ghost]}
                     onPress={() => handleSelectSpot(null)}
                   >
-                    <Text style={styles.ghostText}>Fjern spot</Text>
+                    <Text style={styles.ghostText}>{t("removeSpot")}</Text>
                   </Pressable>
                 )}
                 <Pressable
                   style={[styles.btn, styles.primaryBtn]}
                   onPress={() => setSpotModalVisible(false)}
                 >
-                  <Text style={styles.primaryText}>Luk</Text>
+                  <Text style={styles.primaryText}>{t("close")}</Text>
                 </Pressable>
               </View>
             </View>
@@ -1087,11 +1089,13 @@ function FishTimeline({
   endIso,
   fishEventsMs,
   onEdit,
+  t,
 }: {
   startIso: string;
   endIso: string;
   fishEventsMs: number[];
   onEdit: () => void;
+  t: (key: string) => string;
 }) {
   const startMs = new Date(startIso).getTime();
   const endMs = new Date(endIso).getTime();
@@ -1110,7 +1114,7 @@ function FishTimeline({
       <View style={styles.timelineHeader}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Ionicons name="fish-outline" size={18} color={THEME.graphYellow} />
-          <Text style={styles.timelineTitle}>Fangster på tidslinje</Text>
+          <Text style={styles.timelineTitle}>{t("catchesOnTimeline")}</Text>
         </View>
       </View>
 
@@ -1139,11 +1143,11 @@ function FishTimeline({
 
       <View style={styles.timelineTimeRowSmall}>
         <View>
-          <Text style={styles.timelineTimeLabel}>Start</Text>
+          <Text style={styles.timelineTimeLabel}>{t("start")}</Text>
           <Text style={styles.timelineTimeValue}>{fmtClock(startIso)}</Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={styles.timelineTimeLabel}>Slut</Text>
+          <Text style={styles.timelineTimeLabel}>{t("stop")}</Text>
           <Text style={styles.timelineTimeValue}>{fmtClock(endIso)}</Text>
         </View>
       </View>
@@ -1151,7 +1155,7 @@ function FishTimeline({
       <View style={styles.timelineEditRow}>
         <Pressable style={styles.timelineEditBtn} onPress={onEdit}>
           <Ionicons name="create-outline" size={16} color={THEME.textSec} />
-          <Text style={styles.timelineEditText}>Redigér fangster</Text>
+          <Text style={styles.timelineEditText}>{t("editCatches")}</Text>
         </Pressable>
       </View>
     </View>

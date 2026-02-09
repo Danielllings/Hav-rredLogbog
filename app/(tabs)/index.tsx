@@ -2197,7 +2197,7 @@ async function refreshYearsAndStats(
                       longitude: p.longitude,
                     }))}
                     strokeWidth={4}
-                    strokeColor={THEME.graphYellow}
+                    strokeColor={THEME.danger}
                   />
                   <Marker
                     coordinate={{

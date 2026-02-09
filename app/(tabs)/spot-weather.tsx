@@ -782,7 +782,7 @@ export default function SpotWeatherScreen() {
               <Ionicons name="information-circle" size={20} color={THEME.graphYellow} />
             </View>
             <Text style={styles.hintText}>
-              Tryk på kortet for at vælge en lokation og se vejr & hav data.
+              {t("tapMapHint")}
             </Text>
           </View>
         )}

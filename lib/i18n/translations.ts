@@ -493,6 +493,7 @@ export const da = {
   weatherAndSea: "Vejr & Hav",
   loadingForecasts: "Henter prognoser…",
   noDataAvailable: "Ingen data tilgængelig",
+  tapMapHint: "Tryk på kortet for at vælge en lokation og se vejr & hav data.",
 };
 
 export const en: typeof da = {
@@ -986,6 +987,7 @@ export const en: typeof da = {
   weatherAndSea: "Weather & Sea",
   loadingForecasts: "Loading forecasts…",
   noDataAvailable: "No data available",
+  tapMapHint: "Tap the map to select a location and view weather & sea data.",
 };
 
 export const translations = {

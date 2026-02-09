@@ -56,3 +56,5 @@ build.log
 null.txt
 issue.png
 env
+.env*
+functions/.env*

@@ -574,12 +574,6 @@ export async function fetchOceanForTrip(
       series.length > 0;
 
     if (!hasAny) {
-      // console.log("Ingen ocean-data (vandtemp/vandstand) fundet i vinduet for position", {
-        lat: input.lat,
-        lon: input.lon,
-        tempStation: tempStation?.id,
-        levelStation: levelStation?.id,
-      });
       return null;
     }
 

@@ -112,7 +112,7 @@ export default function LoginScreen() {
         }
         await AsyncStorage.removeItem(REMEMBER_PASSWORD_KEY);
       } catch (err) {
-        console.log("Kunne ikke hente gemt email", err);
+        // console.log("Kunne ikke hente gemt email", err);
       }
     };
     loadRememberedEmail();
@@ -134,7 +134,7 @@ export default function LoginScreen() {
       router.replace("/(tabs)");
     } catch (error: any) {
       const msg = error?.message || "Ukendt fejl ved login";
-      console.log("Login fejl:", msg);
+      // console.log("Login fejl:", msg);
       setErrorText(msg);
       Alert.alert(t("loginError"), msg);
     }

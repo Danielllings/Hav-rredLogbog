@@ -235,7 +235,7 @@ export async function evaluateTripWithDmi(
     const halfMinDuration = MIN_DURATION_MS / 2;
     effectiveStartIso = new Date(centerMs - halfMinDuration).toISOString();
     effectiveEndIso = new Date(centerMs + halfMinDuration).toISOString();
-    console.log(`[DMI] Kort tur (${Math.round(durationMs / 1000)}s) - udvider til 2 timer`);
+    // console.log(`[DMI] Kort tur (${Math.round(durationMs / 1000)}s) - udvider til 2 timer`);
   }
 
   let climate: ClimateStats | null = null;
@@ -244,13 +244,13 @@ export async function evaluateTripWithDmi(
   try {
     climate = await fetchClimateForTrip({ startIso: effectiveStartIso, endIso: effectiveEndIso, lat, lon });
   } catch (e) {
-    console.log("Fejl i fetchClimateForTrip:", e);
+    // console.log("Fejl i fetchClimateForTrip:", e);
   }
 
   try {
     ocean = await fetchOceanForTrip({ startIso: effectiveStartIso, endIso: effectiveEndIso, lat, lon });
   } catch (e) {
-    console.log("Fejl i fetchOceanForTrip:", e);
+    // console.log("Fejl i fetchOceanForTrip:", e);
   }
 
   const evalRes: DmiEvaluation = {
@@ -353,7 +353,7 @@ export type EdrForecast = {
 async function fetchEdrData(pathAndQuery: string) {
   try {
     if (!EDR_BASE_URL) {
-      console.log("EDR proxy URL mangler");
+      // console.log("EDR proxy URL mangler");
       return null;
     }
 
@@ -361,7 +361,7 @@ async function fetchEdrData(pathAndQuery: string) {
       pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`
     )}`;
 
-    console.log("[dmiEdr] fetch", proxyUrl);
+    // console.log("[dmiEdr] fetch", proxyUrl);
 
     const res = await fetch(proxyUrl, {
       method: "GET",
@@ -372,12 +372,12 @@ async function fetchEdrData(pathAndQuery: string) {
     });
 
     if (!res.ok) {
-      console.log("EDR fejlstatus:", res.status, proxyUrl);
+      // console.log("EDR fejlstatus:", res.status, proxyUrl);
       return null;
     }
     return await res.json();
   } catch (e) {
-    console.log("EDR fetch-fejl:", (e as Error)?.message || e, pathAndQuery);
+    // console.log("EDR fetch-fejl:", (e as Error)?.message || e, pathAndQuery);
     return null;
   }
 }

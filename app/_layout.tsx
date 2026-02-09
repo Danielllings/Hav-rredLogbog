@@ -63,10 +63,10 @@ export default function RootLayout() {
     try {
       const synced = await syncOfflineTrips();
       if (synced > 0) {
-        console.log(`[RootLayout] Synced ${synced} offline trips`);
+        // console.log(`[RootLayout] Synced ${synced} offline trips`);
       }
     } catch (e) {
-      console.log("[RootLayout] Offline sync error:", e);
+      // console.log("[RootLayout] Offline sync error:", e);
     } finally {
       syncInProgressRef.current = false;
     }
@@ -97,7 +97,7 @@ export default function RootLayout() {
 
           // Hvis vi lige er gået fra offline -> online, synk offline-ture
           if (isConnected && wasConnectedRef.current === false) {
-            console.log("[RootLayout] Network restored, syncing offline trips...");
+            // console.log("[RootLayout] Network restored, syncing offline trips...");
             trySyncOfflineTrips();
           }
 

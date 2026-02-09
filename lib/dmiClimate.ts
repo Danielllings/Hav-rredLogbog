@@ -151,11 +151,11 @@ async function fetchStationValues(
   url.searchParams.set("datetime", datetime);
   url.searchParams.set("limit", "10000");
   url.searchParams.set("sortorder", "from,DESC"); // DMI kræver from,DESC
-  console.log("[dmiClimate] fetch", url.toString());
+  // console.log("[dmiClimate] fetch", url.toString());
 
   const res = await fetch(url);
   if (!res.ok) {
-    console.log("DMI Climate API fejl:", res.status, await res.text());
+    // console.log("DMI Climate API fejl:", res.status, await res.text());
     return [];
   }
 
@@ -229,14 +229,14 @@ export async function fetchClimateForTrip(
   const station = findNearestClimateStation(input.lat, input.lon, true);
 
   if (!station) {
-    console.log("Ingen klimastation fundet til position", input.lat, input.lon);
+    // console.log("Ingen klimastation fundet til position", input.lat, input.lon);
     return null;
   }
 
   const startMs = Date.parse(input.startIso);
   const endMs = Date.parse(input.endIso);
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
-    console.log("Ugyldige datoer i ClimateInput", input);
+    // console.log("Ugyldige datoer i ClimateInput", input);
     return null;
   }
 
@@ -268,7 +268,7 @@ export async function fetchClimateForTrip(
       fetchStationValues(station.id, "mean_wind_dir", queryStartIso, queryEndIso),
     ]);
 
-    console.log(
+    // console.log(
       "DMI climate rows:",
       station.id,
       "temp", tempVals.length,
@@ -330,13 +330,13 @@ export async function fetchClimateForTrip(
       series.length > 0;
 
     if (!hasAny) {
-      console.log("Ingen klimadata fundet i vinduet for station", station.id);
+      // console.log("Ingen klimadata fundet i vinduet for station", station.id);
       return null;
     }
 
     return stats;
   } catch (err) {
-    console.log("Fejl i fetchClimateForTrip:", err);
+    // console.log("Fejl i fetchClimateForTrip:", err);
     return null;
   }
 }

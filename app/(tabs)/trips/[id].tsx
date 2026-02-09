@@ -318,7 +318,7 @@ export default function TripDetailScreen() {
             }));
           }
         } catch {
-          console.log("Kunne ikke parse path_json");
+          // console.log("Kunne ikke parse path_json");
         }
       }
 
@@ -337,10 +337,10 @@ export default function TripDetailScreen() {
         // Genindlæs turen for at vise de nye data
         await loadTrip();
       } else {
-        console.log("Ingen vejrdata tilgængelig fra DMI");
+        // console.log("Ingen vejrdata tilgængelig fra DMI");
       }
     } catch (e) {
-      console.log("Fejl ved synkronisering af vejrdata:", e);
+      // console.log("Fejl ved synkronisering af vejrdata:", e);
     } finally {
       setSyncingWeather(false);
     }
@@ -354,7 +354,7 @@ export default function TripDetailScreen() {
         const rows = await listSpots();
         setSpots(rows || []);
       } catch (e) {
-        console.log("Kunne ikke hente spots", e);
+        // console.log("Kunne ikke hente spots", e);
         setSpots([]);
       } finally {
         setSpotsLoading(false);
@@ -541,7 +541,7 @@ export default function TripDetailScreen() {
           : prev
       );
     } catch (e) {
-      console.log("Fejl ved opdatering af spot på tur:", e);
+      // console.log("Fejl ved opdatering af spot på tur:", e);
     }
     setSpotModalVisible(false);
   }
@@ -1052,7 +1052,7 @@ export default function TripDetailScreen() {
                           : prev
                       );
                     } catch (e) {
-                      console.log("Fejl ved gem af fangst-events:", e);
+                      // console.log("Fejl ved gem af fangst-events:", e);
                     }
 
                     setEditModalVisible(false);

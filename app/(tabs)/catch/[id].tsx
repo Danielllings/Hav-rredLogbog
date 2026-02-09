@@ -328,7 +328,7 @@ export default function CatchDetail() {
 
       setEvaluation(ev || null);
     } catch (e) {
-      console.log("Fejl ved hentning af trip/meta til fangst", e);
+      // console.log("Fejl ved hentning af trip/meta til fangst", e);
       setEvaluation(null);
     }
   }, []);
@@ -371,7 +371,7 @@ export default function CatchDetail() {
         const trips = await getTrackedTrips(50, 60);
         setTrackedTrips(trips);
       } catch (e) {
-        console.log("Fejl ved getTrackedTrips", e);
+        // console.log("Fejl ved getTrackedTrips", e);
       }
     })();
   }, []);
@@ -383,7 +383,7 @@ export default function CatchDetail() {
         const s = await listSpots();
         setSpots(s);
       } catch (e) {
-        console.log("Fejl ved listSpots", e);
+        // console.log("Fejl ved listSpots", e);
       }
     })();
   }, []);
@@ -469,7 +469,7 @@ export default function CatchDetail() {
         try {
           finalPhotoUrl = await uploadCatchImageAsync(photoUri, id);
         } catch (e) {
-          console.log("Fejl ved upload af fangstbillede:", e);
+          // console.log("Fejl ved upload af fangstbillede:", e);
         }
       } else {
         finalPhotoUrl = photoUri;

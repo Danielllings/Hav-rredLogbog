@@ -349,7 +349,7 @@ export default function SpotWeatherScreen() {
         const rows = await listSpots();
         setSpots(rows);
       } catch (e) {
-        console.log("Could not load spots", e);
+        // console.log("Could not load spots", e);
       }
     })();
   }, []);
@@ -373,7 +373,7 @@ export default function SpotWeatherScreen() {
         }
         setBestSpotId(bestId);
       } catch (e) {
-        console.log("Could not calculate best spot", e);
+        // console.log("Could not calculate best spot", e);
         setBestSpotId(null);
       }
     })();
@@ -392,7 +392,7 @@ export default function SpotWeatherScreen() {
         const edr = await getSpotForecastEdr(pos.latitude, pos.longitude);
 
         if (edr) {
-          console.log("Modtog EDR data:", {
+          // console.log("Modtog EDR data:", {
             air: edr.airTempSeries.length,
             ocean: edr.waterLevelSeries.length,
             waves: edr.waveHeightSeries.length,
@@ -402,7 +402,7 @@ export default function SpotWeatherScreen() {
           setErrorMsg(t("noWeatherDataAvailable"));
         }
       } catch (e) {
-        console.log("Error:", e);
+        // console.log("Error:", e);
         setErrorMsg(t("error"));
       } finally {
         setLoading(false);
@@ -465,7 +465,7 @@ export default function SpotWeatherScreen() {
           setSpotEdrData(edr);
         }
       } catch (e) {
-        console.log("Error spot-EDR:", e);
+        // console.log("Error spot-EDR:", e);
         setSpotErrorMsg(t("error"));
       } finally {
         setSpotLoading(false);
@@ -477,7 +477,7 @@ export default function SpotWeatherScreen() {
         const count = await getFishCountForSpot(selectedSpot.id);
         setSpotFishCount(count);
       } catch (e) {
-        console.log("Could not fetch fish count for spot", e);
+        // console.log("Could not fetch fish count for spot", e);
         setSpotFishCount(0);
       }
     })();
@@ -491,7 +491,7 @@ export default function SpotWeatherScreen() {
       if (selectedSpot?.id === spot.id) setSelectedSpot(null);
       setSpotDeleteTarget(null);
     } catch (e: any) {
-      console.log("Could not delete spot:", e);
+      // console.log("Could not delete spot:", e);
       Alert.alert(
         t("error"),
         e?.message ?? t("couldNotDeleteSpot")
@@ -540,7 +540,7 @@ export default function SpotWeatherScreen() {
       );
       setRenameTarget(null);
     } catch (e) {
-      console.log("Could not rename spot", e);
+      // console.log("Could not rename spot", e);
       setRenameError(t("couldNotRenameSpot"));
     } finally {
       setRenameLoading(false);
@@ -611,7 +611,7 @@ export default function SpotWeatherScreen() {
         );
       }
     } catch (e) {
-      console.log(e);
+      // console.log(e);
     } finally {
       setSearchLoading(false);
       setSearchOpen(false);
@@ -1230,7 +1230,7 @@ export default function SpotWeatherScreen() {
                       setAddSpotModalVisible(false);
                       setShowLocationActions(false);
                     } catch (e) {
-                      console.log("Could not create spot", e);
+                      // console.log("Could not create spot", e);
                     } finally {
                       setAddingSpot(false);
                     }

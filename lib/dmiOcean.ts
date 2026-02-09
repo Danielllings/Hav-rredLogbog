@@ -318,12 +318,12 @@ async function fetchTwWithFallback(
 
     const vals = await fetchObservationValues(station.id, "tw", startIso, endIso);
     if (vals.length > 0) {
-      console.log("Valgte temp-station (med data):", station.id, station.name, "distKm", distKm.toFixed(1));
+      // console.log("Valgte temp-station (med data):", station.id, station.name, "distKm", distKm.toFixed(1));
       return { station, vals };
     }
   }
 
-  console.log("Ingen temp-station med tw-data fundet inden for", MAX_DIST_KM, "km");
+  // console.log("Ingen temp-station med tw-data fundet inden for", MAX_DIST_KM, "km");
   return { station: null, vals: [] };
 }
 
@@ -403,7 +403,7 @@ async function fetchObservationValues(
     const res = await fetch(url);
     if (!res.ok) {
       const txt = await res.text();
-      console.log("DMI OceanObs API fejl:", res.status, txt);
+      // console.log("DMI OceanObs API fejl:", res.status, txt);
       return [];
     }
 
@@ -424,7 +424,7 @@ async function fetchObservationValues(
 
     return out;
   } catch (err) {
-    console.log("Netværksfejl i fetchObservationValues:", err);
+    // console.log("Netværksfejl i fetchObservationValues:", err);
     return [];
   }
 }
@@ -475,14 +475,14 @@ export async function fetchOceanForTrip(
   const levelStation = findNearestStation(LEVEL_STATIONS_DK, input.lat, input.lon);
 
   if (!levelStation && !TEMP_STATIONS_DK.length) {
-    console.log("Ingen ocean-station (temp/level) fundet til position", input.lat, input.lon);
+    // console.log("Ingen ocean-station (temp/level) fundet til position", input.lat, input.lon);
     return null;
   }
 
   const startMs = Date.parse(input.startIso);
   const endMs = Date.parse(input.endIso);
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
-    console.log("Ugyldige datoer i OceanInput", input);
+    // console.log("Ugyldige datoer i OceanInput", input);
     return null;
   }
 
@@ -522,7 +522,7 @@ export async function fetchOceanForTrip(
         : Promise.resolve([]),
     ]);
 
-    console.log(
+    // console.log(
       "DMI ocean rows:",
       tempStation
         ? `${tempStation.id} tw ${tempVals.length}`
@@ -584,7 +584,7 @@ export async function fetchOceanForTrip(
       series.length > 0;
 
     if (!hasAny) {
-      console.log("Ingen ocean-data (vandtemp/vandstand) fundet i vinduet for position", {
+      // console.log("Ingen ocean-data (vandtemp/vandstand) fundet i vinduet for position", {
         lat: input.lat,
         lon: input.lon,
         tempStation: tempStation?.id,
@@ -595,7 +595,7 @@ export async function fetchOceanForTrip(
 
     return stats;
   } catch (err) {
-    console.log("Fejl i fetchOceanForTrip:", err);
+    // console.log("Fejl i fetchOceanForTrip:", err);
     return null;
   }
 }

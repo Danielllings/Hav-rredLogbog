@@ -257,7 +257,7 @@ if (!trackTaskDefined) {
     // Kører i baggrunden (og forgrunden) for at fange GPS-punkter, også når appen er i dvale.
     TaskManager.defineTask(TRACK_TASK_NAME, async ({ data, error }) => {
       if (error) {
-        console.log("BG tracking fejl:", error.message);
+        // console.log("BG tracking fejl:", error.message);
         return;
       }
       // @ts-ignore - task-data typing fra expo-task-manager er løs
@@ -314,12 +314,12 @@ if (!trackTaskDefined) {
         await AsyncStorage.setItem(TRACK_BUFFER_KEY, JSON.stringify(trimmed));
 
       } catch (e) {
-        console.log("BG track buffer parse/save fejl:", e);
+        // console.log("BG track buffer parse/save fejl:", e);
       }
     });
     trackTaskDefined = true;
   } catch (e) {
-    console.log("Task allerede defineret eller fejlede:", e);
+    // console.log("Task allerede defineret eller fejlede:", e);
   }
 }
 
@@ -1214,7 +1214,7 @@ export default function Track() {
         });
         setLiveFetchedAt(now);
       } catch (e) {
-        console.log("Kunne ikke hente live-vejr", e);
+        // console.log("Kunne ikke hente live-vejr", e);
         setLiveError("Kan ikke hente vejr lige nu");
       } finally {
         setLiveFetching(false);
@@ -1238,7 +1238,7 @@ export default function Track() {
       lastLiveFetchRef.current = now;
       fetchLiveWeather(loc.coords.latitude, loc.coords.longitude);
     } catch (e) {
-      console.log("Live vejr lokationsfejl", e);
+      // console.log("Live vejr lokationsfejl", e);
       setLiveError("Kan ikke hente vejr lige nu");
     }
   }, [fetchLiveWeather]);
@@ -1364,7 +1364,7 @@ export default function Track() {
         TRACK_ACTIVE_KEY,
       ]);
     } catch (e) {
-      console.log("Kunne ikke rydde track storage:", e);
+      // console.log("Kunne ikke rydde track storage:", e);
     }
   }, []);
 
@@ -1376,7 +1376,7 @@ export default function Track() {
       if (!Array.isArray(arr)) return [];
       return arr as Pt[];
     } catch (e) {
-      console.log("Kunne ikke hente track buffer:", e);
+      // console.log("Kunne ikke hente track buffer:", e);
       return [];
     }
   }, []);
@@ -1413,7 +1413,7 @@ export default function Track() {
         }
       }
     } catch (e) {
-      console.log("Hydration fejl:", e);
+      // console.log("Hydration fejl:", e);
     }
   }, []);
 
@@ -1444,7 +1444,7 @@ export default function Track() {
         );
       }
     } catch (e) {
-      console.log("Kunne ikke genskabe tracking:", e);
+      // console.log("Kunne ikke genskabe tracking:", e);
     }
   }, [buildLocationUpdateOptions, handlePositionUpdate]);
 
@@ -1577,7 +1577,7 @@ async function refreshYearsAndStats(
       spotsData.sort((a, b) => b.visitCount - a.visitCount);
       setSpotsWithVisits(spotsData);
     } catch (e) {
-      console.log("Fejl ved hentning af spots:", e);
+      // console.log("Fejl ved hentning af spots:", e);
     } finally {
       setLoadingSpots(false);
     }
@@ -1589,7 +1589,7 @@ async function refreshYearsAndStats(
         try {
           await syncOfflineTrips();
         } catch (e) {
-          console.log("Fejl ved sync af offline ture:", e);
+          // console.log("Fejl ved sync af offline ture:", e);
         }
         await hydrateTrackFromStorage();
         await refreshLists();
@@ -1689,7 +1689,7 @@ async function refreshYearsAndStats(
       });
       reminderIdRef.current = id;
     } catch (e) {
-      console.log("Fejl i scheduleReminder:", e);
+      // console.log("Fejl i scheduleReminder:", e);
     }
   }
 
@@ -1703,7 +1703,7 @@ async function refreshYearsAndStats(
       if (!Notifications) return; // Expo Go Android -> no-op
       await Notifications.cancelScheduledNotificationAsync(id);
     } catch (e) {
-      console.log("Fejl i cancelReminder:", e);
+      // console.log("Fejl i cancelReminder:", e);
     }
     reminderIdRef.current = null;
   }
@@ -1765,7 +1765,7 @@ async function refreshYearsAndStats(
           const bgPerm = await Location.requestBackgroundPermissionsAsync();
           backgroundGranted = bgPerm.status === "granted";
         } catch (err) {
-          console.log("Kunne ikke forespoerge baggrundstilladelse:", err);
+          // console.log("Kunne ikke forespoerge baggrundstilladelse:", err);
           backgroundGranted = false;
         }
         if (!backgroundGranted) {
@@ -1787,7 +1787,7 @@ async function refreshYearsAndStats(
             await Location.stopLocationUpdatesAsync(TRACK_TASK_NAME);
           }
         } catch (err) {
-          console.log("Kunne ikke stoppe BG tracking:", err);
+          // console.log("Kunne ikke stoppe BG tracking:", err);
         }
         await clearStoredTrack();
 
@@ -1808,14 +1808,14 @@ async function refreshYearsAndStats(
             accuracy: Location.Accuracy.High,
           });
         } catch (err) {
-          console.log("Kunne ikke hente start-position:", err);
+          // console.log("Kunne ikke hente start-position:", err);
         }
 
         if (!loc) {
           try {
             loc = await Location.getLastKnownPositionAsync();
           } catch (err) {
-            console.log("Kunne ikke hente sidste kendte position:", err);
+            // console.log("Kunne ikke hente sidste kendte position:", err);
           }
         }
 
@@ -1861,7 +1861,7 @@ async function refreshYearsAndStats(
               locationUpdateOptions
             );
           } catch (err) {
-            console.log("Kunne ikke starte BG tracking:", err);
+            // console.log("Kunne ikke starte BG tracking:", err);
             Alert.alert(
               "Baggrundstracking fejlede",
               "Tracking koerer kun i forgrunden."
@@ -1881,7 +1881,7 @@ async function refreshYearsAndStats(
         setRunning(true);
         cancelReminder();
       } catch (e) {
-        console.log("Fejl ved start af tracking:", e);
+        // console.log("Fejl ved start af tracking:", e);
         const errMessage = e instanceof Error ? e.message : String(e);
         Alert.alert(
           "Tracking kunne ikke starte",
@@ -1903,7 +1903,7 @@ async function refreshYearsAndStats(
             await Location.stopLocationUpdatesAsync(TRACK_TASK_NAME);
           }
         } catch (err) {
-          console.log("Kunne ikke stoppe BG tracking:", err);
+          // console.log("Kunne ikke stoppe BG tracking:", err);
         }
         resetState();
         await clearStoredTrack();
@@ -1937,7 +1937,7 @@ async function refreshYearsAndStats(
     try {
       await AsyncStorage.setItem(TRACK_ACTIVE_KEY, "0");
     } catch (e) {
-      console.log("Kunne ikke opdatere tracking-flag:", e);
+      // console.log("Kunne ikke opdatere tracking-flag:", e);
     }
     try {
       const started = await Location.hasStartedLocationUpdatesAsync(
@@ -1947,7 +1947,7 @@ async function refreshYearsAndStats(
         await Location.stopLocationUpdatesAsync(TRACK_TASK_NAME);
       }
     } catch (e) {
-      console.log("Kunne ikke stoppe BG tracking:", e);
+      // console.log("Kunne ikke stoppe BG tracking:", e);
     }
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -2015,7 +2015,7 @@ async function refreshYearsAndStats(
           });
           if (ev) evaluation = ev;
         } catch (e: any) {
-          console.log("Fejl ved DMI-evaluering (online-forsøg):", e?.message || e);
+          // console.log("Fejl ved DMI-evaluering (online-forsøg):", e?.message || e);
         }
 
         if (!evaluation) {
@@ -2030,7 +2030,7 @@ async function refreshYearsAndStats(
             } as any);
             tripSaved = true;
           } catch (e) {
-            console.log("Kunne ikke gemme tur online, køer til offline:", e);
+            // console.log("Kunne ikke gemme tur online, køer til offline:", e);
             await queueOfflineTrip({
               ...basePayload,
               meta_json: JSON.stringify({ evaluation }),
@@ -2055,15 +2055,15 @@ async function refreshYearsAndStats(
           await refreshLists();
           await refreshYearsAndStats(year);
         } catch (e) {
-          console.log("Kunne ikke opdatere lister/stats efter gem:", e);
+          // console.log("Kunne ikke opdatere lister/stats efter gem:", e);
         }
       } catch (e) {
         // Failsafe: Hvis alt andet fejler, prøv at køe turen en sidste gang
-        console.log("Kritisk fejl ved gem af tur, forsøger failsafe:", e);
+        // console.log("Kritisk fejl ved gem af tur, forsøger failsafe:", e);
         if (!tripSaved) {
           try {
             await queueOfflineTrip({ ...basePayload, needs_dmi: true });
-            console.log("Failsafe: Tur køet til offline sync");
+            // console.log("Failsafe: Tur køet til offline sync");
           } catch (queueError) {
             console.error("KRITISK: Kunne ikke gemme tur - hverken online eller offline!", queueError);
             // Her kunne man evt. vise en alert til brugeren

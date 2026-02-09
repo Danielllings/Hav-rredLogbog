@@ -264,7 +264,7 @@ export default function NewCatch() {
       const rows = await getTrackedTrips();
       setTrackedTrips(rows || []);
     } catch (e: any) {
-      console.log("Kunne ikke hente tracked ture", e?.message);
+      // console.log("Kunne ikke hente tracked ture", e?.message);
       setTrackedTrips([]);
     }
   }, []);
@@ -275,7 +275,7 @@ export default function NewCatch() {
       const s = await listSpots();
       setSpots(s || []);
     } catch (e) {
-      console.log("Kunne ikke hente spots", e);
+      // console.log("Kunne ikke hente spots", e);
       setSpots([]);
     } finally {
       setSpotsLoading(false);

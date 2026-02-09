@@ -36,7 +36,7 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
         setLanguageState(saved as Language);
       }
     } catch (e) {
-      console.log("Could not load language preference:", e);
+      // console.log("Could not load language preference:", e);
     } finally {
       setIsLoaded(true);
     }
@@ -47,7 +47,7 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
       await AsyncStorage.setItem(LANGUAGE_KEY, lang);
       setLanguageState(lang);
     } catch (e) {
-      console.log("Could not save language preference:", e);
+      // console.log("Could not save language preference:", e);
     }
   };
 

@@ -143,7 +143,7 @@ export default function ManualImportScreen() {
         const res = await listSpots();
         setSpots(res);
       } catch (e) {
-        console.log("Kunne ikke hente spots til import:", e);
+        // console.log("Kunne ikke hente spots til import:", e);
       } finally {
         setSpotsLoading(false);
       }
@@ -401,7 +401,7 @@ export default function ManualImportScreen() {
 
       setImportSuccess({ trips: created, fish: totalFish });
     } catch (e: any) {
-      console.log("Error during manual import:", e);
+      // console.log("Error during manual import:", e);
       Alert.alert(
         t("importFailed"),
         e?.message ?? t("couldNotSaveTrips")

@@ -1106,7 +1106,7 @@ export default function SettingsScreen() {
           sectionsHtml += `</section>`;
         }
       } catch (e) {
-        console.log("Fejl i år-sektion til PDF:", e);
+        // console.log("Fejl i år-sektion til PDF:", e);
       }
 
       // ALL-TIME SEKTION
@@ -1189,7 +1189,7 @@ export default function SettingsScreen() {
           sectionsHtml += `</section>`;
         }
       } catch (e) {
-        console.log("Fejl i all-time sektion til PDF:", e);
+        // console.log("Fejl i all-time sektion til PDF:", e);
       }
 
       // PDF – alt tekst sort, lys baggrund

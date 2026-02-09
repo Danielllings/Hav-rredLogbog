@@ -184,7 +184,7 @@ async function findNearestSpot(
       spot_lng: best.lng,
     };
   } catch (e) {
-    console.log("Kunne ikke finde nærmeste spot til tur:", e);
+    // console.log("Kunne ikke finde nærmeste spot til tur:", e);
     return {
       spot_id: null,
       spot_name: null,

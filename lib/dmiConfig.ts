@@ -12,7 +12,7 @@ export const DMI_EDR_BASE_URL =
 export const STAC_BASE_URL =
   (extra.stacUrl as string | undefined)?.replace(/\/$/, "") || "";
 
-console.log("[dmiConfig] proxy URLs", {
+// console.log("[dmiConfig] proxy URLs", {
   dmiClimateUrl: DMI_CLIMATE_BASE_URL,
   dmiOceanUrl: DMI_OCEAN_BASE_URL,
   dmiEdrUrl: DMI_EDR_BASE_URL,

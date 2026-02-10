@@ -2658,13 +2658,6 @@ async function refreshYearsAndStats(
           )}
         </View>
 
-        {savingTrip && (
-          <View style={styles.savingOverlay}>
-            <ActivityIndicator color="#FFF" />
-            <Text style={styles.savingText}>{t("savingTrip")}</Text>
-          </View>
-        )}
-
         {/* === TUR FÆRDIG MODAL – GRID/TIMELINE-EDITOR === */}
         <Modal visible={fishModal} transparent animationType="fade">
           <View style={styles.modalBackdrop}>
@@ -3114,6 +3107,14 @@ async function refreshYearsAndStats(
           </View>
         </Modal>
       </ScrollView>
+
+      {/* Loading overlay - udenfor ScrollView så den dækker hele skærmen */}
+      {savingTrip && (
+        <View style={styles.savingOverlay}>
+          <ActivityIndicator size="large" color="#FFF" />
+          <Text style={styles.savingText}>{t("savingTrip")}</Text>
+        </View>
+      )}
     </>
   );
 }
@@ -3496,19 +3497,20 @@ const styles = StyleSheet.create({
   },
   savingOverlay: {
     position: "absolute",
+    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    paddingVertical: 12,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: "rgba(0,0,0,0.75)",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
+    flexDirection: "column",
+    gap: 16,
+    zIndex: 9999,
   },
   savingText: {
     color: "#FFF",
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: "700",
   },
 

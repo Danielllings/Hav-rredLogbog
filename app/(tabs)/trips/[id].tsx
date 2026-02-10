@@ -694,6 +694,8 @@ export default function TripDetailScreen() {
                   series={evaluation.airTempSeries}
                   label={t("airTemp")}
                   unit="°C"
+                  tripStartMs={tripStartMs}
+                  tripEndMs={tripEndMs}
                 />
               )}
 
@@ -702,6 +704,8 @@ export default function TripDetailScreen() {
                   series={evaluation.windSpeedSeries}
                   label={t("windSpeed")}
                   unit="m/s"
+                  tripStartMs={tripStartMs}
+                  tripEndMs={tripEndMs}
                 />
               )}
 
@@ -710,6 +714,8 @@ export default function TripDetailScreen() {
                   series={evaluation.waterTempSeries}
                   label={t("waterTemp")}
                   unit="°C"
+                  tripStartMs={tripStartMs}
+                  tripEndMs={tripEndMs}
                 />
               )}
 
@@ -718,6 +724,8 @@ export default function TripDetailScreen() {
                   series={evaluation.waterLevelSeries}
                   label={t("waterLevel")}
                   unit="cm"
+                  tripStartMs={tripStartMs}
+                  tripEndMs={tripEndMs}
                 />
               )}
 
@@ -1338,7 +1346,19 @@ function StatLine({
   );
 }
 
-function StatGraph({ series, label, unit }: { series: Serie[]; label: string; unit: string }) {
+function StatGraph({
+  series,
+  label,
+  unit,
+  tripStartMs,
+  tripEndMs,
+}: {
+  series: Serie[];
+  label: string;
+  unit: string;
+  tripStartMs?: number;
+  tripEndMs?: number;
+}) {
   const [layoutWidth, setLayoutWidth] = useState(0);
   const [touchIndex, setTouchIndex] = useState<number | null>(null);
 
@@ -1379,6 +1399,28 @@ function StatGraph({ series, label, unit }: { series: Serie[]; label: string; un
     const y = PADDING_Y + GRAPH_H - ((d.v - min) / span) * GRAPH_H;
     return { x, y, data: d };
   });
+
+  // Beregn x-positioner for turens start/slut markører
+  const seriesStartMs = sampled[0].ts;
+  const seriesEndMs = sampled[sampled.length - 1].ts;
+  const seriesSpan = seriesEndMs - seriesStartMs;
+
+  let tripStartX: number | null = null;
+  let tripEndX: number | null = null;
+
+  if (tripStartMs && tripEndMs && seriesSpan > 0) {
+    // Beregn relativ position på grafen
+    const startRatio = (tripStartMs - seriesStartMs) / seriesSpan;
+    const endRatio = (tripEndMs - seriesStartMs) / seriesSpan;
+
+    // Clamp ratios til grafens område (0-1), så pile vises i kanten hvis turen er udenfor
+    const clampedStartRatio = Math.max(0, Math.min(1, startRatio));
+    const clampedEndRatio = Math.max(0, Math.min(1, endRatio));
+
+    // Vis pile - clamp til grafens kanter
+    tripStartX = PADDING_X + clampedStartRatio * graphWidth;
+    tripEndX = PADDING_X + clampedEndRatio * graphWidth;
+  }
 
   // Smooth bezier curve path
   const makeSmoothPath = () => {
@@ -1533,6 +1575,40 @@ function StatGraph({ series, label, unit }: { series: Serie[]; label: string; un
                   cy={lastPoint.y}
                   r="4"
                   fill={THEME.graphYellow}
+                />
+              </>
+            )}
+
+            {/* Tur-markører: pile der peger mod hinanden */}
+            {tripStartX !== null && (
+              <>
+                {/* Start-pil (peger højre) */}
+                <Path
+                  d={`M ${tripStartX - 6},${HEIGHT - 8} L ${tripStartX + 2},${HEIGHT - 4} L ${tripStartX - 6},${HEIGHT}`}
+                  fill="#4ADE80"
+                />
+                <Path
+                  d={`M ${tripStartX},0 L ${tripStartX},${HEIGHT}`}
+                  stroke="#4ADE80"
+                  strokeWidth="1.5"
+                  strokeDasharray="3,3"
+                  opacity={0.6}
+                />
+              </>
+            )}
+            {tripEndX !== null && (
+              <>
+                {/* Slut-pil (peger venstre) */}
+                <Path
+                  d={`M ${tripEndX + 6},${HEIGHT - 8} L ${tripEndX - 2},${HEIGHT - 4} L ${tripEndX + 6},${HEIGHT}`}
+                  fill="#F87171"
+                />
+                <Path
+                  d={`M ${tripEndX},0 L ${tripEndX},${HEIGHT}`}
+                  stroke="#F87171"
+                  strokeWidth="1.5"
+                  strokeDasharray="3,3"
+                  opacity={0.6}
                 />
               </>
             )}

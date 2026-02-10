@@ -144,18 +144,21 @@ async function fetchStationValues(
   endIso: string
 ): Promise<{ ts: number; value: number }[]> {
   const datetime = `${startIso}/${endIso}`;
+
+  if (!DMI_CLIMATE_BASE_URL) {
+    return [];
+  }
+
   const url = new URL(DMI_CLIMATE_BASE_URL);
   url.searchParams.set("stationId", stationId);
   url.searchParams.set("parameterId", parameterId);
   url.searchParams.set("timeResolution", "hour");
   url.searchParams.set("datetime", datetime);
   url.searchParams.set("limit", "10000");
-  url.searchParams.set("sortorder", "from,DESC"); // DMI kræver from,DESC
-  // console.log("[dmiClimate] fetch", url.toString());
+  url.searchParams.set("sortorder", "from,DESC");
 
   const res = await fetch(url);
   if (!res.ok) {
-    // console.log("DMI Climate API fejl:", res.status, await res.text());
     return [];
   }
 

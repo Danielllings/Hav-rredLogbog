@@ -67,6 +67,28 @@ function middleOfRoute(points: { latitude: number; longitude: number }[]) {
   };
 }
 
+/**
+ * Runder et timestamp ned til starten af timen.
+ * DMI Climate API bruger hele timer (from: "18:00:00"), så vi skal matche det.
+ */
+function floorToHour(ms: number): number {
+  const d = new Date(ms);
+  d.setMinutes(0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * Runder et timestamp op til starten af næste time.
+ */
+function ceilToHour(ms: number): number {
+  const d = new Date(ms);
+  if (d.getMinutes() > 0 || d.getSeconds() > 0 || d.getMilliseconds() > 0) {
+    d.setHours(d.getHours() + 1);
+  }
+  d.setMinutes(0, 0, 0);
+  return d.getTime();
+}
+
 // ============================================================================
 // NYT AFSNIT: KYST- OG VINDRETNING BASERET PÅ GPS-TRACK
 // ============================================================================
@@ -226,17 +248,35 @@ export async function evaluateTripWithDmi(
   const durationMs = endMs - startMs;
   const MIN_DURATION_MS = 2 * 60 * 60 * 1000; // 2 timer i ms
 
-  let effectiveStartIso = startIso;
-  let effectiveEndIso = endIso;
+  let effectiveStartMs: number;
+  let effectiveEndMs: number;
 
   if (durationMs < MIN_DURATION_MS) {
     // Udvid tidsintervallet til 2 timer, centreret omkring turen
     const centerMs = startMs + durationMs / 2;
     const halfMinDuration = MIN_DURATION_MS / 2;
-    effectiveStartIso = new Date(centerMs - halfMinDuration).toISOString();
-    effectiveEndIso = new Date(centerMs + halfMinDuration).toISOString();
-    // console.log(`[DMI] Kort tur (${Math.round(durationMs / 1000)}s) - udvider til 2 timer`);
+    effectiveStartMs = centerMs - halfMinDuration;
+    effectiveEndMs = centerMs + halfMinDuration;
+  } else {
+    effectiveStartMs = startMs;
+    effectiveEndMs = endMs;
   }
+
+  // Rund til hele timer for at matche DMI Climate API's timebaserede data
+  effectiveStartMs = floorToHour(effectiveStartMs);
+  effectiveEndMs = ceilToHour(effectiveEndMs);
+
+  // DMI Climate data har ca. 1-2 timers forsinkelse.
+  // Hvis vi spørger for tæt på "nu", får vi ingen data.
+  // Sørg for at starte mindst 2 timer før nuværende tid.
+  const nowMs = Date.now();
+  const twoHoursAgo = floorToHour(nowMs - 2 * 60 * 60 * 1000);
+  if (effectiveStartMs > twoHoursAgo) {
+    effectiveStartMs = twoHoursAgo;
+  }
+
+  const effectiveStartIso = new Date(effectiveStartMs).toISOString();
+  const effectiveEndIso = new Date(effectiveEndMs).toISOString();
 
   let climate: ClimateStats | null = null;
   let ocean: OceanStats | null = null;
@@ -244,13 +284,13 @@ export async function evaluateTripWithDmi(
   try {
     climate = await fetchClimateForTrip({ startIso: effectiveStartIso, endIso: effectiveEndIso, lat, lon });
   } catch (e) {
-    // console.log("Fejl i fetchClimateForTrip:", e);
+    // Fejl i fetchClimateForTrip
   }
 
   try {
     ocean = await fetchOceanForTrip({ startIso: effectiveStartIso, endIso: effectiveEndIso, lat, lon });
   } catch (e) {
-    // console.log("Fejl i fetchOceanForTrip:", e);
+    // Fejl i fetchOceanForTrip
   }
 
   const evalRes: DmiEvaluation = {

@@ -20,7 +20,8 @@ export const THEME = {
 
 export const BEST_SPOT_COLOR = "#F4D03F";
 
-export type TranslateFn = (key: string) => string;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type TranslateFn = (key: any) => string;
 
 export function getWeatherIcon(
   temp: number,

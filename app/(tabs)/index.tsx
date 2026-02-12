@@ -94,6 +94,8 @@ async function ensureNotificationsConfigured() {
         shouldShowAlert: true,
         shouldSetBadge: false,
         shouldPlaySound: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
       }),
     });
     notificationsConfigured = true;
@@ -122,7 +124,7 @@ if (!trackTaskDefined) {
       if (activeRaw !== "1") return;
       const metaRaw = await AsyncStorage.getItem(TRACK_META_KEY);
       if (!metaRaw) return;
-      const { locations } = data || {};
+      const { locations } = (data || {}) as { locations?: any[] };
       if (!locations || !locations.length) return;
 
       const newPts: Pt[] = locations.map((loc: any) => ({
@@ -203,7 +205,7 @@ function TripTitle({ trip, t }: { trip: any; t?: TranslateFn }) {
 }
 
 // Filter options - will use translation function
-const getFilterOptions = (t: (key: string) => string) => [
+const getFilterOptions = (t: (key: any) => string) => [
   { label: t("days14"), days: 14 },
   { label: t("days30"), days: 30 },
   { label: t("days60"), days: 60 },
@@ -798,7 +800,7 @@ function buildWeatherSummary(allTrips: any[], t?: TranslateFn): string | null {
   return lines.join("\n");
 }
 
-function patternIcon(line: string): string {
+function patternIcon(line: string): keyof typeof Ionicons.glyphMap {
   const lower = line.toLowerCase();
 
   if (lower.startsWith("spot:")) return "location-outline";
@@ -1455,7 +1457,7 @@ async function refreshYearsAndStats(
       if (!Notifications) return; // Expo Go Android -> no-op
 
       const perms = await Notifications.requestPermissionsAsync();
-      if (perms.status !== "granted") return;
+      if (!(perms as any).granted && (perms as any).status !== "granted") return;
 
       await cancelReminder();
 
@@ -1464,7 +1466,7 @@ async function refreshYearsAndStats(
           title: "Tracking kører stadig",
           body: "Husk at stoppe turen, når du er færdig.",
         },
-        trigger: { seconds: hours * 3600, repeats: true },
+        trigger: { seconds: hours * 3600, repeats: true } as any,
       });
       reminderIdRef.current = id;
     } catch (e) {

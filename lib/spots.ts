@@ -24,6 +24,9 @@ export type SpotRow = {
   updated_at: string;  // ISO
 };
 
+// Alias for backwards compatibility
+export type Spot = SpotRow;
+
 export type NewSpotInput = {
   name: string;
   lat: number;

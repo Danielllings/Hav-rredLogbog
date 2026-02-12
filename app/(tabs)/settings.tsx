@@ -1026,12 +1026,12 @@ export default function SettingsScreen() {
         v === null || v === undefined ? fallback : String(v);
 
       // ÅR
-      const yearTrips = safe(yearStats?.trips, 0);
-      const yearFish = safe(yearStats?.total_fish, 0);
+      const yearTrips = safe(yearStats?.trips, "0");
+      const yearFish = safe(yearStats?.total_fish, "0");
       const yearKm = ((yearStats?.total_m ?? 0) / 1000).toFixed(1);
       const yearHours = ((yearStats?.total_sec ?? 0) / 3600).toFixed(1);
-      const yearNullTrips = safe(yearStats?.null_trips, 0);
-      const yearCatchTrips = safe(yearStats?.catch_trips, 0);
+      const yearNullTrips = safe(yearStats?.null_trips, "0");
+      const yearCatchTrips = safe(yearStats?.catch_trips, "0");
       const yearFangstrate = safe(yearStats?.fangstrate ?? "0", "0");
       const yearFishPerHour = safe(yearStats?.fish_per_hour ?? "0", "0");
       const yearMulti =
@@ -1040,12 +1040,12 @@ export default function SettingsScreen() {
           : "0%";
 
       // ALL TIME
-      const allTrips = safe(allStats?.trips, 0);
-      const allFish = safe(allStats?.total_fish, 0);
+      const allTrips = safe(allStats?.trips, "0");
+      const allFish = safe(allStats?.total_fish, "0");
       const allKm = ((allStats?.total_m ?? 0) / 1000).toFixed(1);
       const allHours = ((allStats?.total_sec ?? 0) / 3600).toFixed(1);
-      const allNullTrips = safe(allStats?.null_trips, 0);
-      const allCatchTrips = safe(allStats?.catch_trips, 0);
+      const allNullTrips = safe(allStats?.null_trips, "0");
+      const allCatchTrips = safe(allStats?.catch_trips, "0");
       const allFangstrate = safe(allStats?.fangstrate ?? "0", "0");
       const allFishPerHour = safe(allStats?.fish_per_hour ?? "0", "0");
       const allMulti =

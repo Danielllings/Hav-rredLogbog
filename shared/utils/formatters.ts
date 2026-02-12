@@ -1,6 +1,7 @@
 // Formatting utilities for time, trip names, etc.
 
-export type TranslateFn = (key: string) => string;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type TranslateFn = (key: any) => string;
 
 /**
  * Format seconds as HH:MM:SS

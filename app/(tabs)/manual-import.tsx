@@ -252,9 +252,9 @@ export default function ManualImportScreen() {
     monthlyRows.forEach((row) => {
       if (!row.enabled) return;
 
-      const fishTotal = parseNonNegativeInt(row.fish);
+      const fishTotal = parseNonNegativeInt(row.fish) ?? 0;
       const nullTotal = parsePositiveInt(row.nullTrips) ?? 0;
-      if (fishTotal == null && nullTotal === 0) return;
+      if (fishTotal === 0 && nullTotal === 0) return;
       const tripCount = parsePositiveInt(row.trips) ?? 1;
 
       if (fishTotal > 0) {
@@ -1097,6 +1097,10 @@ const styles = StyleSheet.create({
   switchKnobOff: {
     backgroundColor: THEME.card,
     borderColor: THEME.border,
+  },
+  switchKnobOn: {
+    backgroundColor: THEME.primary,
+    borderColor: THEME.primary,
   },
   inputDisabled: {
     opacity: 0.45,

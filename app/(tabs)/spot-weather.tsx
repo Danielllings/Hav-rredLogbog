@@ -218,7 +218,7 @@ function getWeatherIcon(
   return { name: isNight ? "snow" : "snow", color: THEME.blue };
 }
 
-type TranslateFn = (key: string) => string;
+type TranslateFn = (key: any) => string;
 
 function getForecastDays(edrData: EdrForecast | null, t?: TranslateFn) {
   if (!edrData || !edrData.airTempSeries || edrData.airTempSeries.length === 0)
@@ -314,7 +314,7 @@ export default function SpotWeatherScreen() {
   >({});
 
   // bedste spot (stjerne)
-  const [bestSpotId, setBestSpotId] = useState<number | null>(null);
+  const [bestSpotId, setBestSpotId] = useState<string | null>(null);
 
   // lille action-UI ved valgt lokation (klik på kort / søg / current location)
   const [showLocationActions, setShowLocationActions] = useState(false);
@@ -362,7 +362,7 @@ export default function SpotWeatherScreen() {
     }
     (async () => {
       try {
-        let bestId: number | null = null;
+        let bestId: string | null = null;
         let bestCount = 0;
         for (const s of spots) {
           const c = await getFishCountForSpot(s.id);
@@ -1641,16 +1641,13 @@ function SpotMarker({
         title={spot.name}
         description={t("spot")}
         onPress={onPress}
-        onCalloutPress={onLongPress} // klik på callout = samme som langtryk
-        onLongPress={onLongPress}
-        onCalloutLongPress={onLongPress}
+        onCalloutPress={onLongPress}
         tracksViewChanges={false}
         zIndex={isBestSpot ? 2 : 1}
       >
         <Callout
           tooltip={false}
           onPress={onLongPress}
-          onLongPress={onLongPress}
         >
           <View style={{ padding: 8, maxWidth: 200 }}>
             <Text style={{ fontWeight: "700", marginBottom: 4 }}>

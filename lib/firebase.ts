@@ -2,7 +2,6 @@
 import { initializeApp, getApp, getApps } from "firebase/app";
 import {
   initializeAuth,
-  getReactNativePersistence,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -10,6 +9,8 @@ import {
   deleteUser,
   type User,
 } from "firebase/auth";
+// @ts-ignore - React Native specific export
+import { getReactNativePersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";

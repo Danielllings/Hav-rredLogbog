@@ -1,5 +1,5 @@
 import "dotenv/config";
-import type { ExpoConfig } from "expo";
+import type { ExpoConfig } from "@expo/config-types";
 
 /**
  * Reads an environment variable from multiple possible names.
@@ -125,8 +125,6 @@ const config: ExpoConfig = {
     package: "dk.havoerred.logbog",
 
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
-
-    useNextNotificationsApi: true,
 
     permissions: [
       "ACCESS_FINE_LOCATION",

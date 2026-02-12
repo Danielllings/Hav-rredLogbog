@@ -32,6 +32,7 @@ export type CatchRow = {
   lng?: number | null;
   created_at: string;
   updated_at: string;
+  trip_id?: string | null; // optional link to a trip
 };
 
 const mapSnapshotToCatchRow = (snap: QueryDocumentSnapshot): CatchRow => {

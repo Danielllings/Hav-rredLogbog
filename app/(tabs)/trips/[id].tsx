@@ -1201,7 +1201,7 @@ function FishTimeline({
   endIso: string;
   fishEventsMs: number[];
   onEdit: () => void;
-  t: (key: string) => string;
+  t: (key: any) => string;
 }) {
   const startMs = new Date(startIso).getTime();
   const endMs = new Date(endIso).getTime();
@@ -1237,9 +1237,9 @@ function FishTimeline({
         <View style={styles.timelineAxisInner}>
           {clamped.map((t, idx) => {
             const rel = (t - startMs) / durationMs;
-            const left = `${rel * 100}%`;
+            const left = `${rel * 100}%` as const;
             return (
-              <View key={idx} style={[styles.timelineEventWrapper, { left }]}>
+              <View key={idx} style={[styles.timelineEventWrapper, { left: left as any }]}>
                 <View style={styles.timelineEvent} />
               </View>
             );

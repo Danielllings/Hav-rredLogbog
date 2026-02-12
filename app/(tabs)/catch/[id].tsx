@@ -487,7 +487,7 @@ export default function CatchDetail() {
       notes,
       lat: pos?.latitude ?? null,
       lng: pos?.longitude ?? null,
-      photo_uri: finalPhotoUrl,
+      photo_uri: finalPhotoUrl ?? "",
       trip_id: selectedTripId ?? null,
     });
 

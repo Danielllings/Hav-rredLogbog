@@ -3,6 +3,7 @@
   useRef,
   useState,
   useCallback,
+  useMemo,
 } from "react";
 import {
   View,
@@ -12,6 +13,7 @@ import {
   StyleSheet,
   Modal,
   ScrollView,
+  FlatList,
   StatusBar,
   Dimensions,
   Platform,
@@ -45,161 +47,24 @@ import {
 } from "../../lib/offlineTrips";
 import { isRunningInExpoGo } from "expo";
 import { useLanguage } from "../../lib/i18n";
+import { THEME } from "../../constants/theme";
+import { MAP_STYLE, MAP_UI_STYLE } from "../../shared/utils/mapStyles";
+import {
+  haversine,
+  computeDistance,
+  MIN_WAYPOINT_DISTANCE,
+  MAX_WAYPOINT_DISTANCE,
+  MAX_WAYPOINT_SPEED_MS,
+  type Pt,
+} from "../../shared/utils/geo";
+import { fmtTime, getTripTitleParts, type TranslateFn } from "../../shared/utils/formatters";
+import { StatBox } from "../../shared/components/StatBox";
+import { TripGraph, type GraphPoint } from "../../shared/components/TripGraph";
+import { TripCard } from "../../shared/components/TripCard";
 
 const { width } = Dimensions.get("window");
 
-// --- MODERNE TEMA ---
-const THEME = {
-  bg: "#121212",
-  card: "#1C1C1E",
-  cardBorder: "#2C2C2E",
-  primary: "#FFFFFF",
-
-  startGreen: "#22C55E",
-  graphYellow: "#F59E0B",
-  danger: "#FF453A",
-
-  text: "#FFFFFF",
-  textSec: "#A1A1AA",
-  textTertiary: "#636366",
-};
-
-// --- MØRKT KORT STIL ---
-// --- Kort stilarter (lys på Android for bedre synlighed) ---
-const LIGHT_MAP_STYLE = [
-  {
-    elementType: "geometry",
-    stylers: [{ color: "#f5f5f5" }],
-  },
-  {
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#616161" }],
-  },
-  {
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#f5f5f5" }],
-  },
-  {
-    featureType: "poi",
-    elementType: "geometry",
-    stylers: [{ color: "#eeeeee" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#e5e5e5" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry",
-    stylers: [{ color: "#ffffff" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#e0e0e0" }],
-  },
-  {
-    featureType: "road.arterial",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#757575" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry",
-    stylers: [{ color: "#dadada" }],
-  },
-  {
-    featureType: "water",
-    elementType: "geometry",
-    stylers: [{ color: "#c9d7f2" }],
-  },
-];
-
-const DARK_MAP_STYLE = [
-  {
-    elementType: "geometry",
-    stylers: [{ color: "#242f3e" }],
-  },
-  {
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#746855" }],
-  },
-  {
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#242f3e" }],
-  },
-  {
-    featureType: "administrative.locality",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#d59563" }],
-  },
-  {
-    featureType: "poi",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#d59563" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#263c3f" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#6b9a76" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry",
-    stylers: [{ color: "#38414e" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#212a37" }],
-  },
-  {
-    featureType: "road",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#9ca5b3" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry",
-    stylers: [{ color: "#746855" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#1f2835" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#f3d19c" }],
-  },
-  {
-    featureType: "water",
-    elementType: "geometry",
-    stylers: [{ color: "#17263c" }],
-  },
-  {
-    featureType: "water",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#515c6d" }],
-  },
-  {
-    featureType: "water",
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#17263c" }],
-  },
-];
-
 // === NOTIFICATIONS WRAPPER (ingen expo-notifications i Expo Go på Android) ===
-
-const MAP_STYLE = LIGHT_MAP_STYLE;
-const MAP_UI_STYLE = "light";
 
 const DEFAULT_TRACK_REGION: Region = {
   latitude: 55.6761,
@@ -237,14 +102,6 @@ async function ensureNotificationsConfigured() {
   return Notifications;
 }
 
-type Pt = { latitude: number; longitude: number; t: number };
-type GraphPoint = { label: string; value: number };
-
-// Log GPS punkter tættere for at undgå kun start/slut (mobil kan give få opdateringer)
-const MIN_WAYPOINT_DISTANCE = 10;
-// Drop spikes; 300 m-hop giver urealistiske data og ødelægger statistik
-const MAX_WAYPOINT_DISTANCE = 150;
-const MAX_WAYPOINT_SPEED_MS = 8; // ~30 km/t; over det er sandsynligvis et hop
 const TRACK_TASK_NAME = "background_track_updates";
 const TRACK_BUFFER_KEY = "track_buffer_v1";
 const TRACK_META_KEY = "track_meta_v1";
@@ -323,82 +180,6 @@ if (!trackTaskDefined) {
   }
 }
 
-function haversine(a: Pt, b: Pt) {
-  const R = 6371000;
-  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
-  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
-  const la1 = (a.latitude * Math.PI) / 180;
-  const la2 = (b.latitude * Math.PI) / 180;
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
-}
-
-function computeDistance(points: Pt[]): number {
-  if (points.length < 2) return 0;
-  let dist = 0;
-  for (let i = 1; i < points.length; i++) {
-    const step = haversine(points[i - 1], points[i]);
-    // Skip tiny jitter
-    if (step < MIN_WAYPOINT_DISTANCE) continue;
-
-    // Skip spikes (distance or speed)
-    const dtMs =
-      typeof points[i].t === "number" && typeof points[i - 1].t === "number"
-        ? Math.max(1, points[i].t - points[i - 1].t)
-        : null;
-    const speed = dtMs ? step / (dtMs / 1000) : null;
-    if (step > MAX_WAYPOINT_DISTANCE) continue;
-    if (speed != null && speed > MAX_WAYPOINT_SPEED_MS) continue;
-
-    dist += step;
-  }
-  return dist;
-}
-
-function fmtTime(sec: number) {
-  const h = Math.floor(sec / 3600),
-    m = Math.floor((sec % 3600) / 60),
-    s = sec % 60;
-  return `${h.toString().padStart(2, "0")}:${m
-    .toString()
-    .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
-
-function formatTripName(trip: any, translate?: TranslateFn): string {
-  const dt = trip?.start_ts ? new Date(trip.start_ts) : null;
-  const dateStr =
-    dt && !Number.isNaN(dt.getTime())
-      ? dt.toLocaleDateString()
-      : (translate ? translate("unknownDate") : "Ukendt dato");
-
-  const spotName =
-    typeof trip?.spot_name === "string" && trip.spot_name.trim()
-      ? trip.spot_name.trim()
-      : null;
-
-  return spotName ? `${dateStr} · ${spotName}` : dateStr;
-}
-
-function getTripTitleParts(
-  trip: any,
-  translate?: TranslateFn
-): { dateStr: string; spotName: string | null } {
-  const dt = trip?.start_ts ? new Date(trip.start_ts) : null;
-  const dateStr: string =
-    dt && !Number.isNaN(dt.getTime())
-      ? dt.toLocaleDateString()
-      : (translate ? translate("unknownDate") : "Ukendt dato");
-
-  const spotName: string | null =
-    typeof trip?.spot_name === "string" && trip.spot_name.trim()
-      ? trip.spot_name.trim()
-      : null;
-
-  return { dateStr, spotName };
-}
-
 function TripTitle({ trip, t }: { trip: any; t?: TranslateFn }) {
   const { dateStr, spotName } = getTripTitleParts(trip, t);
   return (
@@ -461,8 +242,6 @@ type BestBucket = {
   label: string;
   trips: number;
 };
-
-type TranslateFn = (key: string) => string;
 
 function waterLevelBucket(cm?: number | null, t?: TranslateFn): string {
   if (cm == null || !Number.isFinite(cm)) return t ? t("unknown") : "ukendt";
@@ -1285,16 +1064,16 @@ export default function Track() {
       </View>
     );
   };
-  const seasonOptions = [
+  const seasonOptions = useMemo(() => [
     { key: "all", label: t("wholeYear") },
     { key: "spring", label: t("spring") },
     { key: "summer", label: t("summer") },
     { key: "autumn", label: t("autumn") },
     { key: "winter", label: t("winter") },
-  ];
-  const getSeasonLabel = (key: string) =>
-    seasonOptions.find((s) => s.key === key)?.label ?? t("wholeYear");
-  const filterOptions = getFilterOptions(t);
+  ], [t]);
+  const getSeasonLabel = useCallback((key: string) =>
+    seasonOptions.find((s) => s.key === key)?.label ?? t("wholeYear"), [seasonOptions, t]);
+  const filterOptions = useMemo(() => getFilterOptions(t), [t]);
 
   const reminderIdRef = useRef<string | null>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
@@ -2593,59 +2372,12 @@ async function refreshYearsAndStats(
           </View>
         </Modal>
 
-        <View style={{ gap: 12 }}>
-          {recent.map((tripItem) => (
-            <Link key={tripItem.id} href={`/trips/${tripItem.id}`} asChild>
-              <Pressable style={styles.tripCard}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
-                    width: "100%",
-                  }}
-                >
-                  <View style={styles.tripIcon}>
-                    <Ionicons
-                      name="location"
-                      size={20}
-                      color={THEME.primary}
-                    />
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <TripTitle trip={tripItem} t={t} />
-                    <Text style={styles.tripSub} numberOfLines={1} ellipsizeMode="tail">
-                      {(tripItem.distance_m / 1000).toFixed(2)} km •{" "}
-                      {fmtTime(tripItem.duration_sec)}
-                    </Text>
-                    <View style={[styles.tripBadge, { marginTop: 8 }]}>
-                      {tripItem.fish_count > 0 ? (
-                        <>
-                          <Ionicons
-                            name="fish"
-                            size={14}
-                            color={THEME.bg}
-                          />
-                          <Text
-                            style={[styles.tripBadgeText, { color: THEME.bg }]}
-                          >
-                            {tripItem.fish_count}
-                          </Text>
-                        </>
-                      ) : (
-                        <Text
-                          style={[styles.tripBadgeText, { color: "#000" }]}
-                        >
-                          {t("noFish")}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
-            </Link>
-          ))}
-          {!recent.length && (
+        <FlatList
+          data={recent}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <TripCard trip={item} t={t} />}
+          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          ListEmptyComponent={
             <Text
               style={{
                 color: THEME.textSec,
@@ -2655,8 +2387,12 @@ async function refreshYearsAndStats(
             >
               {t("noTripsFound")}
             </Text>
-          )}
-        </View>
+          }
+          scrollEnabled={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+        />
 
         {/* === TUR FÆRDIG MODAL – GRID/TIMELINE-EDITOR === */}
         <Modal visible={fishModal} transparent animationType="fade">
@@ -3116,153 +2852,6 @@ async function refreshYearsAndStats(
         </View>
       )}
     </>
-  );
-}
-
-// --- KOMPONENTER ---
-
-function StatBox({
-  label,
-  value,
-  icon,
-  color,
-  accent,
-}: {
-  label: string;
-  value: string;
-  icon: any;
-  color?: string;
-  accent?: boolean;
-}) {
-  return (
-    <View style={[styles.statBox, accent && styles.statBoxAccent]}>
-      <View style={styles.statIconWrap}>
-        <Ionicons
-          name={icon}
-          size={16}
-          color={accent ? THEME.graphYellow : THEME.textTertiary}
-        />
-      </View>
-      <Text
-        style={[
-          styles.statValue,
-          color ? { color } : {},
-          accent && { color: THEME.graphYellow },
-        ]}
-      >
-        {value}
-      </Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-// --- BAR GRAPH ---
-function TripGraph({
-  data,
-  label,
-  unit,
-}: {
-  data: GraphPoint[];
-  label: string;
-  unit?: string;
-}) {
-  if (!data || data.length === 0) {
-    return (
-      <Text style={{ color: THEME.textSec, marginTop: 6 }}>
-        Ingen data.
-      </Text>
-    );
-  }
-
-  const values = data.map((d) => d.value);
-  const max = Math.max(...values, 0);
-  const min = Math.min(...values, 0);
-
-  if (max === 0 && min === 0) {
-    return (
-      <Text
-        style={{
-          color: THEME.textSec,
-          marginTop: 6,
-          fontStyle: "italic",
-        }}
-      >
-        Ingen fangster i denne periode.
-      </Text>
-    );
-  }
-
-  const span = max - min || 1;
-  const maxValStr = `${max}${unit ?? ""}`;
-  const minValStr = `${min}${unit ?? ""}`;
-
-  const ticks = [0.25, 0.5, 0.75, 1];
-  const firstLabel = data[0]?.label ?? "";
-  const lastLabel = data[data.length - 1]?.label ?? "";
-
-  return (
-    <View
-      style={{ marginTop: 10, marginBottom: 8, paddingHorizontal: 4 }}
-    >
-      <View style={styles.graphContainer}>
-        <Text style={[styles.graphLabel, { top: 0 }]}>
-          {maxValStr}
-        </Text>
-
-        <View style={styles.graphGrid}>
-          {ticks.map((t) => (
-            <View
-              key={t}
-              style={[
-                styles.graphGridLine,
-                { bottom: `${t * 100}%`, opacity: t === 1 ? 0.2 : 0.08 },
-              ]}
-            />
-          ))}
-        </View>
-
-        <View style={styles.sparkWrap}>
-          {data.map((item, i) => {
-            const rel = (item.value - min) / span;
-            const barH = 10 + rel * 90;
-            const isMax = item.value === max;
-            const showValue = data.length <= 12 && rel > 0.45;
-
-            return (
-              <View
-                key={`${item.label}-${i}`}
-                style={styles.sparkBarWrapper}
-              >
-                {showValue && (
-                  <Text style={styles.sparkValue}>{item.value}</Text>
-                )}
-                <View
-                  style={[
-                    styles.sparkBar,
-                    {
-                      height: barH,
-                      backgroundColor: THEME.graphYellow,
-                      opacity: isMax ? 1 : 0.75,
-                    },
-                  ]}
-                />
-                <Text style={styles.sparkLabel}>{item.label}</Text>
-              </View>
-            );
-          })}
-        </View>
-
-        <Text style={[styles.graphLabel, { bottom: 0 }]}>
-          {minValStr}
-        </Text>
-      </View>
-
-      <View style={styles.graphTimeRow}>
-        <Text style={styles.graphTimeText}>{firstLabel}</Text>
-        <Text style={styles.graphTimeText}>{lastLabel}</Text>
-      </View>
-    </View>
   );
 }
 

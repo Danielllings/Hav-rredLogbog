@@ -14,7 +14,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { auth, signOut } from "../../lib/firebase";
+import { auth, signOut, deleteUser } from "../../lib/firebase";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { statsTrips, listTrips } from "../../lib/trips";
@@ -842,6 +842,10 @@ export default function SettingsScreen() {
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
 
+  const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
+  const [deleteAccountConfirmText, setDeleteAccountConfirmText] = useState("");
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
+
   const { language, setLanguage, t } = useLanguage();
 
   const thisYear = new Date().getFullYear();
@@ -909,6 +913,76 @@ export default function SettingsScreen() {
       return;
     }
     deleteAllUserData();
+  };
+
+  const deleteAccountAndData = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      Alert.alert(
+        "Ikke logget ind",
+        "Du skal være logget ind for at slette din konto."
+      );
+      return;
+    }
+
+    setDeleteAccountLoading(true);
+    try {
+      // 1. Slet alle data først (trips, catches, spots)
+      const collections = ["trips", "catches", "spots"];
+      for (const name of collections) {
+        const colRef = getUserCollectionRef(name);
+        const snapshot = await getDocs(colRef);
+        for (const docSnap of snapshot.docs) {
+          await deleteDoc(docSnap.ref);
+        }
+      }
+
+      // 2. Slet offline-ture gemt lokalt
+      try {
+        await AsyncStorage.removeItem("offline_trips_v2");
+      } catch {}
+
+      // 3. Slet Firebase Auth kontoen
+      await deleteUser(user);
+
+      setDeleteAccountModalVisible(false);
+      setDeleteAccountConfirmText("");
+
+      // Brugeren er nu slettet og logget ud automatisk
+      router.replace("/");
+    } catch (err: any) {
+      console.error("Fejl ved sletning af konto:", err);
+
+      // Håndter "requires-recent-login" fejl
+      if (err?.code === "auth/requires-recent-login") {
+        Alert.alert(
+          "Log ind igen",
+          "Af sikkerhedsårsager skal du logge ind igen før du kan slette din konto. Log ud og log ind igen, og prøv derefter.",
+          [{ text: "OK" }]
+        );
+      } else {
+        Alert.alert(
+          "Fejl",
+          err?.message ?? "Kunne ikke slette din konto. Prøv igen."
+        );
+      }
+    } finally {
+      setDeleteAccountLoading(false);
+    }
+  };
+
+  const handleConfirmDeleteAccount = () => {
+    const confirmWord = language === "da" ? "SLET" : "DELETE";
+    if (deleteAccountConfirmText.trim().toUpperCase() !== confirmWord) {
+      Alert.alert(
+        language === "da" ? "Bekræft sletning" : "Confirm deletion",
+        language === "da"
+          ? `Skriv "${confirmWord}" i feltet for at slette din konto.`
+          : `Type "${confirmWord}" in the field to delete your account.`
+      );
+      return;
+    }
+    deleteAccountAndData();
   };
 
   const generateReport = async (choice: ReportChoice) => {
@@ -1727,6 +1801,42 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
           </View>
+
+          {/* Slet konto */}
+          <View style={[styles.card, { marginTop: 12 }]}>
+            <View style={styles.row}>
+              <View style={[styles.iconContainer, { backgroundColor: "rgba(255, 69, 58, 0.15)" }]}>
+                <Ionicons name="person-remove" size={18} color={THEME.danger} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>
+                  {language === "da" ? "Slet konto" : "Delete account"}
+                </Text>
+                <Text style={styles.value}>
+                  {language === "da"
+                    ? "Slet din konto og alle tilknyttede data permanent"
+                    : "Permanently delete your account and all associated data"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.cardFooter}>
+              <Pressable
+                onPress={() => {
+                  setDeleteAccountConfirmText("");
+                  setDeleteAccountModalVisible(true);
+                }}
+                style={({ pressed }) => [
+                  styles.dangerActionBtn,
+                  pressed ? { opacity: 0.9 } : null,
+                ]}
+              >
+                <Ionicons name="close-circle" size={18} color={THEME.danger} />
+                <Text style={styles.dangerActionBtnText}>
+                  {language === "da" ? "Slet konto" : "Delete account"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
 
         {/* Log ud */}
@@ -2059,6 +2169,95 @@ export default function SettingsScreen() {
               onPress={() => setLanguageModalVisible(false)}
             >
               <Text style={styles.modalCancelText}>{t("close")}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Slet konto modal */}
+      <Modal
+        transparent
+        visible={deleteAccountModalVisible}
+        animationType="fade"
+        onRequestClose={() => {
+          if (deleteAccountLoading) return;
+          setDeleteAccountModalVisible(false);
+          setDeleteAccountConfirmText("");
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalBox}>
+            <View
+              style={{
+                alignSelf: "center",
+                marginBottom: 10,
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: "rgba(255, 69, 58, 0.16)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="warning" size={26} color={THEME.danger} />
+            </View>
+            <Text style={styles.modalTitle}>
+              {language === "da" ? "Slet konto permanent" : "Delete account permanently"}
+            </Text>
+            <Text style={styles.modalText}>
+              {language === "da"
+                ? "Dette vil permanent slette din konto og alle dine data:\n\n• Alle ture og ruter\n• Alle fangster og billeder\n• Alle gemte spots\n• Din brugerprofil\n\nDenne handling kan ikke fortrydes."
+                : "This will permanently delete your account and all your data:\n\n• All trips and routes\n• All catches and photos\n• All saved spots\n• Your user profile\n\nThis action cannot be undone."}
+            </Text>
+            <Text style={[styles.modalText, { marginTop: 8 }]}>
+              {language === "da" ? "Skriv " : "Type "}
+              <Text style={{ fontWeight: "700", color: THEME.danger }}>
+                {language === "da" ? "SLET" : "DELETE"}
+              </Text>
+              {language === "da" ? " for at bekræfte:" : " to confirm:"}
+            </Text>
+
+            <TextInput
+              style={styles.confirmInput}
+              value={deleteAccountConfirmText}
+              onChangeText={setDeleteAccountConfirmText}
+              placeholder={language === "da" ? "SLET" : "DELETE"}
+              placeholderTextColor={THEME.textSec}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.deleteConfirmBtn,
+                { opacity: pressed || deleteAccountLoading ? 0.9 : 1 },
+                deleteAccountConfirmText.trim().toUpperCase() !== (language === "da" ? "SLET" : "DELETE") || deleteAccountLoading
+                  ? { opacity: 0.4 }
+                  : null,
+              ]}
+              disabled={
+                deleteAccountConfirmText.trim().toUpperCase() !== (language === "da" ? "SLET" : "DELETE") || deleteAccountLoading
+              }
+              onPress={handleConfirmDeleteAccount}
+            >
+              {deleteAccountLoading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.deleteConfirmText}>
+                  {language === "da" ? "Slet min konto" : "Delete my account"}
+                </Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              style={styles.modalCancel}
+              onPress={() => {
+                if (deleteAccountLoading) return;
+                setDeleteAccountModalVisible(false);
+                setDeleteAccountConfirmText("");
+              }}
+            >
+              <Text style={styles.modalCancelText}>{t("cancel")}</Text>
             </Pressable>
           </View>
         </View>

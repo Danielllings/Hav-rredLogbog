@@ -106,6 +106,27 @@ export type CoastWindInfo = {
   category: CoastWindCategory;     // grov klassifikation
 };
 
+// DMI API response types
+type DmiGeoJsonFeature = {
+  properties: Record<string, unknown>;
+  geometry?: unknown;
+};
+
+type DmiGeoJsonResponse = {
+  features?: DmiGeoJsonFeature[];
+};
+
+type DmiCoverageRanges = Record<string, { values?: (number | null)[] } | undefined>;
+
+type DmiCoverageJson = {
+  domain?: {
+    axes?: {
+      t?: { values?: string[] };
+    };
+  };
+  ranges?: DmiCoverageRanges;
+};
+
 /** Hjælp: grader → radianer */
 function toRad(d: number): number {
   return (d * Math.PI) / 180;
@@ -393,7 +414,6 @@ export type EdrForecast = {
 async function fetchEdrData(pathAndQuery: string) {
   try {
     if (!EDR_BASE_URL) {
-      // console.log("EDR proxy URL mangler");
       return null;
     }
 
@@ -401,7 +421,6 @@ async function fetchEdrData(pathAndQuery: string) {
       pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`
     )}`;
 
-    // console.log("[dmiEdr] fetch", proxyUrl);
 
     const res = await fetch(proxyUrl, {
       method: "GET",
@@ -412,12 +431,10 @@ async function fetchEdrData(pathAndQuery: string) {
     });
 
     if (!res.ok) {
-      // console.log("EDR fejlstatus:", res.status, proxyUrl);
       return null;
     }
     return await res.json();
   } catch (e) {
-    // console.log("EDR fetch-fejl:", (e as Error)?.message || e, pathAndQuery);
     return null;
   }
 }
@@ -503,7 +520,7 @@ export async function getSpotForecastEdr(
   };
 
   // 1) Vejr (HARMONIE - CoverageJSON)
-  const parseCoverage = (json: any, seriesHandler: (ts: number, ranges: any, i: number, keys: Record<string, string | undefined>) => void) => {
+  const parseCoverage = (json: DmiCoverageJson | null, seriesHandler: (ts: number, ranges: DmiCoverageRanges, i: number, keys: Record<string, string | undefined>) => void) => {
     if (
       !json ||
       !json.domain ||
@@ -547,30 +564,30 @@ export async function getSpotForecastEdr(
   // Prøv CoverageJSON format først
   parseCoverage(harmonieJson, (ts, ranges, i, keys) => {
     if (keys.tempKey && ranges[keys.tempKey]?.values?.[i] != null) {
-      let val = ranges[keys.tempKey].values[i] as number;
+      let val = ranges[keys.tempKey]!.values![i] as number;
       if (val > 200) val -= 273.15;
       result.airTempSeries.push({ ts, v: val });
     }
     if (keys.windKey && ranges[keys.windKey]?.values?.[i] != null) {
-      const val = ranges[keys.windKey].values[i] as number;
+      const val = ranges[keys.windKey]!.values![i] as number;
       result.windSpeedSeries.push({ ts, v: val });
     }
     if (keys.dirKey && ranges[keys.dirKey]?.values?.[i] != null) {
-      const val = ranges[keys.dirKey].values[i] as number;
+      const val = ranges[keys.dirKey]!.values![i] as number;
       result.windDirSeries.push({ ts, v: val });
     }
     if (keys.humidityKey && ranges[keys.humidityKey]?.values?.[i] != null) {
-      const raw = ranges[keys.humidityKey].values[i] as number;
+      const raw = ranges[keys.humidityKey]!.values![i] as number;
       const val = raw > 1 ? raw : raw * 100;
       result.humiditySeries.push({ ts, v: val });
     }
     if (keys.pressureKey && ranges[keys.pressureKey]?.values?.[i] != null) {
-      let val = ranges[keys.pressureKey].values[i] as number;
+      let val = ranges[keys.pressureKey]!.values![i] as number;
       if (val > 2000) val = val / 100;
       result.pressureSeries.push({ ts, v: val });
     }
     if (keys.cloudKey && ranges[keys.cloudKey]?.values?.[i] != null) {
-      const raw = ranges[keys.cloudKey].values[i] as number;
+      const raw = ranges[keys.cloudKey]!.values![i] as number;
       const val = raw > 1 ? raw : raw * 100;
       result.cloudCoverSeries.push({ ts, v: val });
     }
@@ -582,10 +599,10 @@ export async function getSpotForecastEdr(
     harmonieJson &&
     Array.isArray(harmonieJson.features)
   ) {
-    harmonieJson.features.forEach((f: any) => {
+    harmonieJson.features.forEach((f: DmiGeoJsonFeature) => {
       const props = f.properties || {};
       const ts = Date.parse(
-        props.datetime ?? props.step ?? props.time ?? props.timestamp ?? ""
+        String(props.datetime ?? props.step ?? props.time ?? props.timestamp ?? "")
       );
       if (!Number.isFinite(ts)) return;
 
@@ -630,15 +647,15 @@ export async function getSpotForecastEdr(
   // 2) Vandstand/bølger
   const dkss = oceanData?.waterLevelResult;
   if (dkss && Array.isArray(dkss.features)) {
-    dkss.features.forEach((f: any) => {
+    dkss.features.forEach((f: DmiGeoJsonFeature) => {
       const props = f.properties || {};
       const ts = Date.parse(
-        props.datetime ??
+        String(props.datetime ??
           props.step ??
           props.time ??
           props.timestamp ??
           props.validTime ??
-          ""
+          "")
       );
 
       // DMI kan kalde den både ved navn og intern kode
@@ -659,15 +676,15 @@ export async function getSpotForecastEdr(
   // 3) Bølger (WAM - GeoJSON)
   const wam = oceanData?.waveHeightResult;
   if (wam && Array.isArray(wam.features)) {
-    wam.features.forEach((f: any) => {
+    wam.features.forEach((f: DmiGeoJsonFeature) => {
       const props = f.properties || {};
       const ts = Date.parse(
-        props.datetime ??
+        String(props.datetime ??
           props.step ??
           props.time ??
           props.timestamp ??
           props.validTime ??
-          ""
+          "")
       );
       const val = props["significant-wave-height"];
 

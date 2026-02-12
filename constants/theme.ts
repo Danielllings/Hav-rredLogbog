@@ -27,6 +27,23 @@ export const Colors = {
   },
 };
 
+// --- MODERNE TEMA (brugt i index.tsx og andre steder) ---
+export const THEME = {
+  bg: "#121212",
+  card: "#1C1C1E",
+  cardBorder: "#2C2C2E",
+  primary: "#FFFFFF",
+
+  startGreen: "#22C55E",
+  graphYellow: "#F59E0B",
+  danger: "#FF453A",
+
+  text: "#FFFFFF",
+  textSec: "#A1A1AA",
+  textTertiary: "#636366",
+  inputBg: "#2C2C2E",
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

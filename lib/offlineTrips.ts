@@ -46,7 +46,6 @@ async function savePendingTrips(list: PendingTrip[]) {
   try {
     await AsyncStorage.setItem(OFFLINE_TRIPS_KEY, JSON.stringify(list));
   } catch (e) {
-    // console.log("[offlineTrips] Kunne ikke gemme pending trips:", e);
   }
 }
 
@@ -84,12 +83,10 @@ async function fetchDmiWithRetry(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      // console.log(`[offlineTrips] DMI-forsøg ${attempt}/${maxAttempts} for tur ${payload.start_ts}`);
 
       // Tjek netværk før hvert forsøg
       const hasNetwork = await hasNetworkConnection();
       if (!hasNetwork) {
-        // console.log("[offlineTrips] Ingen netværksforbindelse, afbryder DMI-kald");
         return {
           success: false,
           meta_json: null,
@@ -104,14 +101,12 @@ async function fetchDmiWithRetry(
       });
 
       if (evalRes) {
-        // console.log("[offlineTrips] DMI-data hentet succesfuldt");
         return {
           success: true,
           meta_json: JSON.stringify({ evaluation: evalRes }),
         };
       } else {
         // Ingen data fra DMI (ikke en fejl, bare ingen data tilgængelig)
-        // console.log("[offlineTrips] Ingen DMI-data tilgængelig for denne tur");
         return {
           success: true,
           meta_json: null,
@@ -120,7 +115,6 @@ async function fetchDmiWithRetry(
       }
     } catch (e) {
       const errorMsg = (e as Error)?.message || String(e);
-      // console.log(`[offlineTrips] DMI-fejl forsøg ${attempt}:`, errorMsg);
 
       // Hvis det er sidste forsøg, returner fejl
       if (attempt === maxAttempts) {
@@ -133,7 +127,6 @@ async function fetchDmiWithRetry(
 
       // Vent før næste forsøg (eksponentiel backoff)
       const waitTime = RETRY_DELAY_MS * Math.pow(2, attempt - 1);
-      // console.log(`[offlineTrips] Venter ${waitTime}ms før næste forsøg...`);
       await delay(waitTime);
     }
   }
@@ -154,16 +147,13 @@ async function fetchDmiWithRetry(
 export async function syncOfflineTrips(): Promise<number> {
   let list = await loadPendingTrips();
   if (!list.length) {
-    // console.log("[offlineTrips] Ingen ventende ture");
     return 0;
   }
 
-  // console.log(`[offlineTrips] Starter sync af ${list.length} ventende ture...`);
 
   // Tjek netværk først
   const hasNetwork = await hasNetworkConnection();
   if (!hasNetwork) {
-    // console.log("[offlineTrips] Ingen netværksforbindelse, afbryder sync");
     return 0;
   }
 
@@ -171,7 +161,6 @@ export async function syncOfflineTrips(): Promise<number> {
   let synced = 0;
 
   for (const item of list) {
-    // console.log(`[offlineTrips] Behandler tur: ${item.id} (oprettet: ${item.created_at})`);
 
     // Arbejd på en kopi så vi ikke smadrer det der ligger i AsyncStorage
     const payload: SaveTripPayload = { ...item.payload };
@@ -185,14 +174,11 @@ export async function syncOfflineTrips(): Promise<number> {
         // DMI-kald lykkedes (eller ingen data tilgængelig)
         payload.meta_json = dmiResult.meta_json;
         payload.needs_dmi = false;
-        // console.log("[offlineTrips] DMI-evaluering fuldført");
       } else {
         // DMI-kald fejlede - prøv igen senere
-        // console.log(`[offlineTrips] DMI-fejl: ${dmiResult.error}`);
 
         if (retryCount >= MAX_RETRY_ATTEMPTS) {
           // Max forsøg overskredet - gem turen UDEN vejrdata
-          // console.log("[offlineTrips] Max forsøg overskredet, gemmer uden vejrdata");
           payload.meta_json = JSON.stringify({
             evaluation: {
               source: "DMI",
@@ -207,7 +193,6 @@ export async function syncOfflineTrips(): Promise<number> {
             retry_count: retryCount,
             last_error: dmiResult.error,
           });
-          // console.log(`[offlineTrips] Tur lagt tilbage i kø (forsøg ${retryCount}/${MAX_RETRY_ATTEMPTS})`);
           continue;
         }
       }
@@ -217,10 +202,8 @@ export async function syncOfflineTrips(): Promise<number> {
     try {
       await saveTrip(payload as any);
       synced++;
-      // console.log(`[offlineTrips] Tur gemt succesfuldt: ${item.id}`);
     } catch (e) {
       const errorMsg = (e as Error)?.message || String(e);
-      // console.log(`[offlineTrips] Fejl ved gem til Firestore: ${errorMsg}`);
 
       // Læg tilbage i køen
       stillPending.push({
@@ -233,7 +216,6 @@ export async function syncOfflineTrips(): Promise<number> {
   }
 
   await savePendingTrips(stillPending);
-  // console.log(`[offlineTrips] Sync færdig: ${synced} gemt, ${stillPending.length} ventende`);
 
   return synced;
 }
@@ -251,7 +233,6 @@ export async function queueOfflineTrip(base: SaveTripPayload) {
   };
   list.push(item);
   await savePendingTrips(list);
-  // console.log(`[offlineTrips] Tur køet: ${item.id}`);
 }
 
 /**
@@ -274,5 +255,4 @@ export async function getPendingTrips(): Promise<PendingTrip[]> {
  */
 export async function clearPendingTrips(): Promise<void> {
   await AsyncStorage.removeItem(OFFLINE_TRIPS_KEY);
-  // console.log("[offlineTrips] Alle ventende ture slettet");
 }

@@ -10,9 +10,19 @@ import {
   where,
   getDoc,
   type QueryDocumentSnapshot,
+  type QueryConstraint,
 } from "firebase/firestore";
 import { getUserCollectionRef, getUserId } from "./firestore";
 import { listSpots } from "./spots";
+
+// Re-export pure utility functions from tripUtils (for testing)
+export {
+  getFishEventsCount,
+  distanceMeters,
+  getEndPositionFromPath,
+} from "./tripUtils";
+
+import { getFishEventsCount, distanceMeters, getEndPositionFromPath } from "./tripUtils";
 
 export type TripRow = {
   id: string; // Firestore ID
@@ -39,76 +49,6 @@ export type TripRow = {
 const mapSnapshotToTripRow = (snap: QueryDocumentSnapshot): TripRow => {
   return { id: snap.id, ...(snap.data() as Omit<TripRow, "id">) };
 };
-
-/** Hjælp: antal fisk ud fra events, fallback til fish_count */
-function getFishEventsCount(t: TripRow): number {
-  if (t.fish_events_json) {
-    try {
-      const parsed = JSON.parse(t.fish_events_json);
-      if (Array.isArray(parsed)) {
-        return parsed.length;
-      }
-    } catch {
-      // ignorer parse-fejl og brug fish_count
-    }
-  }
-  return t.fish_count ?? 0;
-}
-
-// Haversine distance i meter
-function distanceMeters(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371000; // meter
-  const toRad = (v: number) => (v * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-// Forsøg at hente slutpositionen for turen ud fra path_json
-function getEndPositionFromPath(
-  path_json?: string | null
-): { lat: number; lng: number } | null {
-  if (!path_json) return null;
-  try {
-    const parsed = JSON.parse(path_json);
-
-    if (!Array.isArray(parsed) || parsed.length === 0) return null;
-
-    const last = parsed[parsed.length - 1];
-
-    // Støt både {lat,lng} og {latitude,longitude}
-    const lat =
-      typeof last.lat === "number"
-        ? last.lat
-        : typeof last.latitude === "number"
-        ? last.latitude
-        : null;
-    const lng =
-      typeof last.lng === "number"
-        ? last.lng
-        : typeof last.longitude === "number"
-        ? last.longitude
-        : null;
-
-    if (lat === null || lng === null) return null;
-
-    return { lat, lng };
-  } catch {
-    return null;
-  }
-}
 
 // Find nærmeste spot til en given position
 async function findNearestSpot(
@@ -184,7 +124,6 @@ async function findNearestSpot(
       spot_lng: best.lng,
     };
   } catch (e) {
-    // console.log("Kunne ikke finde nærmeste spot til tur:", e);
     return {
       spot_id: null,
       spot_name: null,
@@ -297,7 +236,7 @@ export async function listTrips(
   daysAgo?: number
 ): Promise<TripRow[]> {
   const tripsRef = getUserCollectionRef("trips");
-  const constraints: any[] = [];
+  const constraints: QueryConstraint[] = [];
 
   if (daysAgo && daysAgo > 0) {
     const d = new Date();
@@ -374,7 +313,7 @@ export type TripStats = {
 /** Aggregerede statistikdata */
 export async function statsTrips(year?: number): Promise<TripStats> {
   const tripsRef = getUserCollectionRef("trips");
-  const constraints: any[] = [];
+  const constraints: QueryConstraint[] = [];
 
   if (year) {
     const start = `${year}-01-01T00:00:00.000Z`;

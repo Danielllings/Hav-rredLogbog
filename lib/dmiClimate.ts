@@ -232,14 +232,12 @@ export async function fetchClimateForTrip(
   const station = findNearestClimateStation(input.lat, input.lon, true);
 
   if (!station) {
-    // console.log("Ingen klimastation fundet til position", input.lat, input.lon);
     return null;
   }
 
   const startMs = Date.parse(input.startIso);
   const endMs = Date.parse(input.endIso);
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
-    // console.log("Ugyldige datoer i ClimateInput", input);
     return null;
   }
 
@@ -325,13 +323,11 @@ export async function fetchClimateForTrip(
       series.length > 0;
 
     if (!hasAny) {
-      // console.log("Ingen klimadata fundet i vinduet for station", station.id);
       return null;
     }
 
     return stats;
   } catch (err) {
-    // console.log("Fejl i fetchClimateForTrip:", err);
     return null;
   }
 }

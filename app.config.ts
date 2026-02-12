@@ -1,7 +1,11 @@
 import "dotenv/config";
 import type { ExpoConfig } from "expo";
 
-function readKey(envNames: string[]) {
+/**
+ * Reads an environment variable from multiple possible names.
+ * EAS Secrets are injected as env vars during build.
+ */
+function readKey(envNames: string[]): string {
   for (const name of envNames) {
     const val = process.env[name];
     if (val) return val;
@@ -9,17 +13,19 @@ function readKey(envNames: string[]) {
   return "";
 }
 
-const mapsApiKey = process.env.MAPS_API_KEY;
-const firebaseApiKey = process.env.FIREBASE_API_KEY;
-const firebaseAuthDomain = process.env.FIREBASE_AUTH_DOMAIN;
-const firebaseProjectId = process.env.FIREBASE_PROJECT_ID;
-const firebaseStorageBucket = process.env.FIREBASE_STORAGE_BUCKET;
-const firebaseMessagingSenderId = process.env.FIREBASE_MESSAGING_SENDER_ID;
-const firebaseAppId = process.env.FIREBASE_APP_ID;
-const dmiClimateUrl = readKey([
-  "DMI_CLIMATE_URL",
-  "EXPO_PUBLIC_DMI_CLIMATE_URL",
-]);
+// API Keys - check both direct name and EXPO_PUBLIC_ prefix for flexibility
+const mapsApiKey = readKey(["MAPS_API_KEY", "EXPO_PUBLIC_MAPS_API_KEY"]);
+
+// Firebase config
+const firebaseApiKey = readKey(["FIREBASE_API_KEY", "EXPO_PUBLIC_FIREBASE_API_KEY"]);
+const firebaseAuthDomain = readKey(["FIREBASE_AUTH_DOMAIN", "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN"]);
+const firebaseProjectId = readKey(["FIREBASE_PROJECT_ID", "EXPO_PUBLIC_FIREBASE_PROJECT_ID"]);
+const firebaseStorageBucket = readKey(["FIREBASE_STORAGE_BUCKET", "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET"]);
+const firebaseMessagingSenderId = readKey(["FIREBASE_MESSAGING_SENDER_ID", "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"]);
+const firebaseAppId = readKey(["FIREBASE_APP_ID", "EXPO_PUBLIC_FIREBASE_APP_ID"]);
+
+// DMI/Backend URLs
+const dmiClimateUrl = readKey(["DMI_CLIMATE_URL", "EXPO_PUBLIC_DMI_CLIMATE_URL"]);
 const dmiEdrUrl = readKey(["DMI_EDR_URL", "EXPO_PUBLIC_DMI_EDR_URL"]);
 const dmiOceanUrl = readKey(["DMI_OCEAN_URL", "EXPO_PUBLIC_DMI_OCEAN_URL"]);
 const stacUrl = readKey(["STAC_URL", "EXPO_PUBLIC_STAC_URL"]);
@@ -101,7 +107,7 @@ const config: ExpoConfig = {
     supportsTablet: false,
     bundleIdentifier: "dk.havoerred.logbog",
 
-    googleServicesFile: "./GoogleService-Info.plist",
+    googleServicesFile: process.env.GOOGLE_SERVICE_INFO_PLIST || "./GoogleService-Info.plist",
 
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
@@ -118,7 +124,7 @@ const config: ExpoConfig = {
   android: {
     package: "dk.havoerred.logbog",
 
-    googleServicesFile: "./google-services.json",
+    googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
 
     useNextNotificationsApi: true,
 

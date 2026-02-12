@@ -58,3 +58,4 @@ issue.png
 env
 .env*
 functions/.env*
+play-service-account.json

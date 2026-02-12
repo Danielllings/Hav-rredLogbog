@@ -10,6 +10,7 @@ import {
   orderBy,
   getDoc,
   type QueryDocumentSnapshot,
+  type QueryConstraint,
   collection,
   setDoc,
 } from "firebase/firestore";
@@ -87,7 +88,7 @@ export async function updateCatch(
   const now = new Date().toISOString();
   const refDoc = doc(getUserCollectionRef("catches"), id);
 
-  const patchToSave: any = { ...patch };
+  const patchToSave: Partial<CatchRow> & { updated_at?: string } = { ...patch };
 
   // Hvis der kommer en ny photo_uri ind, så antag at det er en lokal sti,
   // medmindre det allerede er en http/https-URL.
@@ -119,7 +120,7 @@ export async function listCatches(
   minLength?: number
 ): Promise<CatchRow[]> {
   const catchesRef = getUserCollectionRef("catches");
-  const constraints: any[] = [];
+  const constraints: QueryConstraint[] = [];
 
   if (minLength && minLength > 0) {
     constraints.push(where("length_cm", ">=", minLength));
@@ -147,5 +148,5 @@ export async function listCatches(
 export async function getCatch(id: string): Promise<CatchRow | null> {
   const refDoc = doc(getUserCollectionRef("catches"), id);
   const snap = await getDoc(refDoc);
-  return snap.exists() ? (mapSnapshotToCatchRow(snap as any)) : null;
+  return snap.exists() ? mapSnapshotToCatchRow(snap as QueryDocumentSnapshot) : null;
 }

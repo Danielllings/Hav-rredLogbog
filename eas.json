@@ -9,23 +9,18 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_MAPS_API_KEY": "AIzaSyAgOG_facYZQzne5XBkYA1ZznxMy4967k8",
-        "EXPO_PUBLIC_DMI_EDR_API_KEY": "8bcd7022-8748-4081-8ec8-aaccc93cef72",
-        "EXPO_PUBLIC_DMI_OCEAN_API_KEY": "5af7a804-993e-472d-809c-0631b08fa03b",
-        "EXPO_PUBLIC_DMI_KEY_METOBS": "6473e5fa-e62b-4b18-9091-b435d145a7db",
-        "EXPO_PUBLIC_DMI_CLIMATE_API_KEY": "19c47357-48b6-4cef-81db-78ac4a42830d"
-      }
+      "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_MAPS_API_KEY": "AIzaSyAgOG_facYZQzne5XBkYA1ZznxMy4967k8"
-      }
+      "autoIncrement": true
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./play-service-account.json",
+        "track": "internal"
+      }
+    }
   }
 }

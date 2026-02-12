@@ -7,6 +7,7 @@ import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
+  deleteUser,
   type User,
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -36,13 +37,15 @@ const missingFirebaseConfigFields = Object.entries(firebaseConfigPresence)
   .filter(([, present]) => !present)
   .map(([key]) => key);
 
-if (missingFirebaseConfigFields.length > 0) {
-  console.warn(
-    "[firebase] Missing config fields:",
-    missingFirebaseConfigFields.join(", ")
-  );
-} else {
-  console.info("[firebase] Config fields present:", firebaseConfigPresence);
+if (__DEV__) {
+  if (missingFirebaseConfigFields.length > 0) {
+    console.warn(
+      "[firebase] Missing config fields:",
+      missingFirebaseConfigFields.join(", ")
+    );
+  } else {
+    console.info("[firebase] Config fields present:", firebaseConfigPresence);
+  }
 }
 
 if (!firebaseApiKey) {
@@ -80,5 +83,6 @@ export {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
+  deleteUser,
   type User,
 };

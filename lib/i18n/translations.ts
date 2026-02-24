@@ -179,6 +179,7 @@ export const da = {
   removeSelection: "Fjern valg",
 
   // Time
+  hour: "time",
   hours: "timer",
   minutes: "minutter",
   seconds: "sekunder",
@@ -324,6 +325,9 @@ export const da = {
   typicalMinutes: "Typisk",
   minBefore: "min før",
   minAfter: "min efter",
+  before: "før",
+  after: "efter",
+  at: "ved",
   sunrise: "Solopgang",
   sunset: "Solnedgang",
   tripLength: "Turlængde",
@@ -494,7 +498,62 @@ export const da = {
   weatherAndSea: "Vejr & Hav",
   loadingForecasts: "Henter prognoser…",
   noDataAvailable: "Ingen data tilgængelig",
-  tapMapHint: "Tryk på kortet for at vælge en lokation og se vejr & hav data.",
+  tapMapHint: "Tryk på kortet for at vælge en lokation. Hold inde på et spot for at redigere.",
+
+  // Fredningsbælter
+  protectionZones: "Fredningsbælter",
+  protectionZonesDesc: "Vis forbudte fiskeriområder",
+  protectionZone: "Fredningsbælte",
+  protectionActive: "Fredning aktiv",
+  protectionNotActive: "Fredning ikke aktiv",
+  period: "Periode",
+  watercourse: "Vandløb",
+  legalBasis: "Lovgrundlag",
+  yearRound: "Helårlig",
+  halfYear: "16. sep - 15. mar",
+  otherPeriod: "Anden periode",
+  legend: "Farveforklaring",
+  contact: "Kontakt",
+  gearRestrictions: "Redskabsbegrænsninger",
+  bagLimit: "Fangstbegrænsning",
+  fishMax: "maks. fisk",
+  moreInfo: "Mere info",
+  noRestrictions: "Ingen begrænsninger",
+
+  // Trip Replay
+  tripReplay: "Tur Replay",
+  replayTrip: "Afspil tur",
+  noRouteToReplay: "Ingen rute at afspille",
+
+  // DMI Stations
+  dmiStations: "DMI Stationer",
+  dmiStationsDesc: "Oceanobs vandtemp & vandstand",
+
+  // Coast direction
+  coastDirectionQuestion: "Hvilken retning kigger du ud mod vandet?",
+
+  // Ocean currents & salinity
+  oceanCurrents: "Havstrømme",
+  oceanCurrentsDesc: "Vis strømretning og hastighed",
+  salinity: "Saltholdighed",
+  salinityDesc: "Vis havets saltindhold (PSU)",
+  currentSpeed: "Strømhastighed",
+  weak: "Svag",
+  light: "Let",
+  moderate: "Moderat",
+  strong: "Stærk",
+  veryStrong: "Meget stærk",
+  freshWater: "Ferskvand",
+  brackish: "Brakvand",
+  mixed: "Blandet",
+  transitional: "Overgangsvand",
+  marine: "Saltvand",
+  oceanCurrent: "Havstrøm",
+  direction: "Retning",
+  speed: "Hastighed",
+  loadingOceanData: "Henter havdata...",
+  noOceanData: "Ingen havdata tilgængelig",
+  zoomInForData: "Zoom ind for at se data",
 };
 
 export const en: typeof da = {
@@ -674,6 +733,7 @@ export const en: typeof da = {
   removeSelection: "Remove selection",
 
   // Time
+  hour: "hour",
   hours: "hours",
   minutes: "minutes",
   seconds: "seconds",
@@ -819,6 +879,9 @@ export const en: typeof da = {
   typicalMinutes: "Typically",
   minBefore: "min before",
   minAfter: "min after",
+  before: "before",
+  after: "after",
+  at: "at",
   sunrise: "Sunrise",
   sunset: "Sunset",
   tripLength: "Trip length",
@@ -989,7 +1052,62 @@ export const en: typeof da = {
   weatherAndSea: "Weather & Sea",
   loadingForecasts: "Loading forecasts…",
   noDataAvailable: "No data available",
-  tapMapHint: "Tap the map to select a location and view weather & sea data.",
+  tapMapHint: "Tap the map to select a location. Hold on a spot to edit.",
+
+  // Fredningsbælter
+  protectionZones: "Protection Zones",
+  protectionZonesDesc: "Show restricted fishing areas",
+  protectionZone: "Protection Zone",
+  protectionActive: "Protection active",
+  protectionNotActive: "Protection not active",
+  period: "Period",
+  watercourse: "Watercourse",
+  legalBasis: "Legal basis",
+  yearRound: "Year-round",
+  halfYear: "Sep 16 - Mar 15",
+  otherPeriod: "Other period",
+  legend: "Legend",
+  contact: "Contact",
+  gearRestrictions: "Gear restrictions",
+  bagLimit: "Bag limit",
+  fishMax: "max. fish",
+  moreInfo: "More info",
+  noRestrictions: "No restrictions",
+
+  // Trip Replay
+  tripReplay: "Trip Replay",
+  replayTrip: "Replay trip",
+  noRouteToReplay: "No route to replay",
+
+  // DMI Stations
+  dmiStations: "DMI Stations",
+  dmiStationsDesc: "Ocean temp & water level",
+
+  // Coast direction
+  coastDirectionQuestion: "Which direction do you face the water?",
+
+  // Ocean currents & salinity
+  oceanCurrents: "Ocean Currents",
+  oceanCurrentsDesc: "Show current direction and speed",
+  salinity: "Salinity",
+  salinityDesc: "Show sea salt content (PSU)",
+  currentSpeed: "Current speed",
+  weak: "Weak",
+  light: "Light",
+  moderate: "Moderate",
+  strong: "Strong",
+  veryStrong: "Very strong",
+  freshWater: "Fresh water",
+  brackish: "Brackish",
+  mixed: "Mixed",
+  transitional: "Transitional",
+  marine: "Marine",
+  oceanCurrent: "Ocean Current",
+  direction: "Direction",
+  speed: "Speed",
+  loadingOceanData: "Loading ocean data...",
+  noOceanData: "No ocean data available",
+  zoomInForData: "Zoom in to see data",
 };
 
 export const translations = {

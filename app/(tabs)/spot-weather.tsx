@@ -1,7 +1,8 @@
 // app/(tabs)/spot-weather.tsx
 // SpotWeather med DMI EDR, vandstand/bølger og 0-cm reference-linje på vandstandsgrafen
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -16,6 +17,7 @@ import {
   ActivityIndicator,
   Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import MapView, {
   Marker,
@@ -23,10 +25,13 @@ import MapView, {
   UrlTile,
   Callout,
   Region,
+  Polygon,
   PROVIDER_GOOGLE,
   PROVIDER_DEFAULT,
 } from "react-native-maps";
+import Slider from "@react-native-community/slider";
 import * as Location from "expo-location";
+import * as ExpoLinking from "expo-linking";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import SunCalc from "suncalc";
 
@@ -41,18 +46,53 @@ import {
   listSpots,
   deleteSpot,
   updateSpot,
+  getWindType,
+  getWindTypeLabel,
   type SpotRow,
+  type CoastDirection,
 } from "../../lib/spots";
 
 // BRUG trips-helper i stedet for catches
 import { getFishCountForSpot } from "../../lib/trips";
+import {
+  fetchFredningsbaelter,
+  getPeriodeType,
+  getPeriodeColor,
+  getPeriodeFillColor,
+  getPeriodeLabel,
+  isFredningActive,
+  type FredningsbaelterGeoJSON,
+  type FredningsbaelteFeature,
+} from "../../lib/fredningsbaelter";
+import { OCEAN_STATIONS_DK } from "../../lib/dmiOcean";
 import { useLanguage } from "../../lib/i18n";
+import { useTheme } from "../../lib/theme";
 import { SpotMarker } from "../../shared/components/SpotMarker";
+import { DmiStationMarker } from "../../shared/components/DmiStationMarker";
 import { ScrollableGraph } from "../../shared/components/ScrollableGraph";
+import { CurrentArrowMarker } from "../../shared/components/CurrentArrowMarker";
+import {
+  fetchOceanGridData,
+  getCachedGridData,
+  clearGridCache,
+  cellToCoords,
+  getSalinityColor,
+  getWaveHeightColor,
+  getCurrentSpeedColorRgba,
+  getForecastTimeOptions,
+  CURRENT_COLORS,
+  SALINITY_COLORS,
+  WAVE_COLORS,
+  type OceanGridData,
+  type BoundingBox,
+} from "../../lib/dmiGridData";
 
 type LatLng = { latitude: number; longitude: number };
 
 type MapLayerType = "standard" | "orto";
+
+// Storage key for map layer settings
+const MAP_SETTINGS_KEY = "spot_weather_map_settings";
 
 const MARKER_BOX_WIDTH = 140;
 const MARKER_BOX_HEIGHT = 80;
@@ -273,13 +313,15 @@ function getSunTimes(lat: number, lon: number) {
 
 export default function SpotWeatherScreen() {
   const mapRef = useRef<MapView | null>(null);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const { theme } = useTheme();
 
   const [pos, setPos] = useState<LatLng | null>(null);
   const [showForecast, setShowForecast] = useState(false);
 
   const [edrData, setEdrData] = useState<EdrForecast | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingSlow, setLoadingSlow] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // søg
@@ -314,6 +356,7 @@ export default function SpotWeatherScreen() {
   // tilføj spot-modal
   const [addSpotModalVisible, setAddSpotModalVisible] = useState(false);
   const [newSpotName, setNewSpotName] = useState("");
+  const [newSpotCoastDir, setNewSpotCoastDir] = useState<CoastDirection | null>(null);
   const [addingSpot, setAddingSpot] = useState(false);
 
   // animation til bottomsheet (Vejr & Hav)
@@ -323,6 +366,7 @@ export default function SpotWeatherScreen() {
   const [selectedSpot, setSelectedSpot] = useState<SpotRow | null>(null);
   const [spotEdrData, setSpotEdrData] = useState<EdrForecast | null>(null);
   const [spotLoading, setSpotLoading] = useState(false);
+  const [spotLoadingSlow, setSpotLoadingSlow] = useState(false);
   const [spotErrorMsg, setSpotErrorMsg] = useState<string | null>(null);
   const [spotFishCount, setSpotFishCount] = useState<number | null>(null);
   const [spotDeleteLoading, setSpotDeleteLoading] = useState(false);
@@ -331,8 +375,89 @@ export default function SpotWeatherScreen() {
   );
   const [renameTarget, setRenameTarget] = useState<SpotRow | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renameCoastDir, setRenameCoastDir] = useState<CoastDirection | null>(null);
   const [renameLoading, setRenameLoading] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
+
+  // Fredningsbælter
+  const [fredningsbaelter, setFredningsbaelter] = useState<FredningsbaelterGeoJSON | null>(null);
+  const [showFredningsbaelter, setShowFredningsbaelter] = useState(false);
+  const [selectedZone, setSelectedZone] = useState<FredningsbaelteFeature | null>(null);
+
+  // DMI ocean stations
+  const [showDmiStations, setShowDmiStations] = useState(false);
+
+  // Ocean overlay state
+  const [showCurrents, setShowCurrents] = useState(false);
+  const [showSalinity, setShowSalinity] = useState(false);
+  const [showWaves, setShowWaves] = useState(false);
+  const [oceanGridData, setOceanGridData] = useState<OceanGridData | null>(null);
+  const [oceanGridLoading, setOceanGridLoading] = useState(false);
+  const [forecastHourIndex, setForecastHourIndex] = useState(0);
+  const [currentMapBounds, setCurrentMapBounds] = useState<BoundingBox>({
+    minLat: DEFAULT_REGION.latitude - DEFAULT_REGION.latitudeDelta / 2,
+    maxLat: DEFAULT_REGION.latitude + DEFAULT_REGION.latitudeDelta / 2,
+    minLng: DEFAULT_REGION.longitude - DEFAULT_REGION.longitudeDelta / 2,
+    maxLng: DEFAULT_REGION.longitude + DEFAULT_REGION.longitudeDelta / 2,
+  });
+  const forecastTimeOptions = getForecastTimeOptions();
+
+  // Track if settings have been loaded from storage
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Reset overlays when leaving screen
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        // Cleanup when screen loses focus
+        setShowCurrents(false);
+        setShowSalinity(false);
+        setShowWaves(false);
+        setOceanGridData(null);
+      };
+    }, [])
+  );
+
+  // Load saved map settings on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(MAP_SETTINGS_KEY);
+        if (saved) {
+          const settings = JSON.parse(saved);
+          if (settings.mapLayer) setMapLayer(settings.mapLayer);
+          if (typeof settings.showSpots === "boolean") setShowSpots(settings.showSpots);
+          if (typeof settings.showFredningsbaelter === "boolean") setShowFredningsbaelter(settings.showFredningsbaelter);
+          if (typeof settings.showDmiStations === "boolean") setShowDmiStations(settings.showDmiStations);
+        }
+      } catch (e) {
+        // Ignore errors loading settings
+      } finally {
+        setSettingsLoaded(true);
+      }
+    })();
+  }, []);
+
+  // Save map settings when they change
+  useEffect(() => {
+    if (!settingsLoaded) return; // Don't save until initial load is complete
+
+    (async () => {
+      try {
+        await AsyncStorage.setItem(
+          MAP_SETTINGS_KEY,
+          JSON.stringify({
+            mapLayer,
+            showSpots,
+            showFredningsbaelter,
+            showDmiStations,
+          })
+        );
+      } catch (e) {
+        // Ignore errors saving settings
+      }
+    })();
+  }, [mapLayer, showSpots, showFredningsbaelter, showDmiStations, settingsLoaded]);
 
   // hent gemte spots ved mount
   useEffect(() => {
@@ -345,6 +470,42 @@ export default function SpotWeatherScreen() {
       }
     })();
   }, []);
+
+  // hent fredningsbælter ved mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchFredningsbaelter();
+        setFredningsbaelter(data);
+      } catch (e) {
+        // Ignorer fejl ved load af fredningsbælter
+      }
+    })();
+  }, []);
+
+  // Fetch ocean grid data when overlay is enabled
+  useEffect(() => {
+    if (!showCurrents && !showSalinity && !showWaves) {
+      setOceanGridData(null);
+      return;
+    }
+
+    const selectedTime = forecastTimeOptions[forecastHourIndex]?.value;
+    const opts = {
+      includeCurrents: showCurrents,
+      includeSalinity: showSalinity,
+      includeWaves: showWaves,
+      datetime: selectedTime,
+    };
+
+    setOceanGridLoading(true);
+    fetchOceanGridData(currentMapBounds, opts).then(data => {
+      setOceanGridData(data);
+      setOceanGridLoading(false);
+    }).catch(() => {
+      setOceanGridLoading(false);
+    });
+  }, [showCurrents, showSalinity, showWaves, currentMapBounds, forecastHourIndex]);
 
   // find spot med flest fisk -> stjerne på kortet
   useEffect(() => {
@@ -370,6 +531,16 @@ export default function SpotWeatherScreen() {
       }
     })();
   }, [spots]);
+
+  // Track slow loading for free location (> 5 sekunder)
+  useEffect(() => {
+    if (!loading) {
+      setLoadingSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setLoadingSlow(true), 5000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   // hent vejr når pos + showForecast er sat (fri lokation -> Vejr & Hav)
   useEffect(() => {
@@ -469,6 +640,16 @@ export default function SpotWeatherScreen() {
       }
     })();
   }, [selectedSpot]);
+
+  // Track slow loading for spot (> 5 sekunder)
+  useEffect(() => {
+    if (!spotLoading) {
+      setSpotLoadingSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setSpotLoadingSlow(true), 5000);
+    return () => clearTimeout(timer);
+  }, [spotLoading]);
 
   const handleDeleteSpot = async (spot: SpotRow) => {
     setSpotDeleteLoading(true);
@@ -661,6 +842,14 @@ export default function SpotWeatherScreen() {
           style={[StyleSheet.absoluteFillObject, { backgroundColor: mapBackground }]}
           initialRegion={DEFAULT_REGION}
           onPress={onMapPress}
+          onRegionChangeComplete={(region) => {
+            setCurrentMapBounds({
+              minLat: region.latitude - region.latitudeDelta / 2,
+              maxLat: region.latitude + region.latitudeDelta / 2,
+              minLng: region.longitude - region.longitudeDelta / 2,
+              maxLng: region.longitude + region.longitudeDelta / 2,
+            });
+          }}
           userInterfaceStyle={currentUiStyle}
           mapType={mapType}
           provider={mapProvider}
@@ -683,6 +872,73 @@ export default function SpotWeatherScreen() {
             />
           )}
 
+          {/* Salinity polygons */}
+          {showSalinity && oceanGridData?.salinity?.map((cell, i) => (
+            <Polygon
+              key={`sal-${forecastHourIndex}-${i}`}
+              coordinates={cellToCoords(cell)}
+              fillColor={getSalinityColor(cell.salinity)}
+              strokeColor="transparent"
+              strokeWidth={0}
+              tappable={false}
+              zIndex={0}
+            />
+          ))}
+
+          {/* Current arrows */}
+          {showCurrents && oceanGridData?.currents?.map((cell, i) => (
+            <CurrentArrowMarker key={`cur-${forecastHourIndex}-${i}`} cell={cell} />
+          ))}
+
+          {/* Wave height polygons */}
+          {showWaves && oceanGridData?.waves?.map((cell, i) => (
+            <Polygon
+              key={`wave-${forecastHourIndex}-${i}`}
+              coordinates={cellToCoords(cell)}
+              fillColor={getWaveHeightColor(cell.height)}
+              strokeColor="transparent"
+              strokeWidth={0}
+              tappable={false}
+              zIndex={0}
+            />
+          ))}
+
+          {/* Fredningsbælter polygoner */}
+          {showFredningsbaelter && fredningsbaelter?.features?.map((feature) => {
+            const periodeType = getPeriodeType(feature);
+            const strokeColor = getPeriodeColor(periodeType);
+            const fillColor = getPeriodeFillColor(periodeType);
+            const coords = (feature.geometry.type === "Polygon"
+              ? feature.geometry.coordinates[0]
+              : feature.geometry.coordinates[0][0]) as number[][]; // MultiPolygon
+
+            return (
+              <Polygon
+                key={`zone-${feature.id}`}
+                coordinates={coords.map((c) => ({
+                  latitude: c[1],
+                  longitude: c[0],
+                }))}
+                strokeColor={strokeColor}
+                fillColor={fillColor}
+                strokeWidth={2}
+                tappable={true}
+                zIndex={1}
+                onPress={() => setSelectedZone(feature)}
+              />
+            );
+          })}
+
+          {/* DMI OceanObs stationer */}
+          {showDmiStations &&
+            OCEAN_STATIONS_DK.map((station) => (
+              <DmiStationMarker
+                key={`dmi-${station.id}`}
+                station={station}
+                t={t}
+              />
+            ))}
+
           {/* Gemte spots som røde cirkel-markører med label-boble.
               Tryk på spot -> åbner spot-detail UI. */}
           {showSpots &&
@@ -690,10 +946,9 @@ export default function SpotWeatherScreen() {
               const isBestSpot = bestSpotId != null && bestSpotId === spot.id;
               return (
             <SpotMarker
-              key={`${spot.id}-${isBestSpot ? "best" : "norm"}`}
+              key={`spot-${spot.id}`}
               spot={spot}
               isBestSpot={isBestSpot}
-              useNativeMarker={hasGoogleMapsKey}
               t={t}
               onPress={() => {
                 setShowLocationActions(false);
@@ -724,6 +979,84 @@ export default function SpotWeatherScreen() {
             </Marker>
           )}
         </MapView>
+
+        {/* Ocean overlay scale bars */}
+        {(showCurrents || showSalinity || showWaves) && (
+          <View style={styles.scaleBarsContainer}>
+            {showCurrents && (
+              <View style={styles.scaleBarItem}>
+                <Text style={styles.scaleTitle}>Strøm</Text>
+                <View style={styles.scaleGradient}>
+                  {[...CURRENT_COLORS].reverse().map((color, i) => (
+                    <View key={i} style={[styles.scaleSegment, { backgroundColor: color }]} />
+                  ))}
+                </View>
+                <View style={styles.scaleLabels}>
+                  <Text style={styles.scaleLabelText}>5+</Text>
+                  <Text style={styles.scaleLabelText}>0</Text>
+                </View>
+                <Text style={styles.scaleUnit}>km/t</Text>
+              </View>
+            )}
+            {showSalinity && (
+              <View style={styles.scaleBarItem}>
+                <Text style={styles.scaleTitle}>Salt</Text>
+                <View style={styles.scaleGradient}>
+                  {[...SALINITY_COLORS].reverse().map((color, i) => (
+                    <View key={i} style={[styles.scaleSegment, { backgroundColor: color.replace("0.75", "1") }]} />
+                  ))}
+                </View>
+                <View style={styles.scaleLabels}>
+                  <Text style={styles.scaleLabelText}>35</Text>
+                  <Text style={styles.scaleLabelText}>5</Text>
+                </View>
+                <Text style={styles.scaleUnit}>PSU</Text>
+              </View>
+            )}
+            {showWaves && (
+              <View style={styles.scaleBarItem}>
+                <Text style={styles.scaleTitle}>Bølge</Text>
+                <View style={styles.scaleGradient}>
+                  {[...WAVE_COLORS].reverse().map((color, i) => (
+                    <View key={i} style={[styles.scaleSegment, { backgroundColor: color.replace("0.7", "1") }]} />
+                  ))}
+                </View>
+                <View style={styles.scaleLabels}>
+                  <Text style={styles.scaleLabelText}>3+</Text>
+                  <Text style={styles.scaleLabelText}>0</Text>
+                </View>
+                <Text style={styles.scaleUnit}>m</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Forecast time slider */}
+        {(showCurrents || showSalinity || showWaves) && (
+          <View style={styles.forecastSliderWrapper}>
+            <Text style={styles.forecastSliderLabel}>
+              {forecastTimeOptions[forecastHourIndex]?.label || ""}
+            </Text>
+            <Slider
+              style={styles.forecastSlider}
+              minimumValue={0}
+              maximumValue={48}
+              step={1}
+              value={forecastHourIndex}
+              onSlidingComplete={(val) => setForecastHourIndex(Math.round(val))}
+              minimumTrackTintColor={showCurrents ? "#22C55E" : showSalinity ? "#8B5CF6" : "#06B6D4"}
+              maximumTrackTintColor="rgba(255,255,255,0.3)"
+              thumbTintColor="#fff"
+            />
+          </View>
+        )}
+
+        {/* Loading indicator for ocean data */}
+        {oceanGridLoading && (
+          <View style={styles.oceanLoadingIndicator}>
+            <ActivityIndicator color="#fff" size="small" />
+          </View>
+        )}
 
         {mapLayer === "orto" && (
           <View
@@ -1083,6 +1416,138 @@ export default function SpotWeatherScreen() {
                   style={[
                     styles.toggleThumb,
                     showSpots && styles.toggleThumbActive,
+                  ]}
+                />
+              </Pressable>
+            </View>
+
+            {/* Ocean overlay toggles */}
+            <View style={styles.popupToggleRow}>
+              <View style={styles.popupToggleLeft}>
+                <Ionicons name="navigate" size={18} color={showCurrents ? "#22C55E" : THEME.textSec} />
+                <Text style={styles.popupToggleLabel}>{language === "da" ? "Havstrøm" : "Ocean current"}</Text>
+              </View>
+              <Pressable
+                style={[
+                  styles.toggleTrack,
+                  showCurrents && styles.toggleTrackActive,
+                ]}
+                onPress={() => {
+                  const newVal = !showCurrents;
+                  if (newVal) {
+                    setShowSalinity(false);
+                    setShowWaves(false);
+                    clearGridCache();
+                  }
+                  setShowCurrents(newVal);
+                }}
+              >
+                <View
+                  style={[
+                    styles.toggleThumb,
+                    showCurrents && styles.toggleThumbActive,
+                  ]}
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.popupToggleRow}>
+              <View style={styles.popupToggleLeft}>
+                <Ionicons name="flask" size={18} color={showSalinity ? "#8B5CF6" : THEME.textSec} />
+                <Text style={styles.popupToggleLabel}>{language === "da" ? "Saltindhold" : "Salinity"}</Text>
+              </View>
+              <Pressable
+                style={[
+                  styles.toggleTrack,
+                  showSalinity && styles.toggleTrackActive,
+                ]}
+                onPress={() => {
+                  const newVal = !showSalinity;
+                  if (newVal) {
+                    setShowCurrents(false);
+                    setShowWaves(false);
+                    clearGridCache();
+                  }
+                  setShowSalinity(newVal);
+                }}
+              >
+                <View
+                  style={[
+                    styles.toggleThumb,
+                    showSalinity && styles.toggleThumbActive,
+                  ]}
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.popupToggleRow}>
+              <View style={styles.popupToggleLeft}>
+                <Ionicons name="water" size={18} color={showWaves ? "#06B6D4" : THEME.textSec} />
+                <Text style={styles.popupToggleLabel}>{language === "da" ? "Bølgehøjde" : "Wave height"}</Text>
+              </View>
+              <Pressable
+                style={[
+                  styles.toggleTrack,
+                  showWaves && styles.toggleTrackActive,
+                ]}
+                onPress={() => {
+                  const newVal = !showWaves;
+                  if (newVal) {
+                    setShowCurrents(false);
+                    setShowSalinity(false);
+                    clearGridCache();
+                  }
+                  setShowWaves(newVal);
+                }}
+              >
+                <View
+                  style={[
+                    styles.toggleThumb,
+                    showWaves && styles.toggleThumbActive,
+                  ]}
+                />
+              </Pressable>
+            </View>
+
+            {/* Fredningsbælter toggle */}
+            <View style={styles.popupToggleRow}>
+              <View style={styles.popupToggleLeft}>
+                <Ionicons name="warning" size={18} color={showFredningsbaelter ? "#EF4444" : THEME.textSec} />
+                <Text style={styles.popupToggleLabel}>{language === "da" ? "Fredningsbælter" : "Protection zones"}</Text>
+              </View>
+              <Pressable
+                style={[
+                  styles.toggleTrack,
+                  showFredningsbaelter && styles.toggleTrackActive,
+                ]}
+                onPress={() => setShowFredningsbaelter((v) => !v)}
+              >
+                <View
+                  style={[
+                    styles.toggleThumb,
+                    showFredningsbaelter && styles.toggleThumbActive,
+                  ]}
+                />
+              </Pressable>
+            </View>
+
+            {/* DMI Stationer toggle */}
+            <View style={styles.popupToggleRow}>
+              <View style={styles.popupToggleLeft}>
+                <Ionicons name="analytics" size={18} color={showDmiStations ? "#3B82F6" : THEME.textSec} />
+                <Text style={styles.popupToggleLabel}>{language === "da" ? "DMI Stationer" : "DMI Stations"}</Text>
+              </View>
+              <Pressable
+                style={[
+                  styles.toggleTrack,
+                  showDmiStations && styles.toggleTrackActive,
+                ]}
+                onPress={() => setShowDmiStations((v) => !v)}
+              >
+                <View
+                  style={[
+                    styles.toggleThumb,
+                    showDmiStations && styles.toggleThumbActive,
                   ]}
                 />
               </Pressable>
@@ -2452,6 +2917,83 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     marginTop: 4,
+  },
+
+  // Ocean overlay styles
+  scaleBarsContainer: {
+    position: "absolute",
+    left: 12,
+    top: 100,
+    flexDirection: "column",
+    gap: 8,
+  },
+  scaleBarItem: {
+    backgroundColor: "rgba(0,0,0,0.75)",
+    borderRadius: 8,
+    padding: 8,
+    alignItems: "center",
+    minWidth: 50,
+  },
+  scaleTitle: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  scaleGradient: {
+    width: 16,
+    height: 80,
+    borderRadius: 4,
+    overflow: "hidden",
+    flexDirection: "column",
+  },
+  scaleSegment: {
+    flex: 1,
+  },
+  scaleLabels: {
+    flexDirection: "column",
+    justifyContent: "space-between",
+    height: 80,
+    position: "absolute",
+    right: -22,
+    top: 22,
+  },
+  scaleLabelText: {
+    color: "#fff",
+    fontSize: 9,
+  },
+  scaleUnit: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 9,
+    marginTop: 4,
+  },
+  forecastSliderWrapper: {
+    position: "absolute",
+    bottom: 120,
+    left: 20,
+    right: 20,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    borderRadius: 12,
+    padding: 12,
+  },
+  forecastSliderLabel: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  forecastSlider: {
+    width: "100%",
+    height: 30,
+  },
+  oceanLoadingIndicator: {
+    position: "absolute",
+    top: 60,
+    right: 12,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: 20,
+    padding: 8,
   },
 });
 

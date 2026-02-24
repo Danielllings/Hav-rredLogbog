@@ -1,10 +1,11 @@
 import React from "react";
 import { View, Text, Pressable, Platform } from "react-native";
-import { Marker, Callout } from "react-native-maps";
+import { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
-import { type SpotRow } from "../../lib/spots";
+import { type OceanStation } from "../../lib/dmiOcean";
 
-const BEST_SPOT_COLOR = "#F4D03F";
+const DMI_BLUE = "#00AAFF";
+const DMI_BLUE_DARK = "#0077CC";
 
 const THEME = {
   text: "#FFFFFF",
@@ -12,50 +13,41 @@ const THEME = {
 
 type TranslateFn = (key: any) => string;
 
-interface SpotMarkerProps {
-  spot: SpotRow;
-  isBestSpot: boolean;
-  onPress: () => void;
-  onLongPress?: () => void;
-  t: TranslateFn;
+interface DmiStationMarkerProps {
+  station: OceanStation;
+  onPress?: () => void;
+  t?: TranslateFn;
 }
 
-export function SpotMarker({
-  spot,
-  isBestSpot,
-  onPress,
-  onLongPress,
-  t,
-}: SpotMarkerProps) {
+export function DmiStationMarker({ station, onPress, t }: DmiStationMarkerProps) {
   const isAndroid = Platform.OS === "android";
-  const defaultPin = "#FF3B30";
+  const tempLabel = t ? t("waterTemp") : "Temp";
+  const levelLabel = t ? t("waterLevel") : "Water level";
 
   // Android: Native marker med pinColor
   if (isAndroid) {
     return (
       <Marker
-        coordinate={{ latitude: spot.lat, longitude: spot.lng }}
-        pinColor={isBestSpot ? BEST_SPOT_COLOR : defaultPin}
-        title={spot.name}
-        description={isBestSpot ? `⭐ ${t("bestSpot")}` : t("spot")}
+        coordinate={{ latitude: station.lat, longitude: station.lon }}
+        pinColor={DMI_BLUE}
+        title={station.name}
+        description={`${station.hasTemp ? tempLabel : ""}${station.hasTemp && station.hasLevel ? " + " : ""}${station.hasLevel ? levelLabel : ""}`}
         onPress={onPress}
-        onCalloutPress={onLongPress}
         tracksViewChanges={false}
-        zIndex={isBestSpot ? 2 : 1}
+        zIndex={0}
       />
     );
   }
 
-  // iOS: Custom marker med label + pin
-  // VIGTIGT: Fast højde + centerOffset i stedet for anchor for at undgå offset ved zoom
+  // iOS: Custom marker med label + pin (samme stil som SpotMarker)
   return (
     <Marker
-      coordinate={{ latitude: spot.lat, longitude: spot.lng }}
+      coordinate={{ latitude: station.lat, longitude: station.lon }}
       centerOffset={{ x: 0, y: -40 }}
       tracksViewChanges={false}
       onPress={onPress}
-      identifier={String(spot.id)}
-      zIndex={isBestSpot ? 2 : 1}
+      identifier={`dmi-${station.id}`}
+      zIndex={0}
     >
       <Pressable
         style={({ pressed }) => [
@@ -69,8 +61,6 @@ export function SpotMarker({
         ]}
         collapsable={false}
         onPress={onPress}
-        onLongPress={onLongPress}
-        delayLongPress={600}
         hitSlop={12}
       >
         <View
@@ -87,14 +77,12 @@ export function SpotMarker({
             marginBottom: 6,
           }}
         >
-          {isBestSpot && (
-            <Ionicons
-              name="star"
-              size={12}
-              color={BEST_SPOT_COLOR}
-              style={{ marginRight: 4 }}
-            />
-          )}
+          <Ionicons
+            name="water"
+            size={12}
+            color={DMI_BLUE}
+            style={{ marginRight: 4 }}
+          />
           <Text
             style={{
               color: THEME.text,
@@ -103,7 +91,7 @@ export function SpotMarker({
             }}
             numberOfLines={1}
           >
-            {spot.name}
+            {station.name}
           </Text>
         </View>
 
@@ -114,14 +102,14 @@ export function SpotMarker({
               width: 16,
               height: 16,
               borderRadius: 8,
-              backgroundColor: isBestSpot ? "#c29d00" : "#b71c1c",
+              backgroundColor: DMI_BLUE_DARK,
               top: 8,
             }}
           />
           <Ionicons
             name="location-sharp"
             size={34}
-            color={isBestSpot ? BEST_SPOT_COLOR : "#e53935"}
+            color={DMI_BLUE}
             style={{ textShadowColor: "#000", textShadowRadius: 2 }}
           />
         </View>

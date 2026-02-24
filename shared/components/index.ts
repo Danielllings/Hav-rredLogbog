@@ -3,3 +3,5 @@ export { TripGraph, type GraphPoint } from "./TripGraph";
 export { TripCard } from "./TripCard";
 export { SpotMarker } from "./SpotMarker";
 export { ScrollableGraph } from "./ScrollableGraph";
+export { CurrentArrowMarker } from "./CurrentArrowMarker";
+export { OceanLegend } from "./OceanLegend";

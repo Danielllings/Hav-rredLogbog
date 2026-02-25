@@ -13,28 +13,17 @@ import {
   StatusBar,
   ActivityIndicator,
 } from "react-native";
-import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
-import * as Location from "expo-location";
-import MapView, {
-  Marker,
-  MapPressEvent,
-  UrlTile,
-  PROVIDER_DEFAULT,
-  PROVIDER_GOOGLE,
-} from "react-native-maps";
 import { addCatch } from "../../lib/catches";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLanguage } from "../../lib/i18n";
+import { useTheme } from "../../lib/theme";
 
 // HENT TRACKED TURE (til vejrdata-link)
 import { getTrackedTrips, TrackedTrip } from "../../lib/trips";
-
-// Ortofoto fra Dataforsyningen
-import { ORTO_FORAAR_URL } from "../../lib/maps";
 
 // Spots fra spot-weather
 import { listSpots, type Spot } from "../../lib/spots";
@@ -60,154 +49,6 @@ const THEME = {
   ghost: "#333333",
 };
 
-// --- MØRKT KORT STIL ---
-// --- Kort stilarter (lys på Android for bedre synlighed) ---
-const LIGHT_MAP_STYLE = [
-  {
-    elementType: "geometry",
-    stylers: [{ color: "#f5f5f5" }],
-  },
-  {
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#616161" }],
-  },
-  {
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#f5f5f5" }],
-  },
-  {
-    featureType: "poi",
-    elementType: "geometry",
-    stylers: [{ color: "#eeeeee" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#e5e5e5" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry",
-    stylers: [{ color: "#ffffff" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#e0e0e0" }],
-  },
-  {
-    featureType: "road.arterial",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#757575" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry",
-    stylers: [{ color: "#dadada" }],
-  },
-  {
-    featureType: "water",
-    elementType: "geometry",
-    stylers: [{ color: "#c9d7f2" }],
-  },
-];
-
-// --- Mørkt kort stil ---
-const DARK_MAP_STYLE = [
-  {
-    elementType: "geometry",
-    stylers: [{ color: "#242f3e" }],
-  },
-  {
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#746855" }],
-  },
-  {
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#242f3e" }],
-  },
-  {
-    featureType: "administrative.locality",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#d59563" }],
-  },
-  {
-    featureType: "poi",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#d59563" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#263c3f" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#6b9a76" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry",
-    stylers: [{ color: "#38414e" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#212a37" }],
-  },
-  {
-    featureType: "road",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#9ca5b3" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry",
-    stylers: [{ color: "#746855" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#1f2835" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#f3d19c" }],
-  },
-  {
-    featureType: "water",
-    elementType: "geometry",
-    stylers: [{ color: "#17263c" }],
-  },
-  {
-    featureType: "water",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#515c6d" }],
-  },
-  {
-    featureType: "water",
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#17263c" }],
-  },
-];
-
-const MAP_STYLE = LIGHT_MAP_STYLE;
-const MAP_UI_STYLE = "light";
-const HAS_GOOGLE_MAPS_KEY =
-  Platform.OS !== "android"
-    ? true
-    : Boolean((Constants as any)?.expoConfig?.extra?.mapsApiKey);
-const MAP_PROVIDER =
-  Platform.OS === "android"
-    ? HAS_GOOGLE_MAPS_KEY
-      ? PROVIDER_GOOGLE
-      : PROVIDER_DEFAULT
-    : undefined;
-const MAP_TYPE =
-  Platform.OS === "android" && !HAS_GOOGLE_MAPS_KEY ? "none" : "standard";
-
 function isoDay(d: Date) {
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
     .toISOString()
@@ -228,6 +69,7 @@ function fmtDateTime(iso: string) {
 export default function NewCatch() {
   const router = useRouter();
   const { t } = useLanguage();
+  const { theme } = useTheme();
 
   // form state
   const [photo, setPhoto] = useState<string | undefined>();
@@ -239,10 +81,6 @@ export default function NewCatch() {
   const [pos, setPos] = useState<LatLng | null>(null);
   const [timeOfDay, setTimeOfDay] = useState<string | undefined>();
   const [showPicker, setShowPicker] = useState(false);
-
-  // søgefelt til kortet
-  const [searchText, setSearchText] = useState("");
-  const [searchLoading, setSearchLoading] = useState(false);
 
   // tracked ture / vejrdata-link
   const [trackedTrips, setTrackedTrips] = useState<TrackedTrip[]>([]);
@@ -299,8 +137,6 @@ export default function NewCatch() {
     setPos(null);
     setTimeOfDay(undefined);
     setShowPicker(false);
-    setSearchText("");
-    setSearchLoading(false);
     setSelectedTripId(null);
     setSelectedTripLabel(null);
     setSpotSearch("");
@@ -335,44 +171,6 @@ export default function NewCatch() {
     });
     if (!res.canceled && res.assets?.length) {
       setPhoto(res.assets[0].uri);
-    }
-  }
-
-  async function useCurrentLocation() {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(t("accessDenied"), t("appNeedsLocationAccess"));
-      return;
-    }
-    const loc = await Location.getCurrentPositionAsync({});
-    setPos({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-  }
-
-  function onMapPress(e: MapPressEvent) {
-    setPos(e.nativeEvent.coordinate);
-  }
-
-  async function searchOnMap() {
-    const q = searchText.trim();
-    if (!q) return;
-
-    try {
-      setSearchLoading(true);
-      const results = await Location.geocodeAsync(q);
-      if (!results || results.length === 0) {
-        Alert.alert(
-          t("nothingFound"),
-          t("couldNotFindLocation")
-        );
-        return;
-      }
-      const r = results[0];
-      const newPos = { latitude: r.latitude, longitude: r.longitude };
-      setPos(newPos);
-    } catch (e: any) {
-      Alert.alert(t("error"), e?.message ?? t("couldNotLookupLocation"));
-    } finally {
-      setSearchLoading(false);
     }
   }
 
@@ -650,7 +448,7 @@ export default function NewCatch() {
           ) : (
             <Pressable style={styles.heroEmpty} onPress={pick}>
               <View style={styles.heroIconCircle}>
-                <Ionicons name="camera" size={32} color={THEME.calendarAccent} />
+                <Ionicons name="camera" size={32} color={theme.primary} />
               </View>
               <Text style={styles.heroEmptyTitle}>{t("addPhoto")}</Text>
               <Text style={styles.heroEmptyText}>
@@ -757,107 +555,55 @@ export default function NewCatch() {
             placeholder="fx Sandeel, Silling …"
           />
 
-          {/* LOKATION VIA SPOTS */}
-          <Text style={styles.sectionLabel}>{t("location")}</Text>
-          <Pressable
-            style={styles.dateInput}
-            onPress={() => setSpotModalVisible(true)}
-          >
-            <Ionicons name="location" size={18} color={THEME.textSec} />
-            <Text style={styles.dateText}>
-              {locationDesc ? locationDesc : t("addLocation")}
-            </Text>
-          </Pressable>
-          <Text
-            style={{
-              fontSize: 12,
-              color: THEME.textSec,
-              marginTop: 4,
-              marginBottom: 8,
-            }}
-          >
-            {t("locationFromSpotHint")}
-          </Text>
         </View>
 
-        {/* KORT 2: FANGSTSTED */}
+        {/* LOKATION */}
         <View style={styles.card}>
-          <Text style={styles.title}>{t("catchLocation")}</Text>
-
-          <View style={styles.locationBtnRow}>
-            <Pressable onPress={useCurrentLocation} style={styles.locationBtn}>
-              <Ionicons name="locate" size={16} color={THEME.text} />
-              <Text style={styles.locationBtnText}>{t("myPosition")}</Text>
-            </Pressable>
-            {pos && (
-              <Pressable onPress={() => setPos(null)} style={styles.locationBtn}>
-                <Ionicons name="close" size={16} color={THEME.textSec} />
-                <Text style={styles.locationBtnText}>{t("clear")}</Text>
-              </Pressable>
-            )}
-          </View>
-
-          {/* SØG PÅ KORTET */}
-          <View style={styles.mapSearchRow}>
-            <Ionicons name="search" size={18} color={THEME.textSec} />
-            <TextInput
-              value={searchText}
-              onChangeText={setSearchText}
-              placeholder={t("searchPlaceOrAddress")}
-              placeholderTextColor={THEME.textSec}
-              style={styles.mapSearchInput}
-              returnKeyType="search"
-              onSubmitEditing={searchOnMap}
-            />
-            <Pressable
-              onPress={searchOnMap}
-              disabled={searchLoading}
-              style={styles.mapSearchBtn}
-            >
-              <Text style={styles.mapSearchBtnText}>
-                {searchLoading ? "..." : t("search")}
+          <View style={styles.locationHeader}>
+            <View style={styles.locationIconCircle}>
+              <Ionicons name="location" size={22} color={THEME.calendarAccent} />
+            </View>
+            <View>
+              <Text style={styles.title}>{t("location")}</Text>
+              <Text style={styles.locationSubtitle}>
+                {t("selectFromYourSpots")}
               </Text>
-            </Pressable>
+            </View>
           </View>
 
-          <View style={styles.mapContainer}>
-            <MapView
-              style={{ flex: 1 }}
-              onPress={(e: MapPressEvent) => onMapPress(e)}
-              initialRegion={{
-                latitude: pos?.latitude ?? 55.6761,
-                longitude: pos?.longitude ?? 12.5683,
-                latitudeDelta: 0.05,
-                longitudeDelta: 0.05,
-              }}
-              region={
-                pos
-                  ? {
-                      latitude: pos.latitude,
-                      longitude: pos.longitude,
-                      latitudeDelta: 0.01,
-                      longitudeDelta: 0.01,
-                    }
-                  : undefined
-              }
-              pitchEnabled
-              rotateEnabled
-              scrollEnabled
-              zoomEnabled
-              customMapStyle={MAP_STYLE}
-              userInterfaceStyle={MAP_UI_STYLE}
-              provider={MAP_PROVIDER}
-              mapType={MAP_TYPE}
+          {/* Valgt spot eller vælg-knap */}
+          {selectedSpotId && locationDesc ? (
+            <View style={styles.selectedSpotCard}>
+              <View style={styles.selectedSpotInfo}>
+                <Ionicons name="location" size={20} color={THEME.calendarAccent} />
+                <Text style={styles.selectedSpotName}>{locationDesc}</Text>
+              </View>
+              <Pressable
+                style={styles.changeSpotBtn}
+                onPress={() => setSpotModalVisible(true)}
+              >
+                <Text style={styles.changeSpotBtnText}>{t("change")}</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              style={styles.selectSpotBtn}
+              onPress={() => setSpotModalVisible(true)}
             >
-              <UrlTile
-                urlTemplate={ORTO_FORAAR_URL}
-                maximumZ={21}
-                tileSize={256}
-              />
+              <Ionicons name="add-circle" size={22} color={THEME.calendarAccent} />
+              <Text style={styles.selectSpotBtnText}>{t("selectSpot")}</Text>
+              <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
+            </Pressable>
+          )}
 
-              {pos && <Marker coordinate={pos} title="Fangststed" />}
-            </MapView>
-          </View>
+          {spots.length === 0 && !spotsLoading && (
+            <View style={styles.noSpotsHint}>
+              <Ionicons name="information-circle" size={18} color={THEME.textSec} />
+              <Text style={styles.noSpotsHintText}>
+                {t("noSpotsYet")}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* KNAPPER */}
@@ -1254,5 +1000,86 @@ const styles = StyleSheet.create({
     color: "#000",
     fontSize: 14,
     fontWeight: "600",
+  },
+
+  // Enhanced location section
+  locationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 16,
+  },
+  locationIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationSubtitle: {
+    color: THEME.textSec,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  selectedSpotCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.3)",
+  },
+  selectedSpotInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  selectedSpotName: {
+    color: THEME.text,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  changeSpotBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: THEME.calendarAccent,
+    borderRadius: 10,
+  },
+  changeSpotBtnText: {
+    color: "#000",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  selectSpotBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: THEME.inputBg,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: THEME.cardBorder,
+  },
+  selectSpotBtnText: {
+    color: THEME.text,
+    fontSize: 15,
+    fontWeight: "600",
+    flex: 1,
+  },
+  noSpotsHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 4,
+  },
+  noSpotsHintText: {
+    color: THEME.textSec,
+    fontSize: 13,
+    flex: 1,
   },
 });

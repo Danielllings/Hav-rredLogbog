@@ -56,6 +56,7 @@ import {
 import { getFishCountForSpot } from "../../lib/trips";
 import {
   fetchFredningsbaelter,
+  findFredningsbaelterAtPoint,
   getPeriodeType,
   getPeriodeColor,
   getPeriodeFillColor,
@@ -74,6 +75,7 @@ import { CurrentVelocityOverlay } from "../../shared/components/CurrentVelocityO
 import { WaveSwellOverlay } from "../../shared/components/WaveSwellOverlay";
 import { SalinityHeatmapOverlay } from "../../shared/components/SalinityHeatmapOverlay";
 import { WaterLevelOverlay } from "../../shared/components/WaterLevelOverlay";
+import { WindOverlay } from "../../shared/components/WindOverlay";
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -439,6 +441,8 @@ export default function SpotWeatherScreen() {
   const [showSalinity, setShowSalinity] = useState(false);
   const [showWaves, setShowWaves] = useState(false);
   const [showWaterLevel, setShowWaterLevel] = useState(false);
+  const [showWind, setShowWind] = useState(false);
+  const [overlayPopupVisible, setOverlayPopupVisible] = useState(false);
 
   // Track current map region for passing to overlays
   const [mapRegion, setMapRegion] = useState<Region>({
@@ -456,10 +460,13 @@ export default function SpotWeatherScreen() {
   useFocusEffect(
     useCallback(() => {
       return () => {
-        // Cleanup when screen loses focus
+        // Cleanup when screen loses focus - reset to normal map view
         setShowCurrents(false);
         setShowSalinity(false);
         setShowWaves(false);
+        setShowWaterLevel(false);
+        setShowWind(false);
+        setOverlayPopupVisible(false);
       };
     }, [])
   );
@@ -767,6 +774,17 @@ export default function SpotWeatherScreen() {
     if (e.nativeEvent?.action === "marker-press") return;
 
     const c = e.nativeEvent.coordinate;
+
+    // Tjek om tappet er inden for et fredningsbælte
+    if (showFredningsbaelter && fredningsbaelter) {
+      const zones = findFredningsbaelterAtPoint(c.latitude, c.longitude, fredningsbaelter);
+      if (zones.length > 0) {
+        // Vis det første matchende fredningsbælte
+        setSelectedZone(zones[0]);
+        return; // Stop her - vis ikke normal map press behavior
+      }
+    }
+
     setPos(c);
     setShowForecast(false);
     setEdrData(null);
@@ -835,7 +853,7 @@ export default function SpotWeatherScreen() {
   const forecastDays = getForecastDays(edrData, t);
 
   // Check if any ocean overlay is active
-  const oceanOverlayActive = showCurrents || showSalinity || showWaves || showWaterLevel;
+  const oceanOverlayActive = showCurrents || showSalinity || showWaves || showWaterLevel || showWind;
   // Always use dark background (CartoDB dark tiles as base)
   const mapBackground = "#0a0a12";
   // Dark styles for both map layers
@@ -916,20 +934,41 @@ export default function SpotWeatherScreen() {
               ? feature.geometry.coordinates[0]
               : feature.geometry.coordinates[0][0]) as number[][]; // MultiPolygon
 
+            // Beregn centroid for markør
+            const sumLat = coords.reduce((acc, c) => acc + c[1], 0);
+            const sumLng = coords.reduce((acc, c) => acc + c[0], 0);
+            const centroid = {
+              latitude: sumLat / coords.length,
+              longitude: sumLng / coords.length,
+            };
+
             return (
-              <Polygon
-                key={`zone-${feature.id}`}
-                coordinates={coords.map((c) => ({
-                  latitude: c[1],
-                  longitude: c[0],
-                }))}
-                strokeColor={strokeColor}
-                fillColor={fillColor}
-                strokeWidth={2}
-                tappable={true}
-                zIndex={1}
-                onPress={() => setSelectedZone(feature)}
-              />
+              <React.Fragment key={`zone-${feature.id}`}>
+                <Polygon
+                  coordinates={coords.map((c) => ({
+                    latitude: c[1],
+                    longitude: c[0],
+                  }))}
+                  strokeColor={strokeColor}
+                  fillColor={fillColor}
+                  strokeWidth={2}
+                  tappable={false}
+                  zIndex={1}
+                />
+                {/* Usynlig tap-markør i midten af zonen */}
+                <Marker
+                  coordinate={centroid}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  onPress={() => setSelectedZone(feature)}
+                  tracksViewChanges={false}
+                >
+                  <View style={{
+                    width: 40,
+                    height: 40,
+                    backgroundColor: "rgba(0,0,0,0.01)",
+                  }} />
+                </Marker>
+              </React.Fragment>
             );
           })}
 
@@ -1029,6 +1068,17 @@ export default function SpotWeatherScreen() {
             />
           </View>
         )}
+        {showWind && (
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+            <WindOverlay
+              visible={true}
+              onClose={() => setShowWind(false)}
+              initialLat={mapRegion.latitude}
+              initialLng={mapRegion.longitude}
+              initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+            />
+          </View>
+        )}
 
         {/* Scale bars and sliders are now built into each animated overlay */}
 
@@ -1063,12 +1113,120 @@ export default function SpotWeatherScreen() {
             <Ionicons name="layers" size={20} color="#000" />
           </Pressable>
 
+          {/* Ocean overlay button */}
+          <Pressable
+            style={[styles.iconBtn, (showWind || showCurrents || showWaves || showSalinity || showWaterLevel) && styles.iconBtnActive]}
+            onPress={() => setOverlayPopupVisible(true)}
+          >
+            <Ionicons name="partly-sunny" size={20} color={(showWind || showCurrents || showWaves || showSalinity || showWaterLevel) ? "#FFF" : "#000"} />
+          </Pressable>
+
           {(pos || selectedSpot) && (
             <Pressable style={styles.iconBtn} onPress={clearSelection}>
               <Ionicons name="close" size={20} color="#000" />
             </Pressable>
           )}
         </View>
+
+        {/* Ocean overlay popup */}
+        {overlayPopupVisible && (
+          <Pressable
+            style={styles.overlayPopupBackdrop}
+            onPress={() => setOverlayPopupVisible(false)}
+          >
+            <View style={styles.overlayPopup}>
+              <Pressable
+                style={[styles.overlayPopupRow, showWind && styles.overlayPopupRowActive]}
+                onPress={() => {
+                  setShowCurrents(false);
+                  setShowSalinity(false);
+                  setShowWaves(false);
+                  setShowWaterLevel(false);
+                  setShowWind(!showWind);
+                  setOverlayPopupVisible(false);
+                }}
+              >
+                <Ionicons name="flag" size={18} color={showWind ? "#000" : "#F59E0B"} />
+                <Text style={[styles.overlayPopupText, showWind && styles.overlayPopupTextActive]}>
+                  {language === "da" ? "Vind" : "Wind"}
+                </Text>
+                {showWind && <Ionicons name="checkmark" size={18} color="#000" />}
+              </Pressable>
+
+              <Pressable
+                style={[styles.overlayPopupRow, showCurrents && styles.overlayPopupRowActive]}
+                onPress={() => {
+                  setShowSalinity(false);
+                  setShowWaves(false);
+                  setShowWaterLevel(false);
+                  setShowWind(false);
+                  setShowCurrents(!showCurrents);
+                  setOverlayPopupVisible(false);
+                }}
+              >
+                <Ionicons name="navigate" size={18} color={showCurrents ? "#000" : "#22C55E"} />
+                <Text style={[styles.overlayPopupText, showCurrents && styles.overlayPopupTextActive]}>
+                  {language === "da" ? "Havstrøm" : "Current"}
+                </Text>
+                {showCurrents && <Ionicons name="checkmark" size={18} color="#000" />}
+              </Pressable>
+
+              <Pressable
+                style={[styles.overlayPopupRow, showWaves && styles.overlayPopupRowActive]}
+                onPress={() => {
+                  setShowCurrents(false);
+                  setShowSalinity(false);
+                  setShowWaterLevel(false);
+                  setShowWind(false);
+                  setShowWaves(!showWaves);
+                  setOverlayPopupVisible(false);
+                }}
+              >
+                <Ionicons name="water" size={18} color={showWaves ? "#000" : "#06B6D4"} />
+                <Text style={[styles.overlayPopupText, showWaves && styles.overlayPopupTextActive]}>
+                  {language === "da" ? "Bølger" : "Waves"}
+                </Text>
+                {showWaves && <Ionicons name="checkmark" size={18} color="#06B6D4" />}
+              </Pressable>
+
+              <Pressable
+                style={[styles.overlayPopupRow, showSalinity && styles.overlayPopupRowActive]}
+                onPress={() => {
+                  setShowCurrents(false);
+                  setShowWaves(false);
+                  setShowWaterLevel(false);
+                  setShowWind(false);
+                  setShowSalinity(!showSalinity);
+                  setOverlayPopupVisible(false);
+                }}
+              >
+                <Ionicons name="flask" size={18} color={showSalinity ? "#000" : "#8B5CF6"} />
+                <Text style={[styles.overlayPopupText, showSalinity && styles.overlayPopupTextActive]}>
+                  {language === "da" ? "Saltindhold" : "Salinity"}
+                </Text>
+                {showSalinity && <Ionicons name="checkmark" size={18} color="#000" />}
+              </Pressable>
+
+              <Pressable
+                style={[styles.overlayPopupRow, showWaterLevel && styles.overlayPopupRowActive]}
+                onPress={() => {
+                  setShowCurrents(false);
+                  setShowSalinity(false);
+                  setShowWaves(false);
+                  setShowWind(false);
+                  setShowWaterLevel(!showWaterLevel);
+                  setOverlayPopupVisible(false);
+                }}
+              >
+                <Ionicons name="trending-up" size={18} color={showWaterLevel ? "#000" : "#3B82F6"} />
+                <Text style={[styles.overlayPopupText, showWaterLevel && styles.overlayPopupTextActive]}>
+                  {language === "da" ? "Vandstand" : "Water level"}
+                </Text>
+                {showWaterLevel && <Ionicons name="checkmark" size={18} color="#000" />}
+              </Pressable>
+            </View>
+          </Pressable>
+        )}
 
         {/* Lille UI når en lokation er valgt på kortet (ikke spot) */}
         {pos && showLocationActions && !selectedSpot && (
@@ -1359,94 +1517,6 @@ export default function SpotWeatherScreen() {
                 {mapLayer === "orto" && (
                   <Ionicons name="checkmark-circle" size={22} color={THEME.graphYellow} />
                 )}
-              </Pressable>
-            </View>
-
-            {/* Ocean overlay section - Windy style */}
-            <Text style={styles.overlaysSectionTitle}>{language === "da" ? "Hav overlays" : "Ocean overlays"}</Text>
-            <View style={styles.overlaysSection}>
-              <Pressable
-                style={[styles.overlayRow, showCurrents && styles.overlayRowActive]}
-                onPress={() => {
-                  if (showCurrents) {
-                    setShowCurrents(false);
-                  } else {
-                    setShowSalinity(false);
-                    setShowWaves(false);
-                    setShowWaterLevel(false);
-                    setShowCurrents(true);
-                  }
-                  setLayerModalVisible(false);
-                }}
-              >
-                <Ionicons name="navigate" size={20} color={showCurrents ? "#22C55E" : THEME.textSec} />
-                <Text style={[styles.overlayRowText, showCurrents && styles.overlayRowTextActive]}>
-                  {language === "da" ? "Havstrøm" : "Ocean current"}
-                </Text>
-                {showCurrents && <Ionicons name="checkmark" size={20} color="#22C55E" />}
-              </Pressable>
-
-              <Pressable
-                style={[styles.overlayRow, showWaves && styles.overlayRowActive]}
-                onPress={() => {
-                  if (showWaves) {
-                    setShowWaves(false);
-                  } else {
-                    setShowCurrents(false);
-                    setShowSalinity(false);
-                    setShowWaterLevel(false);
-                    setShowWaves(true);
-                  }
-                  setLayerModalVisible(false);
-                }}
-              >
-                <Ionicons name="water" size={20} color={showWaves ? "#06B6D4" : THEME.textSec} />
-                <Text style={[styles.overlayRowText, showWaves && styles.overlayRowTextActive]}>
-                  {language === "da" ? "Bølgehøjde" : "Wave height"}
-                </Text>
-                {showWaves && <Ionicons name="checkmark" size={20} color="#06B6D4" />}
-              </Pressable>
-
-              <Pressable
-                style={[styles.overlayRow, showSalinity && styles.overlayRowActive]}
-                onPress={() => {
-                  if (showSalinity) {
-                    setShowSalinity(false);
-                  } else {
-                    setShowCurrents(false);
-                    setShowWaves(false);
-                    setShowWaterLevel(false);
-                    setShowSalinity(true);
-                  }
-                  setLayerModalVisible(false);
-                }}
-              >
-                <Ionicons name="flask" size={20} color={showSalinity ? "#8B5CF6" : THEME.textSec} />
-                <Text style={[styles.overlayRowText, showSalinity && styles.overlayRowTextActive]}>
-                  {language === "da" ? "Saltindhold" : "Salinity"}
-                </Text>
-                {showSalinity && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
-              </Pressable>
-
-              <Pressable
-                style={[styles.overlayRow, showWaterLevel && styles.overlayRowActive]}
-                onPress={() => {
-                  if (showWaterLevel) {
-                    setShowWaterLevel(false);
-                  } else {
-                    setShowCurrents(false);
-                    setShowSalinity(false);
-                    setShowWaves(false);
-                    setShowWaterLevel(true);
-                  }
-                  setLayerModalVisible(false);
-                }}
-              >
-                <Ionicons name="trending-up" size={20} color={showWaterLevel ? "#3B82F6" : THEME.textSec} />
-                <Text style={[styles.overlayRowText, showWaterLevel && styles.overlayRowTextActive]}>
-                  {language === "da" ? "Vandstand" : "Water level"}
-                </Text>
-                {showWaterLevel && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
               </Pressable>
             </View>
 
@@ -2000,6 +2070,144 @@ export default function SpotWeatherScreen() {
         </View>
       </Modal>
 
+      {/* Fredningsbælte details modal */}
+      <Modal
+        transparent
+        visible={selectedZone !== null}
+        animationType="fade"
+        onRequestClose={() => setSelectedZone(null)}
+      >
+        <Pressable
+          style={styles.popupBackdrop}
+          onPress={() => setSelectedZone(null)}
+        >
+          <View
+            style={[styles.popupCard, { maxHeight: "85%" }]}
+            onStartShouldSetResponder={() => true}
+          >
+            {selectedZone && (
+              <>
+                {/* Header med status */}
+                <View style={styles.zoneHeader}>
+                  <View style={styles.zoneHeaderLeft}>
+                    <View style={[styles.zoneHeaderIcon, { backgroundColor: getPeriodeColor(getPeriodeType(selectedZone)) }]}>
+                      <Ionicons name="shield" size={18} color="#FFF" />
+                    </View>
+                    <View style={styles.zoneHeaderText}>
+                      <Text style={styles.zoneHeaderTitle} numberOfLines={1}>
+                        {selectedZone.properties.NAVN || "Fredningsbælte"}
+                      </Text>
+                      <View style={styles.zoneHeaderStatus}>
+                        <View style={[
+                          styles.zoneStatusDot,
+                          { backgroundColor: isFredningActive(selectedZone) ? "#EF4444" : "#22C55E" }
+                        ]} />
+                        <Text style={[
+                          styles.zoneHeaderStatusText,
+                          { color: isFredningActive(selectedZone) ? "#EF4444" : "#22C55E" }
+                        ]}>
+                          {isFredningActive(selectedZone)
+                            ? (language === "da" ? "Aktiv" : "Active")
+                            : (language === "da" ? "Inaktiv" : "Inactive")}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <Pressable style={styles.popupCloseBtn} onPress={() => setSelectedZone(null)}>
+                    <Ionicons name="close" size={20} color={THEME.textSec} />
+                  </Pressable>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 12 }}>
+                  {/* Kompakt info-grid */}
+                  <View style={styles.zoneInfoGrid}>
+                    {/* Periode */}
+                    <View style={styles.zoneInfoItem}>
+                      <Ionicons name="calendar-outline" size={16} color={THEME.textSec} />
+                      <Text style={styles.zoneInfoLabel}>{language === "da" ? "Periode" : "Period"}</Text>
+                      <Text style={styles.zoneInfoValue}>
+                        {selectedZone.properties.FREDNINGSP || getPeriodeLabel(getPeriodeType(selectedZone), language)}
+                      </Text>
+                    </View>
+
+                    {/* Lovgrundlag */}
+                    {selectedZone.properties.LOVGRUNDLA && (
+                      <View style={styles.zoneInfoItem}>
+                        <Ionicons name="document-text-outline" size={16} color={THEME.textSec} />
+                        <Text style={styles.zoneInfoLabel}>{language === "da" ? "Lovgrundlag" : "Legal basis"}</Text>
+                        <Text style={styles.zoneInfoValue} numberOfLines={2}>{selectedZone.properties.LOVGRUNDLA}</Text>
+                      </View>
+                    )}
+
+                    {/* Baglimit */}
+                    {selectedZone.properties.Baglimit !== null && selectedZone.properties.Baglimit !== undefined && (
+                      <View style={styles.zoneInfoItem}>
+                        <Ionicons name="fish-outline" size={16} color={THEME.textSec} />
+                        <Text style={styles.zoneInfoLabel}>{language === "da" ? "Dagskvoter" : "Daily limit"}</Text>
+                        <Text style={styles.zoneInfoValue}>{selectedZone.properties.Baglimit} stk.</Text>
+                      </View>
+                    )}
+
+                    {/* Redskab */}
+                    {selectedZone.properties.Redskab && (
+                      <View style={styles.zoneInfoItem}>
+                        <Ionicons name="construct-outline" size={16} color={THEME.textSec} />
+                        <Text style={styles.zoneInfoLabel}>{language === "da" ? "Redskaber" : "Gear"}</Text>
+                        <Text style={styles.zoneInfoValue} numberOfLines={2}>{selectedZone.properties.Redskab}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Beskrivelse/Bemærkninger */}
+                  {(selectedZone.properties.Beskrivels || selectedZone.properties.BEMARKNING) && (
+                    <View style={styles.zoneDescBox}>
+                      <Text style={styles.zoneDescText}>
+                        {selectedZone.properties.Beskrivels || selectedZone.properties.BEMARKNING}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Links sektion */}
+                  <View style={styles.zoneLinkSection}>
+                    {/* Specifik bekendtgørelse hvis tilgængelig */}
+                    {selectedZone.properties.WWW && (
+                      <Pressable
+                        style={styles.zonePrimaryLink}
+                        onPress={() => ExpoLinking.openURL(selectedZone.properties.WWW!)}
+                      >
+                        <Ionicons name="document-text" size={18} color="#FFF" />
+                        <Text style={styles.zonePrimaryLinkText}>
+                          {language === "da" ? "Se bekendtgørelse" : "View regulation"}
+                        </Text>
+                        <Ionicons name="open-outline" size={16} color="#FFF" />
+                      </Pressable>
+                    )}
+
+                    {/* Generelt link til Fiskeristyrelsen */}
+                    <Pressable
+                      style={styles.zoneSecondaryLink}
+                      onPress={() => ExpoLinking.openURL("https://fiskeristyrelsen.dk/lyst-og-fritidsfiskeri/fredningsbaelter")}
+                    >
+                      <Ionicons name="globe-outline" size={16} color="#3B82F6" />
+                      <Text style={styles.zoneSecondaryLinkText}>
+                        {language === "da" ? "Fiskeristyrelsen.dk" : "Danish Fisheries Agency"}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {/* Vandløbsnummer (lille tekst i bunden) */}
+                  {selectedZone.properties.VANDLOBSNR && (
+                    <Text style={styles.zoneFooterText}>
+                      {language === "da" ? "Vandløbsnr." : "Watercourse no."}: {selectedZone.properties.VANDLOBSNR}
+                    </Text>
+                  )}
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+
     </>
   );
 }
@@ -2041,6 +2249,55 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
+  },
+
+  // Active state for icon buttons
+  iconBtnActive: {
+    backgroundColor: "#3B82F6",
+  },
+
+  // Ocean overlay popup
+  overlayPopupBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 99,
+  },
+  overlayPopup: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 270 : 250,
+    right: 16,
+    backgroundColor: "rgba(30, 30, 30, 0.95)",
+    borderRadius: 16,
+    paddingVertical: 8,
+    minWidth: 160,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 101,
+  },
+  overlayPopupRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  overlayPopupRowActive: {
+    backgroundColor: THEME.graphYellow,
+  },
+  overlayPopupText: {
+    flex: 1,
+    color: THEME.text,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  overlayPopupTextActive: {
+    color: "#000",
   },
 
   // Pin marker
@@ -2962,6 +3219,124 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "500",
+  },
+
+  // Fredningsbælte zone detail styles - kompakt design
+  zoneHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  zoneHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  zoneHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  zoneHeaderText: {
+    flex: 1,
+  },
+  zoneHeaderTitle: {
+    color: THEME.text,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  zoneHeaderStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  zoneHeaderStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  zoneStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  zoneInfoGrid: {
+    backgroundColor: THEME.inputBg,
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: THEME.border,
+  },
+  zoneInfoItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  zoneInfoLabel: {
+    color: THEME.textSec,
+    fontSize: 12,
+    fontWeight: "500",
+    width: 70,
+  },
+  zoneInfoValue: {
+    color: THEME.text,
+    fontSize: 13,
+    fontWeight: "600",
+    flex: 1,
+  },
+  zoneDescBox: {
+    backgroundColor: "rgba(245, 158, 11, 0.08)",
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: THEME.graphYellow,
+  },
+  zoneDescText: {
+    color: THEME.text,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  zoneLinkSection: {
+    marginTop: 16,
+    gap: 10,
+  },
+  zonePrimaryLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#3B82F6",
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  zonePrimaryLinkText: {
+    color: "#FFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  zoneSecondaryLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+  },
+  zoneSecondaryLinkText: {
+    color: "#3B82F6",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  zoneFooterText: {
+    color: THEME.textSec,
+    fontSize: 11,
+    textAlign: "center",
+    marginTop: 16,
+    marginBottom: 8,
   },
 });
 

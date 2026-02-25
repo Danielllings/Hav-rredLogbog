@@ -18,12 +18,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Constants from "expo-constants";
 import MapView, {
   Marker,
-  MapPressEvent,
   PROVIDER_GOOGLE,
   PROVIDER_DEFAULT,
   UrlTile,
 } from "react-native-maps";
-import * as Location from "expo-location";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
@@ -40,6 +38,7 @@ import { uploadCatchImageAsync } from "../../../lib/storage";
 import { ORTO_FORAAR_URL } from "../../../lib/maps";
 import { listSpots, type Spot } from "../../../lib/spots";
 import { useLanguage } from "../../../lib/i18n";
+import { useTheme } from "../../../lib/theme";
 
 type LatLng = { latitude: number; longitude: number };
 type Stat = { avg: number; min: number; max: number };
@@ -243,6 +242,7 @@ export default function CatchDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useLanguage();
+  const { theme } = useTheme();
 
   const [row, setRow] = useState<any | null>(null);
   const [edit, setEdit] = useState(false);
@@ -494,21 +494,6 @@ export default function CatchDetail() {
     router.replace("/catches");
   }
 
-  async function useCurrentLocation() {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      setPermissionMessage(t("appNeedsLocationAccess"));
-      setPermissionModalVisible(true);
-      return;
-    }
-    const loc = await Location.getCurrentPositionAsync({});
-    setPos({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-  }
-
-  function onMapPress(e: MapPressEvent) {
-    if (!edit) return;
-    setPos(e.nativeEvent.coordinate);
-  }
 
   async function pickImage() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -825,7 +810,7 @@ export default function CatchDetail() {
                 </Text>
                 {row.notes && (
                   <View style={styles.spotBadge}>
-                    <Ionicons name="location" size={12} color={THEME.graphYellow} />
+                    <Ionicons name="location" size={12} color={theme.primary} />
                     <Text style={styles.spotBadgeText}>{row.notes}</Text>
                   </View>
                 )}
@@ -849,7 +834,7 @@ export default function CatchDetail() {
               {/* Ekstra info */}
               <View style={styles.detailSection}>
                 <View style={styles.detailItem}>
-                  <Ionicons name="fish-outline" size={16} color={THEME.graphYellow} />
+                  <Ionicons name="fish-outline" size={16} color={theme.primary} />
                   <Text style={styles.detailLabel}>{t("baitFly")}</Text>
                   <Text style={styles.detailValue}>{row.bait || "—"}</Text>
                 </View>
@@ -1128,107 +1113,46 @@ export default function CatchDetail() {
                 placeholder="fx Sandeel …"
               />
 
-              {/* LOKATION VIA SPOTS */}
-              <Text style={styles.sectionLabel}>{t("location")}</Text>
-              <Pressable
-                style={styles.dateInput}
-                onPress={() => setSpotModalVisible(true)}
-              >
-                <Ionicons name="location" size={18} color={THEME.textSec} />
-                <Text style={styles.dateText}>
-                  {notes ? notes : t("addLocation")}
-                </Text>
-              </Pressable>
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: THEME.textSec,
-                  marginTop: 4,
-                  marginBottom: 8,
-                }}
-              >
-                {t("locationFromSpotHint")}
-              </Text>
             </View>
 
+            {/* LOKATION - Enhanced spot selection */}
             <View style={styles.card}>
-              <Text style={styles.title}>{t("locationOnMap")}</Text>
+              <View style={styles.locationHeader}>
+                <View style={styles.locationIconCircle}>
+                  <Ionicons name="location" size={22} color={THEME.calendarAccent} />
+                </View>
+                <View>
+                  <Text style={styles.locationTitle}>{t("location")}</Text>
+                  <Text style={styles.locationSubtitle}>{t("selectFromYourSpots")}</Text>
+                </View>
+              </View>
 
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 8,
-                  marginTop: 8,
-                  marginBottom: 8,
-                }}
-              >
-                <Pressable
-                  onPress={useCurrentLocation}
-                  style={styles.smallBtn}
-                >
-                  <Text
-                    style={{
-                      color: THEME.text,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {t("useMyPosition")}
-                  </Text>
-                </Pressable>
-                {pos && (
+              {notes ? (
+                <View style={styles.selectedSpotCard}>
+                  <View style={styles.selectedSpotInfo}>
+                    <Ionicons name="location" size={20} color={THEME.calendarAccent} />
+                    <Text style={styles.selectedSpotName}>{notes}</Text>
+                  </View>
                   <Pressable
-                    onPress={() => setPos(null)}
-                    style={styles.smallBtn}
+                    style={styles.changeSpotBtn}
+                    onPress={() => setSpotModalVisible(true)}
                   >
-                    <Text
-                      style={{
-                        color: THEME.text,
-                        fontWeight: "600",
-                      }}
-                    >
-                      {t("clear")}
-                    </Text>
+                    <Text style={styles.changeSpotBtnText}>{t("change")}</Text>
                   </Pressable>
-                )}
-              </View>
-
-              <View style={styles.mapContainer}>
-                <MapView
-                  style={{ flex: 1 }}
-                  onPress={(e: MapPressEvent) => onMapPress(e)}
-                  initialRegion={{
-                    latitude: pos?.latitude ?? 55.6761,
-                    longitude: pos?.longitude ?? 12.5683,
-                    latitudeDelta: 0.05,
-                    longitudeDelta: 0.05,
-                  }}
-                  region={
-                    pos
-                      ? {
-                          latitude: pos.latitude,
-                          longitude: pos.longitude,
-                          latitudeDelta: 0.01,
-                          longitudeDelta: 0.01,
-                        }
-                      : undefined
-                  }
-                  pitchEnabled
-                  rotateEnabled
-                scrollEnabled
-                zoomEnabled
-                customMapStyle={MAP_STYLE}
-                userInterfaceStyle={MAP_UI_STYLE}
-                provider={MAP_PROVIDER}
-                mapType={MAP_TYPE}
-              >
-                  <UrlTile
-                    urlTemplate={ORTO_FORAAR_URL}
-                    maximumZ={21}
-                    tileSize={256}
-                  />
-                  {pos && <Marker coordinate={pos} title="Fangststed" />}
-                </MapView>
-              </View>
+                </View>
+              ) : spots.length > 0 ? (
+                <Pressable
+                  style={styles.selectSpotBtn}
+                  onPress={() => setSpotModalVisible(true)}
+                >
+                  <Ionicons name="add-circle-outline" size={22} color={THEME.calendarAccent} />
+                  <Text style={styles.selectSpotBtnText}>{t("selectSpot")}</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.noSpotsContainer}>
+                  <Text style={styles.noSpotsText}>{t("noSpotsYet")}</Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.editActionRow}>
@@ -1275,6 +1199,7 @@ function LabeledInput(props: any) {
 
 // Kompas med pil
 function WindCompass({ directionDeg }: { directionDeg?: number }) {
+  const { theme } = useTheme();
   if (directionDeg === undefined || Number.isNaN(directionDeg)) {
     return (
       <View style={styles.compass}>
@@ -1292,7 +1217,7 @@ function WindCompass({ directionDeg }: { directionDeg?: number }) {
       <Ionicons
         name="arrow-up"
         size={22}
-        color={THEME.graphYellow}
+        color={theme.primary}
         style={{ transform: [{ rotate: `${rot}deg` }] }}
       />
     </View>
@@ -2102,5 +2027,93 @@ const styles = StyleSheet.create({
     flex: 1,
     color: THEME.text,
     fontSize: 15,
+  },
+
+  // Enhanced location section styles
+  locationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  locationIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  locationTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: THEME.text,
+  },
+  locationSubtitle: {
+    fontSize: 12,
+    color: THEME.textSec,
+    marginTop: 2,
+  },
+  selectedSpotCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.2)",
+  },
+  selectedSpotInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  selectedSpotName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: THEME.text,
+    flex: 1,
+  },
+  changeSpotBtn: {
+    backgroundColor: THEME.calendarAccent,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  changeSpotBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#000",
+  },
+  selectSpotBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: THEME.inputBg,
+    borderRadius: 12,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: THEME.cardBorder,
+    borderStyle: "dashed",
+  },
+  selectSpotBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: THEME.calendarAccent,
+  },
+  noSpotsContainer: {
+    backgroundColor: THEME.inputBg,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+  },
+  noSpotsText: {
+    fontSize: 14,
+    color: THEME.textSec,
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

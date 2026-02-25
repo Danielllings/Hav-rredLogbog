@@ -34,9 +34,9 @@ import MapView, {
   PROVIDER_DEFAULT,
   UrlTile,
 } from "react-native-maps";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { saveTrip, listTrips, statsTrips, listYears } from "../../lib/trips";
-import { listSpots, type SpotRow } from "../../lib/spots";
+import { listSpots, getWindType, type SpotRow, type CoastDirection } from "../../lib/spots";
 import { evaluateTripWithDmi, getSpotForecastEdr } from "../../lib/dmi";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -47,6 +47,7 @@ import {
 } from "../../lib/offlineTrips";
 import { isRunningInExpoGo } from "expo";
 import { useLanguage } from "../../lib/i18n";
+import { useTheme } from "../../lib/theme";
 import { THEME } from "../../constants/theme";
 import { MAP_STYLE, MAP_UI_STYLE } from "../../shared/utils/mapStyles";
 import {
@@ -55,12 +56,14 @@ import {
   MIN_WAYPOINT_DISTANCE,
   MAX_WAYPOINT_DISTANCE,
   MAX_WAYPOINT_SPEED_MS,
+  MIN_GPS_ACCURACY,
   type Pt,
 } from "../../shared/utils/geo";
 import { fmtTime, getTripTitleParts, type TranslateFn } from "../../shared/utils/formatters";
 import { StatBox } from "../../shared/components/StatBox";
 import { TripGraph, type GraphPoint } from "../../shared/components/TripGraph";
 import { TripCard } from "../../shared/components/TripCard";
+import { ORTO_FORAAR_URL } from "../../lib/maps";
 
 const { width } = Dimensions.get("window");
 
@@ -127,14 +130,22 @@ if (!trackTaskDefined) {
       const { locations } = (data || {}) as { locations?: any[] };
       if (!locations || !locations.length) return;
 
-      const newPts: Pt[] = locations.map((loc: any) => ({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        t:
-          typeof loc.timestamp === "number" && Number.isFinite(loc.timestamp)
-            ? loc.timestamp
-            : Date.now(),
-      }));
+      // Filtrer punkter med dårlig GPS-nøjagtighed
+      const newPts: Pt[] = locations
+        .filter((loc: any) => {
+          const accuracy = loc.coords?.accuracy;
+          return accuracy == null || accuracy <= MIN_GPS_ACCURACY;
+        })
+        .map((loc: any) => ({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          t:
+            typeof loc.timestamp === "number" && Number.isFinite(loc.timestamp)
+              ? loc.timestamp
+              : Date.now(),
+        }));
+
+      if (!newPts.length) return;
 
       try {
         const raw = (await AsyncStorage.getItem(TRACK_BUFFER_KEY)) ?? "[]";
@@ -394,9 +405,19 @@ function movementLabel(distanceM?: number | null, durationSec?: number | null, t
 
 // VIGTIG DEL: nu bruger vi fangst-timestamps fra fish_events_json
 // i kombination med vejr-evaluation pr. tur
-function buildWeatherSummary(allTrips: any[], t?: TranslateFn): string | null {
+function buildWeatherSummary(allTrips: any[], t?: TranslateFn, spots?: any[]): string | null {
   const tripsWithFish = allTrips.filter((t) => (t.fish_count ?? 0) > 0);
   if (!tripsWithFish.length) return null;
+
+  // Byg et map fra spot_id til coastDirection for hurtig lookup
+  const spotCoastMap = new Map<string, CoastDirection>();
+  if (spots) {
+    for (const spot of spots) {
+      if (spot.id && spot.coastDirection) {
+        spotCoastMap.set(String(spot.id), spot.coastDirection);
+      }
+    }
+  }
 
   const tideStats: Record<string, SimpleBucket> = {};
   const seasonStats: Record<string, SimpleBucket> = {};
@@ -492,8 +513,6 @@ function buildWeatherSummary(allTrips: any[], t?: TranslateFn): string | null {
     const airT = evaluation?.airTempC?.avg ?? null;
     const waterT = evaluation?.waterTempC?.avg ?? null;
     const windMs = evaluation?.windMS?.avg ?? null;
-    const cwRaw: string | null = evaluation?.coastWind?.category ?? null;
-    const cw = coastWindLabel(cwRaw);
 
     // Prøv vindretning i grader (flere mulige felter)
     const windDirDeg: number | null =
@@ -502,6 +521,27 @@ function buildWeatherSummary(allTrips: any[], t?: TranslateFn): string | null {
         evaluation?.windFromDirDeg?.avg ??
         evaluation?.windFromDir?.avg ??
         null) ?? null;
+
+    // Hent spotets kystretning - enten fra trip eller via spot lookup
+    const tripSpotId = trip.spot_id ?? trip.spotId ?? null;
+    const spotCoastDir: CoastDirection | null =
+      trip.spot_coast_direction ??
+      trip.coastDirection ??
+      (tripSpotId ? spotCoastMap.get(String(tripSpotId)) : null) ??
+      null;
+
+    // Beregn vind ift. kyst fra vindretning + spotets kystretning
+    let cw: string | null = null;
+    if (windDirDeg != null && Number.isFinite(windDirDeg) && spotCoastDir) {
+      const windType = getWindType(windDirDeg, spotCoastDir);
+      cw = windType === 'offshore' ? (t ? t("offshoreWind") : 'fralandsvind')
+         : windType === 'onshore' ? (t ? t("onshoreWind") : 'pålandsvind')
+         : (t ? t("sideWind") : 'sidevind');
+    } else {
+      // Fallback til gammel metode hvis vi ikke har kystretning
+      const cwRaw: string | null = evaluation?.coastWind?.category ?? null;
+      cw = coastWindLabel(cwRaw);
+    }
 
     const windDirKey =
       windDirDeg != null && Number.isFinite(windDirDeg)
@@ -759,9 +799,37 @@ function buildWeatherSummary(allTrips: any[], t?: TranslateFn): string | null {
       sunOffset.sunriseCount >= sunOffset.sunsetCount
         ? (t ? t("sunrise") : "solopgang")
         : (t ? t("sunset") : "solnedgang");
-    const dir = avg < 0 ? (t ? t("minBefore") : "min før") : (t ? t("minAfter") : "min efter");
-    const minutes = Math.round(Math.abs(avg));
-    lines.push(`${t ? t("typicalMinutes") : "Typisk"} ${minutes} ${dir} ${event}`);
+    const absMinutes = Math.abs(avg);
+
+    // Rund til 30-minutters intervaller eller timer
+    let timeLabel: string;
+    let useDirection = true;
+    if (absMinutes >= 90) {
+      // 1.5+ timer -> vis i hele timer
+      const hours = Math.round(absMinutes / 60);
+      timeLabel = t
+        ? `${hours} ${hours > 1 ? t("hours") : t("hour")}`
+        : `${hours} time${hours > 1 ? "r" : ""}`;
+    } else if (absMinutes >= 45) {
+      // 45-89 min -> "1 time"
+      timeLabel = t ? `1 ${t("hour")}` : "1 time";
+    } else {
+      // Under 45 min -> rund til nærmeste 30 min
+      const rounded = Math.round(absMinutes / 30) * 30;
+      if (rounded === 0) {
+        timeLabel = t ? t("at") : "ved";
+        useDirection = false;
+      } else {
+        timeLabel = `${rounded} min`;
+      }
+    }
+
+    if (useDirection) {
+      const dir = avg < 0 ? (t ? t("before") : "før") : (t ? t("after") : "efter");
+      lines.push(`${t ? t("typicalMinutes") : "Typisk"} ${timeLabel} ${dir} ${event}`);
+    } else {
+      lines.push(`${t ? t("typicalMinutes") : "Typisk"} ${timeLabel} ${event}`);
+    }
   }
 
   // Tur-setup
@@ -857,7 +925,9 @@ function patternIcon(line: string): keyof typeof Ionicons.glyphMap {
 // ============================================================================
 
 export default function Track() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const { theme } = useTheme();
+  const router = useRouter();
   const [running, setRunning] = useState(false);
   const [points, setPoints] = useState<Pt[]>([]);
   const [distanceM, setDistanceM] = useState(0);
@@ -930,6 +1000,7 @@ export default function Track() {
   const [seasonPickerVisible, setSeasonPickerVisible] = useState(false);
   const [selectedSeasonKey, setSelectedSeasonKey] = useState("all");
   const [spotsModalVisible, setSpotsModalVisible] = useState(false);
+  const [noSpotsModalVisible, setNoSpotsModalVisible] = useState(false);
   const [spotsWithVisits, setSpotsWithVisits] = useState<
     Array<SpotRow & { visitCount: number; fishCount: number }>
   >([]);
@@ -1038,7 +1109,7 @@ export default function Track() {
             <Ionicons
               name="information-circle-outline"
               size={14}
-              color={THEME.graphYellow}
+              color={theme.primary}
               style={{ marginRight: 6 }}
             />
             <Text style={styles.fishPatternChipText}>
@@ -1057,7 +1128,7 @@ export default function Track() {
             <Ionicons
               name={patternIcon(line)}
               size={14}
-              color={THEME.graphYellow}
+              color={theme.primary}
               style={{ marginRight: 6 }}
             />
             <Text style={styles.fishPatternChipText}>{line}</Text>
@@ -1088,8 +1159,8 @@ export default function Track() {
   const buildLocationUpdateOptions = useCallback(
     (): Location.LocationTaskOptions => ({
       accuracy: Location.Accuracy.High,
-      distanceInterval: 5,
-      timeInterval: 4000,
+      distanceInterval: 20, // Kun opdater ved 20m+ bevægelse
+      timeInterval: 5000,   // Max hvert 5. sekund
       pausesUpdatesAutomatically: false,
       ...(Platform.OS === "android"
         ? {
@@ -1107,6 +1178,12 @@ export default function Track() {
   );
 
   const handlePositionUpdate = useCallback((pos: Location.LocationObject) => {
+    // Ignorer readings med dårlig GPS-nøjagtighed (typisk indendørs eller dårligt signal)
+    const accuracy = pos.coords.accuracy;
+    if (accuracy != null && accuracy > MIN_GPS_ACCURACY) {
+      return; // Skip dette punkt - for upræcist
+    }
+
     const p: Pt = {
       latitude: pos.coords.latitude,
       longitude: pos.coords.longitude,
@@ -1123,14 +1200,19 @@ export default function Track() {
       }
       const last = arr[arr.length - 1];
       const step = haversine(last, p);
+
+      // Ignorer små bevægelser (GPS-jitter når man står stille)
       if (step < MIN_WAYPOINT_DISTANCE) {
         return arr;
       }
+
+      // Ignorer urealistiske hop (teleportation/GPS-spike)
       const dtMs = Math.max(1, p.t - last.t);
       const speed = step / (dtMs / 1000);
       if (step > MAX_WAYPOINT_DISTANCE || speed > MAX_WAYPOINT_SPEED_MS) {
         return arr;
       }
+
       const newDist = step;
       setDistanceM((m) => m + newDist);
       return [...arr, p];
@@ -1218,8 +1300,8 @@ export default function Track() {
         watchRef.current = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
-            distanceInterval: 5,
-            timeInterval: 4000,
+            distanceInterval: 20, // Kun opdater ved 20m+ bevægelse
+            timeInterval: 5000,   // Max hvert 5. sekund
           },
           handlePositionUpdate
         );
@@ -1327,8 +1409,11 @@ async function refreshYearsAndStats(
     const filteredYearTrips = filterTripsBySeason(yearTrips, seasonKey);
     const filteredAllTrips = filterTripsBySeason(allTrips, seasonKey);
 
-    const yearSummary = buildWeatherSummary(filteredYearTrips, t);
-    const allSummary = buildWeatherSummary(filteredAllTrips, t);
+    // Hent spots til at beregne vind ift. kyst
+    const spots = await listSpots();
+
+    const yearSummary = buildWeatherSummary(filteredYearTrips, t, spots);
+    const allSummary = buildWeatherSummary(filteredAllTrips, t, spots);
 
     setYearWeatherSummary(yearSummary);
     setAllTimeWeatherSummary(allSummary);
@@ -1492,6 +1577,7 @@ async function refreshYearsAndStats(
   function confirmStart() {
     if (starting || running) return;
     setStarting(true);
+
     const resetState = () => {
       setRunning(false);
       setPoints([]);
@@ -1512,6 +1598,14 @@ async function refreshYearsAndStats(
 
     (async () => {
       try {
+        // Tjek om der findes spots - påkrævet for statistik
+        const spots = await listSpots();
+        if (!spots || spots.length === 0) {
+          setStarting(false);
+          setNoSpotsModalVisible(true);
+          return;
+        }
+
         const { status } =
           await Location.requestForegroundPermissionsAsync();
 
@@ -1653,8 +1747,8 @@ async function refreshYearsAndStats(
         watchRef.current = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
-            distanceInterval: 5,
-            timeInterval: 4000,
+            distanceInterval: 20, // Kun opdater ved 20m+ bevægelse
+            timeInterval: 5000,   // Max hvert 5. sekund
           },
           handlePositionUpdate
         );
@@ -1957,19 +2051,16 @@ async function refreshYearsAndStats(
               initialRegion={DEFAULT_TRACK_REGION}
               region={region}
               onRegionChangeComplete={setRegion}
-              customMapStyle={MAP_STYLE}
               userInterfaceStyle={MAP_UI_STYLE}
               provider={trackingMapProvider}
-              mapType={trackingMapType}
+              mapType="none"
             >
-              {trackingUsesOsmTiles && (
-                <UrlTile
-                  urlTemplate={OSM_TILE_URL}
-                  maximumZ={19}
-                  tileSize={256}
-                  zIndex={0}
-                />
-              )}
+              {/* Orto map tiles - always on */}
+              <UrlTile
+                urlTemplate={ORTO_FORAAR_URL}
+                maximumZ={21}
+                tileSize={256}
+              />
               {points.length > 0 && (
                 <>
                   <Polyline
@@ -1994,14 +2085,14 @@ async function refreshYearsAndStats(
             {/* Stats overlay */}
             <View style={styles.mapOverlay}>
               <View style={styles.overlayStatBox}>
-                <Ionicons name="time-outline" size={14} color={THEME.graphYellow} />
+                <Ionicons name="time-outline" size={14} color={theme.primary} />
                 <View>
                   <Text style={styles.overlayLabel}>{t("time")}</Text>
                   <Text style={styles.overlayValue}>{fmtTime(sec)}</Text>
                 </View>
               </View>
               <View style={styles.overlayStatBox}>
-                <Ionicons name="navigate-outline" size={14} color={THEME.graphYellow} />
+                <Ionicons name="navigate-outline" size={14} color={theme.primary} />
                 <View>
                   <Text style={styles.overlayLabel}>{t("distance").toUpperCase()}</Text>
                   <Text style={styles.overlayValue}>
@@ -2011,7 +2102,7 @@ async function refreshYearsAndStats(
               </View>
               {running && (
                 <View style={styles.overlayStatBox}>
-                  <Ionicons name="fish" size={14} color={THEME.graphYellow} />
+                  <Ionicons name="fish" size={14} color={theme.primary} />
                   <View>
                     <Text style={styles.overlayLabel}>{t("catch")}</Text>
                     <Text style={styles.overlayValue}>{catchMarks.length}</Text>
@@ -2164,7 +2255,7 @@ async function refreshYearsAndStats(
                 setSpotsModalVisible(true);
               }}
             >
-              <Ionicons name="location" size={18} color={THEME.graphYellow} />
+              <Ionicons name="location" size={18} color={theme.primary} />
               <Text style={styles.spotsButtonTitle}>{t("myFishingSpots")}</Text>
               <Ionicons name="chevron-forward" size={16} color={THEME.textTertiary} />
             </Pressable>
@@ -2193,7 +2284,7 @@ async function refreshYearsAndStats(
         >
           <View style={styles.expandableHeader}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Ionicons name="trophy-outline" size={18} color={THEME.graphYellow} />
+              <Ionicons name="trophy-outline" size={18} color={theme.primary} />
               <Text style={styles.cardTitle}>All-Time</Text>
             </View>
             <Ionicons
@@ -2403,7 +2494,7 @@ async function refreshYearsAndStats(
               {/* Header med ikon og tæller */}
               <View style={styles.endTripHeader}>
                 <View style={styles.endTripTitleRow}>
-                  <Ionicons name="flag" size={24} color={THEME.graphYellow} />
+                  <Ionicons name="flag" size={24} color={theme.primary} />
                   <Text style={styles.endTripTitle}>{t("finishTrip")}</Text>
                 </View>
                 <View style={styles.endTripCountBadge}>
@@ -2750,7 +2841,7 @@ async function refreshYearsAndStats(
 
               {loadingSpots ? (
                 <View style={{ padding: 40, alignItems: "center" }}>
-                  <ActivityIndicator size="large" color={THEME.graphYellow} />
+                  <ActivityIndicator size="large" color={theme.primary} />
                   <Text style={{ color: THEME.textSec, marginTop: 12 }}>
                     Henter spots...
                   </Text>
@@ -2792,7 +2883,7 @@ async function refreshYearsAndStats(
                         <Ionicons
                           name="location"
                           size={18}
-                          color={THEME.graphYellow}
+                          color={theme.primary}
                         />
                       </View>
                       <View style={{ flex: 1 }}>
@@ -2821,7 +2912,7 @@ async function refreshYearsAndStats(
                         <View
                           style={[
                             styles.spotStatBadge,
-                            { backgroundColor: THEME.graphYellow },
+                            { backgroundColor: theme.primary },
                           ]}
                         >
                           <Ionicons
@@ -2841,6 +2932,74 @@ async function refreshYearsAndStats(
                 </ScrollView>
               )}
 
+            </View>
+          </View>
+        </Modal>
+
+        {/* === OPRET SPOT FØRST MODAL === */}
+        <Modal
+          visible={noSpotsModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setNoSpotsModalVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.noSpotsModal}>
+              {/* Ikon */}
+              <View style={styles.noSpotsIconCircle}>
+                <Ionicons name="map" size={32} color={theme.primary} />
+              </View>
+
+              {/* Titel */}
+              <Text style={styles.noSpotsTitle}>
+                {language === "da" ? "Opret et spot først" : "Create a spot first"}
+              </Text>
+
+              {/* Beskrivelse */}
+              <Text style={styles.noSpotsDescription}>
+                {language === "da"
+                  ? "For at tracke ture skal du først oprette mindst ét fiskeplads-spot."
+                  : "To track trips, you need to create at least one fishing spot."}
+              </Text>
+
+              {/* Vejrkort badge */}
+              <View style={styles.noSpotsAppBadge}>
+                <Ionicons name="map-outline" size={16} color={theme.primary} />
+                <Text style={styles.noSpotsAppBadgeText}>
+                  {language === "da" ? "Vejrkort" : "Weather Map"}
+                </Text>
+              </View>
+
+              <Text style={styles.noSpotsHint}>
+                {language === "da"
+                  ? "Tryk på kortet i Vejrkort for at oprette spots, som dine ture automatisk tilknyttes."
+                  : "Tap on the map in Weather Map to create spots that your trips will automatically be linked to."}
+              </Text>
+
+              {/* Knapper */}
+              <View style={styles.noSpotsButtons}>
+                <Pressable
+                  style={styles.noSpotsButtonPrimary}
+                  onPress={() => {
+                    setNoSpotsModalVisible(false);
+                    router.push("/spot-weather");
+                  }}
+                >
+                  <Ionicons name="map" size={18} color="#000" />
+                  <Text style={styles.noSpotsButtonPrimaryText}>
+                    {language === "da" ? "Åbn Vejrkort" : "Open Weather Map"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.noSpotsButtonSecondary}
+                  onPress={() => setNoSpotsModalVisible(false)}
+                >
+                  <Text style={styles.noSpotsButtonSecondaryText}>
+                    {language === "da" ? "Annuller" : "Cancel"}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
         </Modal>
@@ -3490,6 +3649,97 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#26262A",
   },
+
+  // No Spots Modal
+  noSpotsModal: {
+    width: "100%",
+    backgroundColor: "#1C1C1E",
+    borderRadius: 24,
+    padding: 28,
+    alignItems: "center",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+  },
+  noSpotsIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  noSpotsTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: THEME.text,
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  noSpotsDescription: {
+    fontSize: 15,
+    color: THEME.textSec,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  noSpotsAppBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  noSpotsAppBadgeText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: THEME.graphYellow,
+  },
+  noSpotsHint: {
+    fontSize: 13,
+    color: THEME.textSec,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  noSpotsButtons: {
+    width: "100%",
+    gap: 12,
+  },
+  noSpotsButtonPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: THEME.graphYellow,
+    paddingVertical: 16,
+    borderRadius: 14,
+  },
+  noSpotsButtonPrimaryText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#000",
+  },
+  noSpotsButtonSecondary: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+  },
+  noSpotsButtonSecondaryText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: THEME.textSec,
+  },
+
   btn: {
     paddingVertical: 16,
     borderRadius: 16,

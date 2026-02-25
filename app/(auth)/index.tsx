@@ -12,12 +12,13 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Animated,
-  Dimensions,
+  Image,
 } from "react-native";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLanguage } from "../../lib/i18n";
 // Firebase login-funktioner
 import {
@@ -30,7 +31,6 @@ type AuthMode = "initial" | "login" | "signup";
 const REMEMBER_EMAIL_KEY = "remember_email";
 const REMEMBER_PASSWORD_KEY = "remember_password";
 
-const { width } = Dimensions.get("window");
 
 const THEME = {
   bg: "#121212",
@@ -60,8 +60,6 @@ export default function LoginScreen() {
   // Animationer
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  const logoScale = useRef(new Animated.Value(0.8)).current;
-  const waveAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Initial animation
@@ -77,29 +75,7 @@ export default function LoginScreen() {
         tension: 40,
         useNativeDriver: true,
       }),
-      Animated.spring(logoScale, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
     ]).start();
-
-    // Wave animation loop
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(waveAnim, {
-          toValue: 1,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(waveAnim, {
-          toValue: 0,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
   }, []);
 
   useEffect(() => {
@@ -161,44 +137,20 @@ export default function LoginScreen() {
     setMode("initial");
   }
 
-  const waveTranslate = waveAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 15],
-  });
-
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      {/* Background decoration */}
-      <View style={styles.bgDecoration}>
-        <Animated.View
-          style={[
-            styles.wave,
-            styles.wave1,
-            { transform: [{ translateY: waveTranslate }] },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.wave,
-            styles.wave2,
-            {
-              transform: [
-                {
-                  translateY: waveAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [8, -8],
-                  }),
-                },
-              ],
-            },
-          ]}
-        />
-      </View>
+    <View style={styles.container}>
+      {/* Gradient baggrund */}
+      <LinearGradient
+        colors={["#1A1207", "#2D1F0D", "#1A1207"]}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <Animated.View
           style={[
             styles.inner,
@@ -208,16 +160,16 @@ export default function LoginScreen() {
             },
           ]}
         >
-          {/* Logo */}
-          <Animated.View
-            style={[styles.logoContainer, { transform: [{ scale: logoScale }] }]}
-          >
-            <View style={styles.logoCircle}>
-              <Ionicons name="fish" size={40} color={THEME.accent} />
-            </View>
-          </Animated.View>
-
           <View style={styles.card}>
+            {/* Logo */}
+            <View style={styles.logoContainer}>
+              <Image
+                source={require("../../assets/android-icon-foreground.png")}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
+
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.appTitle}>{t("appName")}</Text>
@@ -460,35 +412,18 @@ export default function LoginScreen() {
           </View>
         </Animated.View>
       </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.bg,
+    backgroundColor: "#1A1207",
   },
-  bgDecoration: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: "hidden",
-  },
-  wave: {
-    position: "absolute",
-    width: width * 2.5,
-    height: 300,
-    borderRadius: 150,
-    opacity: 0.04,
-  },
-  wave1: {
-    backgroundColor: THEME.accent,
-    bottom: -150,
-    left: -width * 0.5,
-  },
-  wave2: {
-    backgroundColor: THEME.accent,
-    bottom: -200,
-    left: -width * 0.3,
+  keyboardView: {
+    flex: 1,
   },
   inner: {
     flex: 1,
@@ -496,27 +431,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  logoContainer: {
-    marginBottom: 24,
-  },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    borderWidth: 2,
-    borderColor: "rgba(245, 158, 11, 0.3)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   card: {
     width: "100%",
     maxWidth: 420,
-    backgroundColor: THEME.card,
+    backgroundColor: "rgba(28, 28, 30, 0.85)",
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: -25,
+  },
+  logo: {
+    width: 280,
+    height: 180,
   },
   header: {
     marginBottom: 28,
@@ -545,7 +480,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    backgroundColor: "rgba(245, 158, 11, 0.2)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -561,10 +496,10 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: THEME.inputBg,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    borderColor: "rgba(255, 255, 255, 0.12)",
     paddingHorizontal: 14,
   },
   inputIcon: {
@@ -591,10 +526,10 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: THEME.cardBorder,
+    borderColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: THEME.inputBg,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
   checkboxChecked: {
     borderColor: THEME.accent,
@@ -622,7 +557,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   btnPrimary: {
-    backgroundColor: THEME.primary,
+    backgroundColor: THEME.accent,
     borderRadius: 14,
     paddingVertical: 14,
     flexDirection: "row",
@@ -643,7 +578,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   btnSecondary: {
-    backgroundColor: THEME.inputBg,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     borderRadius: 14,
     paddingVertical: 14,
     flexDirection: "row",
@@ -651,11 +586,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    borderColor: "rgba(255, 255, 255, 0.12)",
   },
   btnSecondaryPressed: {
     opacity: 0.9,
-    backgroundColor: THEME.cardBorder,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
   },
   btnSecondaryText: {
     color: THEME.text,

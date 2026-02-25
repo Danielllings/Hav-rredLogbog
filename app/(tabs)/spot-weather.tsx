@@ -70,22 +70,10 @@ import { useTheme } from "../../lib/theme";
 import { SpotMarker } from "../../shared/components/SpotMarker";
 import { DmiStationMarker } from "../../shared/components/DmiStationMarker";
 import { ScrollableGraph } from "../../shared/components/ScrollableGraph";
-import { CurrentArrowMarker } from "../../shared/components/CurrentArrowMarker";
-import {
-  fetchOceanGridData,
-  getCachedGridData,
-  clearGridCache,
-  cellToCoords,
-  getSalinityColor,
-  getWaveHeightColor,
-  getCurrentSpeedColorRgba,
-  getForecastTimeOptions,
-  CURRENT_COLORS,
-  SALINITY_COLORS,
-  WAVE_COLORS,
-  type OceanGridData,
-  type BoundingBox,
-} from "../../lib/dmiGridData";
+import { CurrentVelocityOverlay } from "../../shared/components/CurrentVelocityOverlay";
+import { WaveSwellOverlay } from "../../shared/components/WaveSwellOverlay";
+import { SalinityHeatmapOverlay } from "../../shared/components/SalinityHeatmapOverlay";
+import { WaterLevelOverlay } from "../../shared/components/WaterLevelOverlay";
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -116,6 +104,63 @@ const BEST_SPOT_COLOR = "#F4D03F";
 
 
 // --- Kort stilarter (lys på Android for bedre synlighed) ---
+// --- Antracit / mørk grå stil ---
+const ANTHRACITE_MAP_STYLE = [
+  { elementType: "geometry", stylers: [{ color: "#2d2d2d" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8a8a8a" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#2d2d2d" }] },
+  {
+    featureType: "poi",
+    elementType: "geometry",
+    stylers: [{ color: "#353535" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#3a3a3a" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#404040" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#2a2a2a" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "transit",
+    elementType: "labels",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#4a4a4a" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#1a1a2e" }],
+  },
+];
+
 const LIGHT_MAP_STYLE = [
   { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
   { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
@@ -229,9 +274,11 @@ const DARK_MAP_STYLE = [
   },
 ];
 
-const MAP_STYLE = LIGHT_MAP_STYLE;
-const MAP_UI_STYLE = "light";
+const MAP_STYLE = ANTHRACITE_MAP_STYLE;
+const MAP_UI_STYLE = "dark";
 const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const CARTO_DARK_URL = "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png";
+const CARTO_DARK_LABELS_URL = "https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png";
 
 const DEFAULT_REGION: Region = {
   latitude: 55.6761,
@@ -391,19 +438,19 @@ export default function SpotWeatherScreen() {
   const [showCurrents, setShowCurrents] = useState(false);
   const [showSalinity, setShowSalinity] = useState(false);
   const [showWaves, setShowWaves] = useState(false);
-  const [oceanGridData, setOceanGridData] = useState<OceanGridData | null>(null);
-  const [oceanGridLoading, setOceanGridLoading] = useState(false);
-  const [forecastHourIndex, setForecastHourIndex] = useState(0);
-  const [currentMapBounds, setCurrentMapBounds] = useState<BoundingBox>({
-    minLat: DEFAULT_REGION.latitude - DEFAULT_REGION.latitudeDelta / 2,
-    maxLat: DEFAULT_REGION.latitude + DEFAULT_REGION.latitudeDelta / 2,
-    minLng: DEFAULT_REGION.longitude - DEFAULT_REGION.longitudeDelta / 2,
-    maxLng: DEFAULT_REGION.longitude + DEFAULT_REGION.longitudeDelta / 2,
+  const [showWaterLevel, setShowWaterLevel] = useState(false);
+
+  // Track current map region for passing to overlays
+  const [mapRegion, setMapRegion] = useState<Region>({
+    latitude: 55.5,
+    longitude: 11.0,
+    latitudeDelta: 5,
+    longitudeDelta: 5,
   });
-  const forecastTimeOptions = getForecastTimeOptions();
 
   // Track if settings have been loaded from storage
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+
 
   // Reset overlays when leaving screen
   useFocusEffect(
@@ -413,7 +460,6 @@ export default function SpotWeatherScreen() {
         setShowCurrents(false);
         setShowSalinity(false);
         setShowWaves(false);
-        setOceanGridData(null);
       };
     }, [])
   );
@@ -483,29 +529,6 @@ export default function SpotWeatherScreen() {
     })();
   }, []);
 
-  // Fetch ocean grid data when overlay is enabled
-  useEffect(() => {
-    if (!showCurrents && !showSalinity && !showWaves) {
-      setOceanGridData(null);
-      return;
-    }
-
-    const selectedTime = forecastTimeOptions[forecastHourIndex]?.value;
-    const opts = {
-      includeCurrents: showCurrents,
-      includeSalinity: showSalinity,
-      includeWaves: showWaves,
-      datetime: selectedTime,
-    };
-
-    setOceanGridLoading(true);
-    fetchOceanGridData(currentMapBounds, opts).then(data => {
-      setOceanGridData(data);
-      setOceanGridLoading(false);
-    }).catch(() => {
-      setOceanGridLoading(false);
-    });
-  }, [showCurrents, showSalinity, showWaves, currentMapBounds, forecastHourIndex]);
 
   // find spot med flest fisk -> stjerne på kortet
   useEffect(() => {
@@ -811,26 +834,24 @@ export default function SpotWeatherScreen() {
 
   const forecastDays = getForecastDays(edrData, t);
 
-  const mapBackground = mapLayer === "orto" ? "#0b0b0f" : THEME.bg;
-  const currentMapStyle = isAndroid
-    ? mapLayer === "orto"
-      ? DARK_MAP_STYLE
-      : MAP_STYLE
-    : undefined;
-  const currentUiStyle = mapLayer === "orto" ? "dark" : MAP_UI_STYLE;
+  // Check if any ocean overlay is active
+  const oceanOverlayActive = showCurrents || showSalinity || showWaves || showWaterLevel;
+  // Always use dark background (CartoDB dark tiles as base)
+  const mapBackground = "#0a0a12";
+  // Dark styles for both map layers
+  const currentMapStyle = mapLayer === "orto" ? DARK_MAP_STYLE : MAP_STYLE;
+  const currentUiStyle = "dark";
   const hasGoogleMapsKey =
     !isAndroid ? true : Boolean(Constants.expoConfig?.extra?.mapsApiKey);
   const useStandardTileFallback =
     isAndroid && mapLayer === "standard" && !hasGoogleMapsKey;
+  // Use "none" mapType for standard mode (CartoDB dark tiles) or orto fallback on Android
   const mapType =
-    isAndroid && (mapLayer === "orto" || useStandardTileFallback)
+    (isAndroid && mapLayer === "orto") || mapLayer === "standard"
       ? "none"
       : "standard";
-  const mapProvider = isAndroid
-    ? hasGoogleMapsKey
-      ? PROVIDER_GOOGLE
-      : PROVIDER_DEFAULT
-    : undefined;
+  // Google Maps på begge platforme for at få custom styling (anthracit)
+  const mapProvider = hasGoogleMapsKey ? PROVIDER_GOOGLE : PROVIDER_DEFAULT;
 
   return (
     <>
@@ -842,14 +863,7 @@ export default function SpotWeatherScreen() {
           style={[StyleSheet.absoluteFillObject, { backgroundColor: mapBackground }]}
           initialRegion={DEFAULT_REGION}
           onPress={onMapPress}
-          onRegionChangeComplete={(region) => {
-            setCurrentMapBounds({
-              minLat: region.latitude - region.latitudeDelta / 2,
-              maxLat: region.latitude + region.latitudeDelta / 2,
-              minLng: region.longitude - region.longitudeDelta / 2,
-              maxLng: region.longitude + region.longitudeDelta / 2,
-            });
-          }}
+          onRegionChangeComplete={setMapRegion}
           userInterfaceStyle={currentUiStyle}
           mapType={mapType}
           provider={mapProvider}
@@ -872,36 +886,26 @@ export default function SpotWeatherScreen() {
             />
           )}
 
-          {/* Salinity polygons */}
-          {showSalinity && oceanGridData?.salinity?.map((cell, i) => (
-            <Polygon
-              key={`sal-${forecastHourIndex}-${i}`}
-              coordinates={cellToCoords(cell)}
-              fillColor={getSalinityColor(cell.salinity)}
-              strokeColor="transparent"
-              strokeWidth={0}
-              tappable={false}
-              zIndex={0}
-            />
-          ))}
+          {/* Dark CartoDB tiles as default base map (standard mode) */}
+          {mapLayer !== "orto" && (
+            <>
+              <UrlTile
+                urlTemplate={CARTO_DARK_URL}
+                maximumZ={19}
+                tileSize={512}
+                zIndex={0}
+              />
+              <UrlTile
+                urlTemplate={CARTO_DARK_LABELS_URL}
+                maximumZ={19}
+                tileSize={512}
+                zIndex={10}
+                opacity={0.7}
+              />
+            </>
+          )}
 
-          {/* Current arrows */}
-          {showCurrents && oceanGridData?.currents?.map((cell, i) => (
-            <CurrentArrowMarker key={`cur-${forecastHourIndex}-${i}`} cell={cell} />
-          ))}
-
-          {/* Wave height polygons */}
-          {showWaves && oceanGridData?.waves?.map((cell, i) => (
-            <Polygon
-              key={`wave-${forecastHourIndex}-${i}`}
-              coordinates={cellToCoords(cell)}
-              fillColor={getWaveHeightColor(cell.height)}
-              strokeColor="transparent"
-              strokeWidth={0}
-              tappable={false}
-              zIndex={0}
-            />
-          ))}
+          {/* Ocean overlays are now rendered as animated WebView overlays after MapView */}
 
           {/* Fredningsbælter polygoner */}
           {showFredningsbaelter && fredningsbaelter?.features?.map((feature) => {
@@ -980,83 +984,54 @@ export default function SpotWeatherScreen() {
           )}
         </MapView>
 
-        {/* Ocean overlay scale bars */}
-        {(showCurrents || showSalinity || showWaves) && (
-          <View style={styles.scaleBarsContainer}>
-            {showCurrents && (
-              <View style={styles.scaleBarItem}>
-                <Text style={styles.scaleTitle}>Strøm</Text>
-                <View style={styles.scaleGradient}>
-                  {[...CURRENT_COLORS].reverse().map((color, i) => (
-                    <View key={i} style={[styles.scaleSegment, { backgroundColor: color }]} />
-                  ))}
-                </View>
-                <View style={styles.scaleLabels}>
-                  <Text style={styles.scaleLabelText}>5+</Text>
-                  <Text style={styles.scaleLabelText}>0</Text>
-                </View>
-                <Text style={styles.scaleUnit}>km/t</Text>
-              </View>
-            )}
-            {showSalinity && (
-              <View style={styles.scaleBarItem}>
-                <Text style={styles.scaleTitle}>Salt</Text>
-                <View style={styles.scaleGradient}>
-                  {[...SALINITY_COLORS].reverse().map((color, i) => (
-                    <View key={i} style={[styles.scaleSegment, { backgroundColor: color.replace("0.75", "1") }]} />
-                  ))}
-                </View>
-                <View style={styles.scaleLabels}>
-                  <Text style={styles.scaleLabelText}>35</Text>
-                  <Text style={styles.scaleLabelText}>5</Text>
-                </View>
-                <Text style={styles.scaleUnit}>PSU</Text>
-              </View>
-            )}
-            {showWaves && (
-              <View style={styles.scaleBarItem}>
-                <Text style={styles.scaleTitle}>Bølge</Text>
-                <View style={styles.scaleGradient}>
-                  {[...WAVE_COLORS].reverse().map((color, i) => (
-                    <View key={i} style={[styles.scaleSegment, { backgroundColor: color.replace("0.7", "1") }]} />
-                  ))}
-                </View>
-                <View style={styles.scaleLabels}>
-                  <Text style={styles.scaleLabelText}>3+</Text>
-                  <Text style={styles.scaleLabelText}>0</Text>
-                </View>
-                <Text style={styles.scaleUnit}>m</Text>
-              </View>
-            )}
+        {/* Animated ocean overlays - vises over kortet */}
+        {showCurrents && (
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+            <CurrentVelocityOverlay
+              visible={true}
+              onClose={() => setShowCurrents(false)}
+              initialLat={mapRegion.latitude}
+              initialLng={mapRegion.longitude}
+              initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+            />
           </View>
         )}
-
-        {/* Forecast time slider */}
-        {(showCurrents || showSalinity || showWaves) && (
-          <View style={styles.forecastSliderWrapper}>
-            <Text style={styles.forecastSliderLabel}>
-              {forecastTimeOptions[forecastHourIndex]?.label || ""}
-            </Text>
-            <Slider
-              style={styles.forecastSlider}
-              minimumValue={0}
-              maximumValue={48}
-              step={1}
-              value={forecastHourIndex}
-              onSlidingComplete={(val) => setForecastHourIndex(Math.round(val))}
-              minimumTrackTintColor={showCurrents ? "#22C55E" : showSalinity ? "#8B5CF6" : "#06B6D4"}
-              maximumTrackTintColor="rgba(255,255,255,0.3)"
-              thumbTintColor="#fff"
+        {showWaves && (
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+            <WaveSwellOverlay
+              visible={true}
+              onClose={() => setShowWaves(false)}
+              initialLat={mapRegion.latitude}
+              initialLng={mapRegion.longitude}
+              initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+            />
+          </View>
+        )}
+        {showSalinity && (
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+            <SalinityHeatmapOverlay
+              visible={true}
+              onClose={() => setShowSalinity(false)}
+              initialLat={mapRegion.latitude}
+              initialLng={mapRegion.longitude}
+              initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+            />
+          </View>
+        )}
+        {showWaterLevel && (
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+            <WaterLevelOverlay
+              visible={true}
+              onClose={() => setShowWaterLevel(false)}
+              initialLat={mapRegion.latitude}
+              initialLng={mapRegion.longitude}
+              initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
             />
           </View>
         )}
 
-        {/* Loading indicator for ocean data */}
-        {oceanGridLoading && (
-          <View style={styles.oceanLoadingIndicator}>
-            <ActivityIndicator color="#fff" size="small" />
-          </View>
-        )}
+        {/* Scale bars and sliders are now built into each animated overlay */}
+
 
         {mapLayer === "orto" && (
           <View
@@ -1094,18 +1069,6 @@ export default function SpotWeatherScreen() {
             </Pressable>
           )}
         </View>
-
-        {/* Infoboks i bunden når der ikke er åben prognose / lokations-UI / spot-detail */}
-        {!showForecast && !showLocationActions && !selectedSpot && (
-          <View style={styles.hintCard}>
-            <View style={styles.hintIconWrap}>
-              <Ionicons name="information-circle" size={20} color={THEME.graphYellow} />
-            </View>
-            <Text style={styles.hintText}>
-              {t("tapMapHint")}
-            </Text>
-          </View>
-        )}
 
         {/* Lille UI når en lokation er valgt på kortet (ikke spot) */}
         {pos && showLocationActions && !selectedSpot && (
@@ -1399,157 +1362,128 @@ export default function SpotWeatherScreen() {
               </Pressable>
             </View>
 
-            {/* Toggle */}
-            <View style={styles.popupToggleRow}>
-              <View style={styles.popupToggleLeft}>
-                <Ionicons name="location" size={18} color={THEME.textSec} />
-                <Text style={styles.popupToggleLabel}>{t("showYourSpots")}</Text>
-              </View>
+            {/* Ocean overlay section - Windy style */}
+            <Text style={styles.overlaysSectionTitle}>{language === "da" ? "Hav overlays" : "Ocean overlays"}</Text>
+            <View style={styles.overlaysSection}>
               <Pressable
-                style={[
-                  styles.toggleTrack,
-                  showSpots && styles.toggleTrackActive,
-                ]}
+                style={[styles.overlayRow, showCurrents && styles.overlayRowActive]}
+                onPress={() => {
+                  if (showCurrents) {
+                    setShowCurrents(false);
+                  } else {
+                    setShowSalinity(false);
+                    setShowWaves(false);
+                    setShowWaterLevel(false);
+                    setShowCurrents(true);
+                  }
+                  setLayerModalVisible(false);
+                }}
+              >
+                <Ionicons name="navigate" size={20} color={showCurrents ? "#22C55E" : THEME.textSec} />
+                <Text style={[styles.overlayRowText, showCurrents && styles.overlayRowTextActive]}>
+                  {language === "da" ? "Havstrøm" : "Ocean current"}
+                </Text>
+                {showCurrents && <Ionicons name="checkmark" size={20} color="#22C55E" />}
+              </Pressable>
+
+              <Pressable
+                style={[styles.overlayRow, showWaves && styles.overlayRowActive]}
+                onPress={() => {
+                  if (showWaves) {
+                    setShowWaves(false);
+                  } else {
+                    setShowCurrents(false);
+                    setShowSalinity(false);
+                    setShowWaterLevel(false);
+                    setShowWaves(true);
+                  }
+                  setLayerModalVisible(false);
+                }}
+              >
+                <Ionicons name="water" size={20} color={showWaves ? "#06B6D4" : THEME.textSec} />
+                <Text style={[styles.overlayRowText, showWaves && styles.overlayRowTextActive]}>
+                  {language === "da" ? "Bølgehøjde" : "Wave height"}
+                </Text>
+                {showWaves && <Ionicons name="checkmark" size={20} color="#06B6D4" />}
+              </Pressable>
+
+              <Pressable
+                style={[styles.overlayRow, showSalinity && styles.overlayRowActive]}
+                onPress={() => {
+                  if (showSalinity) {
+                    setShowSalinity(false);
+                  } else {
+                    setShowCurrents(false);
+                    setShowWaves(false);
+                    setShowWaterLevel(false);
+                    setShowSalinity(true);
+                  }
+                  setLayerModalVisible(false);
+                }}
+              >
+                <Ionicons name="flask" size={20} color={showSalinity ? "#8B5CF6" : THEME.textSec} />
+                <Text style={[styles.overlayRowText, showSalinity && styles.overlayRowTextActive]}>
+                  {language === "da" ? "Saltindhold" : "Salinity"}
+                </Text>
+                {showSalinity && <Ionicons name="checkmark" size={20} color="#8B5CF6" />}
+              </Pressable>
+
+              <Pressable
+                style={[styles.overlayRow, showWaterLevel && styles.overlayRowActive]}
+                onPress={() => {
+                  if (showWaterLevel) {
+                    setShowWaterLevel(false);
+                  } else {
+                    setShowCurrents(false);
+                    setShowSalinity(false);
+                    setShowWaves(false);
+                    setShowWaterLevel(true);
+                  }
+                  setLayerModalVisible(false);
+                }}
+              >
+                <Ionicons name="trending-up" size={20} color={showWaterLevel ? "#3B82F6" : THEME.textSec} />
+                <Text style={[styles.overlayRowText, showWaterLevel && styles.overlayRowTextActive]}>
+                  {language === "da" ? "Vandstand" : "Water level"}
+                </Text>
+                {showWaterLevel && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
+              </Pressable>
+            </View>
+
+            {/* Additional layers section */}
+            <Text style={styles.overlaysSectionTitle}>{language === "da" ? "Ekstra lag" : "Additional layers"}</Text>
+            <View style={styles.overlaysSection}>
+              <Pressable
+                style={[styles.overlayRow, showSpots && styles.overlayRowChecked]}
                 onPress={() => setShowSpots((v) => !v)}
               >
-                <View
-                  style={[
-                    styles.toggleThumb,
-                    showSpots && styles.toggleThumbActive,
-                  ]}
-                />
+                <Ionicons name="location" size={20} color={showSpots ? THEME.graphYellow : THEME.textSec} />
+                <Text style={[styles.overlayRowText, showSpots && { color: THEME.graphYellow }]}>
+                  {t("showYourSpots")}
+                </Text>
+                {showSpots && <Ionicons name="checkmark" size={20} color={THEME.graphYellow} />}
               </Pressable>
-            </View>
 
-            {/* Ocean overlay toggles */}
-            <View style={styles.popupToggleRow}>
-              <View style={styles.popupToggleLeft}>
-                <Ionicons name="navigate" size={18} color={showCurrents ? "#22C55E" : THEME.textSec} />
-                <Text style={styles.popupToggleLabel}>{language === "da" ? "Havstrøm" : "Ocean current"}</Text>
-              </View>
               <Pressable
-                style={[
-                  styles.toggleTrack,
-                  showCurrents && styles.toggleTrackActive,
-                ]}
-                onPress={() => {
-                  const newVal = !showCurrents;
-                  if (newVal) {
-                    setShowSalinity(false);
-                    setShowWaves(false);
-                    clearGridCache();
-                  }
-                  setShowCurrents(newVal);
-                }}
-              >
-                <View
-                  style={[
-                    styles.toggleThumb,
-                    showCurrents && styles.toggleThumbActive,
-                  ]}
-                />
-              </Pressable>
-            </View>
-
-            <View style={styles.popupToggleRow}>
-              <View style={styles.popupToggleLeft}>
-                <Ionicons name="flask" size={18} color={showSalinity ? "#8B5CF6" : THEME.textSec} />
-                <Text style={styles.popupToggleLabel}>{language === "da" ? "Saltindhold" : "Salinity"}</Text>
-              </View>
-              <Pressable
-                style={[
-                  styles.toggleTrack,
-                  showSalinity && styles.toggleTrackActive,
-                ]}
-                onPress={() => {
-                  const newVal = !showSalinity;
-                  if (newVal) {
-                    setShowCurrents(false);
-                    setShowWaves(false);
-                    clearGridCache();
-                  }
-                  setShowSalinity(newVal);
-                }}
-              >
-                <View
-                  style={[
-                    styles.toggleThumb,
-                    showSalinity && styles.toggleThumbActive,
-                  ]}
-                />
-              </Pressable>
-            </View>
-
-            <View style={styles.popupToggleRow}>
-              <View style={styles.popupToggleLeft}>
-                <Ionicons name="water" size={18} color={showWaves ? "#06B6D4" : THEME.textSec} />
-                <Text style={styles.popupToggleLabel}>{language === "da" ? "Bølgehøjde" : "Wave height"}</Text>
-              </View>
-              <Pressable
-                style={[
-                  styles.toggleTrack,
-                  showWaves && styles.toggleTrackActive,
-                ]}
-                onPress={() => {
-                  const newVal = !showWaves;
-                  if (newVal) {
-                    setShowCurrents(false);
-                    setShowSalinity(false);
-                    clearGridCache();
-                  }
-                  setShowWaves(newVal);
-                }}
-              >
-                <View
-                  style={[
-                    styles.toggleThumb,
-                    showWaves && styles.toggleThumbActive,
-                  ]}
-                />
-              </Pressable>
-            </View>
-
-            {/* Fredningsbælter toggle */}
-            <View style={styles.popupToggleRow}>
-              <View style={styles.popupToggleLeft}>
-                <Ionicons name="warning" size={18} color={showFredningsbaelter ? "#EF4444" : THEME.textSec} />
-                <Text style={styles.popupToggleLabel}>{language === "da" ? "Fredningsbælter" : "Protection zones"}</Text>
-              </View>
-              <Pressable
-                style={[
-                  styles.toggleTrack,
-                  showFredningsbaelter && styles.toggleTrackActive,
-                ]}
+                style={[styles.overlayRow, showFredningsbaelter && styles.overlayRowChecked]}
                 onPress={() => setShowFredningsbaelter((v) => !v)}
               >
-                <View
-                  style={[
-                    styles.toggleThumb,
-                    showFredningsbaelter && styles.toggleThumbActive,
-                  ]}
-                />
+                <Ionicons name="warning" size={20} color={showFredningsbaelter ? "#EF4444" : THEME.textSec} />
+                <Text style={[styles.overlayRowText, showFredningsbaelter && { color: "#EF4444" }]}>
+                  {language === "da" ? "Fredningsbælter" : "Protection zones"}
+                </Text>
+                {showFredningsbaelter && <Ionicons name="checkmark" size={20} color="#EF4444" />}
               </Pressable>
-            </View>
 
-            {/* DMI Stationer toggle */}
-            <View style={styles.popupToggleRow}>
-              <View style={styles.popupToggleLeft}>
-                <Ionicons name="analytics" size={18} color={showDmiStations ? "#3B82F6" : THEME.textSec} />
-                <Text style={styles.popupToggleLabel}>{language === "da" ? "DMI Stationer" : "DMI Stations"}</Text>
-              </View>
               <Pressable
-                style={[
-                  styles.toggleTrack,
-                  showDmiStations && styles.toggleTrackActive,
-                ]}
+                style={[styles.overlayRow, showDmiStations && styles.overlayRowChecked]}
                 onPress={() => setShowDmiStations((v) => !v)}
               >
-                <View
-                  style={[
-                    styles.toggleThumb,
-                    showDmiStations && styles.toggleThumbActive,
-                  ]}
-                />
+                <Ionicons name="analytics" size={20} color={showDmiStations ? "#3B82F6" : THEME.textSec} />
+                <Text style={[styles.overlayRowText, showDmiStations && { color: "#3B82F6" }]}>
+                  {language === "da" ? "DMI Stationer" : "DMI Stations"}
+                </Text>
+                {showDmiStations && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
               </Pressable>
             </View>
           </View>
@@ -2065,6 +1999,7 @@ export default function SpotWeatherScreen() {
           </View>
         </View>
       </Modal>
+
     </>
   );
 }
@@ -2630,6 +2565,50 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
 
+  // Windy-style overlay section
+  overlaysSectionTitle: {
+    color: THEME.textSec,
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 16,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  overlaysSection: {
+    backgroundColor: "rgba(30, 30, 30, 0.8)",
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  overlayRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.06)",
+  },
+  overlayRowActive: {
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+  },
+  overlayRowChecked: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+  },
+  overlayRowText: {
+    flex: 1,
+    color: THEME.text,
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  overlayRowTextActive: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+
   // Coord badge
   coordBadge: {
     flexDirection: "row",
@@ -2967,33 +2946,22 @@ const styles = StyleSheet.create({
     fontSize: 9,
     marginTop: 4,
   },
-  forecastSliderWrapper: {
-    position: "absolute",
-    bottom: 120,
-    left: 20,
-    right: 20,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    borderRadius: 12,
-    padding: 12,
-  },
-  forecastSliderLabel: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  forecastSlider: {
-    width: "100%",
-    height: 30,
-  },
   oceanLoadingIndicator: {
     position: "absolute",
-    top: 60,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    borderRadius: 20,
-    padding: 8,
+    top: 80,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  oceanLoadingText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "500",
   },
 });
 

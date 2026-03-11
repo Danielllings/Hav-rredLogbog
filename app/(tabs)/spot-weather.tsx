@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams } from "expo-router";
 import {
   View,
   Text,
@@ -37,6 +38,7 @@ import SunCalc from "suncalc";
 
 import {
   getSpotForecastEdr,
+  warmUpDmiProxy,
   type EdrForecast,
   type Serie,
 } from "../../lib/dmi";
@@ -87,49 +89,68 @@ const MAP_SETTINGS_KEY = "spot_weather_map_settings";
 const MARKER_BOX_WIDTH = 140;
 const MARKER_BOX_HEIGHT = 80;
 
+// --- NERO TEMA ---
 const THEME = {
-  bg: "#121212",
-  card: "#1E1E1E",
+  bg: "#0D0D0F",
+  card: "#161618",
+  elevated: "#1E1E21",
+  cardBorder: "#2A2A2E",
+
   primary: "#FFFFFF",
+  primaryText: "#0D0D0F",
+
   text: "#FFFFFF",
-  textSec: "#A1A1AA",
-  inputBg: "#2C2C2E",
-  border: "#333333",
-  graphYellow: "#F59E0B",
-  danger: "#FF453A",
-  success: "#22C55E",
-  blue: "#5E9EFF",
+  textSec: "#A0A0A8",
+  textTertiary: "#606068",
+
+  accent: "#F59E0B",
+  accentMuted: "#F59E0B20",
+  accentBorder: "#F59E0B40",
+
+  inputBg: "#1E1E21",
+  border: "#2A2A2E",
+
+  danger: "#FF3B30",
+  dangerMuted: "#FF3B3015",
+  success: "#F59E0B",
+
+  // Graph colors
+  graphGreen: "#F59E0B",
+  graphBlue: "#3B82F6",
   cyan: "#40E0D0",
-  purple: "#C084FC",
+  purple: "#A855F7",
+
+  // Legacy
+  graphYellow: "#F59E0B",
 };
-const BEST_SPOT_COLOR = "#F4D03F";
+const BEST_SPOT_COLOR = "#F59E0B";
 
 
 // --- Kort stilarter (lys på Android for bedre synlighed) ---
-// --- Antracit / mørk grå stil ---
+// --- Antracit / mørk grå stil (land lyst, vand mørkt) ---
 const ANTHRACITE_MAP_STYLE = [
-  { elementType: "geometry", stylers: [{ color: "#2d2d2d" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8a8a8a" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#2d2d2d" }] },
+  { elementType: "geometry", stylers: [{ color: "#3a3a3a" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#9a9a9a" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#3a3a3a" }] },
   {
     featureType: "poi",
-    elementType: "geometry",
-    stylers: [{ color: "#353535" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#3a3a3a" }],
-  },
-  {
-    featureType: "road",
     elementType: "geometry",
     stylers: [{ color: "#404040" }],
   },
   {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#454545" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#4a4a4a" }],
+  },
+  {
     featureType: "road",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#2a2a2a" }],
+    stylers: [{ color: "#353535" }],
   },
   {
     featureType: "road",
@@ -154,12 +175,12 @@ const ANTHRACITE_MAP_STYLE = [
   {
     featureType: "road.highway",
     elementType: "geometry",
-    stylers: [{ color: "#4a4a4a" }],
+    stylers: [{ color: "#505050" }],
   },
   {
     featureType: "water",
     elementType: "geometry",
-    stylers: [{ color: "#1a1a2e" }],
+    stylers: [{ color: "#0f0f1a" }],
   },
 ];
 
@@ -279,8 +300,12 @@ const DARK_MAP_STYLE = [
 const MAP_STYLE = ANTHRACITE_MAP_STYLE;
 const MAP_UI_STYLE = "dark";
 const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+// CartoDB tile styles - swap between dark/light
 const CARTO_DARK_URL = "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png";
 const CARTO_DARK_LABELS_URL = "https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png";
+// Light alternatives (uncomment to use):
+// const CARTO_LIGHT_URL = "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png";
+// const CARTO_LIGHT_LABELS_URL = "https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png";
 
 const DEFAULT_REGION: Region = {
   latitude: 55.6761,
@@ -364,6 +389,7 @@ export default function SpotWeatherScreen() {
   const mapRef = useRef<MapView | null>(null);
   const { t, language } = useLanguage();
   const { theme } = useTheme();
+  const params = useLocalSearchParams<{ createSpotLat?: string; createSpotLng?: string }>();
 
   const [pos, setPos] = useState<LatLng | null>(null);
   const [showForecast, setShowForecast] = useState(false);
@@ -471,8 +497,11 @@ export default function SpotWeatherScreen() {
     }, [])
   );
 
-  // Load saved map settings on mount
+  // Load saved map settings on mount + warm up DMI proxy
   useEffect(() => {
+    // Pre-warm DMI proxy for hurtigere vejr-kald
+    warmUpDmiProxy();
+
     (async () => {
       try {
         const saved = await AsyncStorage.getItem(MAP_SETTINGS_KEY);
@@ -490,6 +519,36 @@ export default function SpotWeatherScreen() {
       }
     })();
   }, []);
+
+  // Handle incoming params to create spot at specific location
+  useEffect(() => {
+    if (params.createSpotLat && params.createSpotLng) {
+      const lat = parseFloat(params.createSpotLat);
+      const lng = parseFloat(params.createSpotLng);
+
+      if (!isNaN(lat) && !isNaN(lng)) {
+        // Set the position
+        setPos({ latitude: lat, longitude: lng });
+
+        // Animate map to location
+        if (mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: lat,
+            longitude: lng,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }, 500);
+        }
+
+        // Open the add spot modal after a short delay
+        setTimeout(() => {
+          setNewSpotName("");
+          setNewSpotCoastDir(null);
+          setAddSpotModalVisible(true);
+        }, 600);
+      }
+    }
+  }, [params.createSpotLat, params.createSpotLng]);
 
   // Save map settings when they change
   useEffect(() => {
@@ -512,12 +571,20 @@ export default function SpotWeatherScreen() {
     })();
   }, [mapLayer, showSpots, showFredningsbaelter, showDmiStations, settingsLoaded]);
 
-  // hent gemte spots ved mount
+  // Hent gemte spots ved mount + prefetch weather i baggrunden
   useEffect(() => {
     (async () => {
       try {
         const rows = await listSpots();
         setSpots(rows);
+
+        // OPTIMIZED: Prefetch weather for user spots in background (fire and forget)
+        // This makes spot selection feel faster
+        if (rows.length > 0) {
+          rows.slice(0, 5).forEach((s) => {
+            getSpotForecastEdr(s.lat, s.lng).catch(() => {});
+          });
+        }
       } catch (e) {
         // console.log("Could not load spots", e);
       }
@@ -562,27 +629,31 @@ export default function SpotWeatherScreen() {
     })();
   }, [spots]);
 
-  // Track slow loading for free location (> 5 sekunder)
+  // Track slow loading for free location (> 3 sekunder)
   useEffect(() => {
     if (!loading) {
       setLoadingSlow(false);
       return;
     }
-    const timer = setTimeout(() => setLoadingSlow(true), 5000);
+    const timer = setTimeout(() => setLoadingSlow(true), 3000);
     return () => clearTimeout(timer);
   }, [loading]);
 
-  // hent vejr når pos + showForecast er sat (fri lokation -> Vejr & Hav)
+  // Hent vejr når pos + showForecast er sat (fri lokation -> Vejr & Hav)
+  // OPTIMIZED: dmi.ts håndterer nu caching internt
   useEffect(() => {
     if (!pos || !showForecast) return;
+
+    let cancelled = false;
 
     (async () => {
       setLoading(true);
       setErrorMsg(null);
-      setEdrData(null);
 
       try {
         const edr = await getSpotForecastEdr(pos.latitude, pos.longitude);
+
+        if (cancelled) return;
 
         if (edr) {
           setEdrData(edr);
@@ -590,12 +661,18 @@ export default function SpotWeatherScreen() {
           setErrorMsg(t("noWeatherDataAvailable"));
         }
       } catch (e) {
-        // console.log("Error:", e);
+        if (cancelled) return;
         setErrorMsg(t("error"));
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [pos, showForecast]);
 
   // solopgang/solnedgang for aktiv position (fri lokation)
@@ -625,7 +702,8 @@ export default function SpotWeatherScreen() {
     }
   }, [showForecast, sheetAnim]);
 
-  // hent vejr + fiskestatistik for selectedSpot (spot-detail UI)
+  // Hent vejr + fiskestatistik for selectedSpot (spot-detail UI)
+  // OPTIMIZED: dmi.ts håndterer nu caching internt
   useEffect(() => {
     if (!selectedSpot) {
       setSpotEdrData(null);
@@ -641,43 +719,52 @@ export default function SpotWeatherScreen() {
       500
     );
 
+    let cancelled = false;
+
     (async () => {
       setSpotLoading(true);
       setSpotErrorMsg(null);
-      setSpotEdrData(null);
+
       try {
         const edr = await getSpotForecastEdr(p.latitude, p.longitude);
+        if (cancelled) return;
+
         if (!edr) {
           setSpotErrorMsg(t("noWeatherDataAvailable"));
         } else {
           setSpotEdrData(edr);
         }
       } catch (e) {
-        // console.log("Error spot-EDR:", e);
+        if (cancelled) return;
         setSpotErrorMsg(t("error"));
       } finally {
-        setSpotLoading(false);
+        if (!cancelled) {
+          setSpotLoading(false);
+        }
       }
     })();
 
     (async () => {
       try {
         const count = await getFishCountForSpot(selectedSpot.id);
-        setSpotFishCount(count);
+        if (!cancelled) setSpotFishCount(count);
       } catch (e) {
-        // console.log("Could not fetch fish count for spot", e);
-        setSpotFishCount(0);
+        if (!cancelled) setSpotFishCount(0);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedSpot]);
 
-  // Track slow loading for spot (> 5 sekunder)
+  // Track slow loading for spot (> 3 sekunder)
   useEffect(() => {
     if (!spotLoading) {
       setSpotLoadingSlow(false);
       return;
     }
-    const timer = setTimeout(() => setSpotLoadingSlow(true), 5000);
+    const timer = setTimeout(() => setSpotLoadingSlow(true), 3000);
     return () => clearTimeout(timer);
   }, [spotLoading]);
 
@@ -702,12 +789,14 @@ export default function SpotWeatherScreen() {
   const openRenameModal = (spot: SpotRow) => {
     setRenameTarget(spot);
     setRenameValue(spot.name || "");
+    setRenameCoastDir(spot.coastDirection || null);
     setRenameError(null);
   };
 
   const closeRenameModal = () => {
     if (renameLoading) return;
     setRenameTarget(null);
+    setRenameCoastDir(null);
     setRenameError(null);
   };
 
@@ -727,16 +816,17 @@ export default function SpotWeatherScreen() {
     setRenameLoading(true);
     setRenameError(null);
     try {
-      await updateSpot(renameTarget.id, { name: newName });
+      await updateSpot(renameTarget.id, { name: newName, coastDirection: renameCoastDir });
       setSpots((prev) =>
         prev.map((s) =>
-          s.id === renameTarget.id ? { ...s, name: newName } : s
+          s.id === renameTarget.id ? { ...s, name: newName, coastDirection: renameCoastDir } : s
         )
       );
       setSelectedSpot((prev) =>
-        prev && prev.id === renameTarget.id ? { ...prev, name: newName } : prev
+        prev && prev.id === renameTarget.id ? { ...prev, name: newName, coastDirection: renameCoastDir } : prev
       );
       setRenameTarget(null);
+      setRenameCoastDir(null);
     } catch (e) {
       // console.log("Could not rename spot", e);
       setRenameError(t("couldNotRenameSpot"));
@@ -848,28 +938,35 @@ export default function SpotWeatherScreen() {
       edrData.waveHeightSeries.length > 0 ||
       edrData.humiditySeries.length > 0 ||
       edrData.pressureSeries.length > 0 ||
-      edrData.cloudCoverSeries.length > 0);
+      edrData.cloudCoverSeries.length > 0 ||
+      (edrData.precipitationSeries && edrData.precipitationSeries.length > 0));
 
   const forecastDays = getForecastDays(edrData, t);
 
   // Check if any ocean overlay is active
   const oceanOverlayActive = showCurrents || showSalinity || showWaves || showWaterLevel || showWind;
-  // Always use dark background (CartoDB dark tiles as base)
-  const mapBackground = "#0a0a12";
+  // Use blue/anthracite background for orto, dark for standard
+  const mapBackground = mapLayer === "orto" ? "#0f1a2e" : "#0a0a12";
   // Dark styles for both map layers
   const currentMapStyle = mapLayer === "orto" ? DARK_MAP_STYLE : MAP_STYLE;
   const currentUiStyle = "dark";
-  const hasGoogleMapsKey =
-    !isAndroid ? true : Boolean(Constants.expoConfig?.extra?.mapsApiKey);
+  const hasGoogleMapsKey = Boolean(Constants.expoConfig?.extra?.mapsApiKey);
   const useStandardTileFallback =
     isAndroid && mapLayer === "standard" && !hasGoogleMapsKey;
-  // Use "none" mapType for standard mode (CartoDB dark tiles) or orto fallback on Android
-  const mapType =
-    (isAndroid && mapLayer === "orto") || mapLayer === "standard"
-      ? "none"
-      : "standard";
-  // Google Maps på begge platforme for at få custom styling (anthracit)
-  const mapProvider = hasGoogleMapsKey ? PROVIDER_GOOGLE : PROVIDER_DEFAULT;
+
+  // iOS: Use native Apple Maps dark mode for standard, "none" for orto (custom tiles)
+  // Android: Use "none" for both (CartoDB/orto tiles)
+  const mapType = isAndroid
+    ? "none"
+    : mapLayer === "standard"
+      ? "mutedStandard"
+      : "none";
+
+  // iOS: Use Apple Maps (DEFAULT) for standard mode to get native dark mode
+  // Android: Use Google Maps if available
+  const mapProvider = isAndroid
+    ? (hasGoogleMapsKey ? PROVIDER_GOOGLE : PROVIDER_DEFAULT)
+    : (mapLayer === "standard" ? PROVIDER_DEFAULT : PROVIDER_DEFAULT);
 
   return (
     <>
@@ -904,8 +1001,9 @@ export default function SpotWeatherScreen() {
             />
           )}
 
-          {/* Dark CartoDB tiles as default base map (standard mode) */}
-          {mapLayer !== "orto" && (
+          {/* Dark CartoDB tiles as default base map (standard mode) - Android only */}
+          {/* iOS uses native Apple Maps dark mode */}
+          {isAndroid && mapLayer !== "orto" && (
             <>
               <UrlTile
                 urlTemplate={CARTO_DARK_URL}
@@ -1099,18 +1197,19 @@ export default function SpotWeatherScreen() {
             style={styles.iconBtn}
             onPress={() => setSearchOpen(true)}
           >
-            <Ionicons name="search" size={20} color="#000" />
+            <Ionicons name="search" size={22} color={THEME.graphYellow} />
           </Pressable>
 
           <Pressable style={styles.iconBtn} onPress={useCurrentLocation}>
-            <Ionicons name="locate" size={20} color="#000" />
+            <Ionicons name="locate" size={22} color={THEME.graphYellow} />
           </Pressable>
 
+          {/* Extra layers button */}
           <Pressable
             style={styles.iconBtn}
             onPress={() => setLayerModalVisible(true)}
           >
-            <Ionicons name="layers" size={20} color="#000" />
+            <Ionicons name="layers" size={22} color={THEME.graphYellow} />
           </Pressable>
 
           {/* Ocean overlay button */}
@@ -1118,25 +1217,66 @@ export default function SpotWeatherScreen() {
             style={[styles.iconBtn, (showWind || showCurrents || showWaves || showSalinity || showWaterLevel) && styles.iconBtnActive]}
             onPress={() => setOverlayPopupVisible(true)}
           >
-            <Ionicons name="partly-sunny" size={20} color={(showWind || showCurrents || showWaves || showSalinity || showWaterLevel) ? "#FFF" : "#000"} />
+            <Ionicons name="partly-sunny" size={22} color={(showWind || showCurrents || showWaves || showSalinity || showWaterLevel) ? "#FFF" : THEME.graphYellow} />
           </Pressable>
 
           {(pos || selectedSpot) && (
             <Pressable style={styles.iconBtn} onPress={clearSelection}>
-              <Ionicons name="close" size={20} color="#000" />
+              <Ionicons name="close" size={22} color={THEME.graphYellow} />
             </Pressable>
           )}
         </View>
 
-        {/* Ocean overlay popup */}
+        {/* Floating Map Type Selector - Bottom Left (hidden when ocean overlay is active) */}
+        {!oceanOverlayActive && (
+          <View style={styles.mapTypeSelectorContainer}>
+            <Pressable
+              style={[styles.mapTypeCard, mapLayer === "standard" && styles.mapTypeCardActive]}
+              onPress={() => setMapLayer("standard")}
+            >
+              <View style={[styles.mapTypeIconWrap, mapLayer === "standard" && styles.mapTypeIconWrapActive]}>
+                <Ionicons name="map" size={18} color={mapLayer === "standard" ? "#000" : THEME.graphYellow} />
+              </View>
+              <Text style={[styles.mapTypeLabel, mapLayer === "standard" && styles.mapTypeLabelActive]}>
+                {language === "da" ? "Kort" : "Map"}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.mapTypeCard, mapLayer === "orto" && styles.mapTypeCardActive]}
+              onPress={() => setMapLayer("orto")}
+            >
+              <View style={[styles.mapTypeIconWrap, mapLayer === "orto" && styles.mapTypeIconWrapActive]}>
+                <Ionicons name="earth" size={18} color={mapLayer === "orto" ? "#000" : THEME.graphYellow} />
+              </View>
+              <Text style={[styles.mapTypeLabel, mapLayer === "orto" && styles.mapTypeLabelActive]}>
+                {language === "da" ? "Satellit" : "Satellite"}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Ocean overlay popup - Floating Card */}
         {overlayPopupVisible && (
-          <Pressable
-            style={styles.overlayPopupBackdrop}
-            onPress={() => setOverlayPopupVisible(false)}
-          >
-            <View style={styles.overlayPopup}>
+          <>
+            <Pressable
+              style={styles.oceanOverlayDismiss}
+              onPress={() => setOverlayPopupVisible(false)}
+            />
+            <View style={styles.oceanOverlayCard}>
+              <View style={styles.oceanOverlayHeader}>
+                <Text style={styles.oceanOverlayTitle}>
+                  {language === "da" ? "Hav & Vejr" : "Ocean & Weather"}
+                </Text>
+                <Pressable
+                  style={styles.oceanOverlayCloseBtn}
+                  onPress={() => setOverlayPopupVisible(false)}
+                >
+                  <Ionicons name="close" size={16} color={THEME.textSec} />
+                </Pressable>
+              </View>
+
               <Pressable
-                style={[styles.overlayPopupRow, showWind && styles.overlayPopupRowActive]}
+                style={styles.oceanOverlayRow}
                 onPress={() => {
                   setShowCurrents(false);
                   setShowSalinity(false);
@@ -1146,15 +1286,15 @@ export default function SpotWeatherScreen() {
                   setOverlayPopupVisible(false);
                 }}
               >
-                <Ionicons name="flag" size={18} color={showWind ? "#000" : "#F59E0B"} />
-                <Text style={[styles.overlayPopupText, showWind && styles.overlayPopupTextActive]}>
-                  {language === "da" ? "Vind" : "Wind"}
-                </Text>
-                {showWind && <Ionicons name="checkmark" size={18} color="#000" />}
+                <View style={[styles.oceanOverlayIcon, showWind && styles.oceanOverlayIconActive]}>
+                  <Ionicons name="flag" size={16} color={showWind ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.oceanOverlayLabel}>{language === "da" ? "Vind" : "Wind"}</Text>
+                {showWind && <Ionicons name="checkmark" size={18} color={THEME.graphYellow} />}
               </Pressable>
 
               <Pressable
-                style={[styles.overlayPopupRow, showCurrents && styles.overlayPopupRowActive]}
+                style={styles.oceanOverlayRow}
                 onPress={() => {
                   setShowSalinity(false);
                   setShowWaves(false);
@@ -1164,15 +1304,15 @@ export default function SpotWeatherScreen() {
                   setOverlayPopupVisible(false);
                 }}
               >
-                <Ionicons name="navigate" size={18} color={showCurrents ? "#000" : "#22C55E"} />
-                <Text style={[styles.overlayPopupText, showCurrents && styles.overlayPopupTextActive]}>
-                  {language === "da" ? "Havstrøm" : "Current"}
-                </Text>
-                {showCurrents && <Ionicons name="checkmark" size={18} color="#000" />}
+                <View style={[styles.oceanOverlayIcon, showCurrents && styles.oceanOverlayIconActive]}>
+                  <Ionicons name="navigate" size={16} color={showCurrents ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.oceanOverlayLabel}>{language === "da" ? "Havstrøm" : "Current"}</Text>
+                {showCurrents && <Ionicons name="checkmark" size={18} color={THEME.graphYellow} />}
               </Pressable>
 
               <Pressable
-                style={[styles.overlayPopupRow, showWaves && styles.overlayPopupRowActive]}
+                style={styles.oceanOverlayRow}
                 onPress={() => {
                   setShowCurrents(false);
                   setShowSalinity(false);
@@ -1182,15 +1322,15 @@ export default function SpotWeatherScreen() {
                   setOverlayPopupVisible(false);
                 }}
               >
-                <Ionicons name="water" size={18} color={showWaves ? "#000" : "#06B6D4"} />
-                <Text style={[styles.overlayPopupText, showWaves && styles.overlayPopupTextActive]}>
-                  {language === "da" ? "Bølger" : "Waves"}
-                </Text>
-                {showWaves && <Ionicons name="checkmark" size={18} color="#06B6D4" />}
+                <View style={[styles.oceanOverlayIcon, showWaves && styles.oceanOverlayIconActive]}>
+                  <Ionicons name="water" size={16} color={showWaves ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.oceanOverlayLabel}>{language === "da" ? "Bølger" : "Waves"}</Text>
+                {showWaves && <Ionicons name="checkmark" size={18} color={THEME.graphYellow} />}
               </Pressable>
 
               <Pressable
-                style={[styles.overlayPopupRow, showSalinity && styles.overlayPopupRowActive]}
+                style={styles.oceanOverlayRow}
                 onPress={() => {
                   setShowCurrents(false);
                   setShowWaves(false);
@@ -1200,15 +1340,15 @@ export default function SpotWeatherScreen() {
                   setOverlayPopupVisible(false);
                 }}
               >
-                <Ionicons name="flask" size={18} color={showSalinity ? "#000" : "#8B5CF6"} />
-                <Text style={[styles.overlayPopupText, showSalinity && styles.overlayPopupTextActive]}>
-                  {language === "da" ? "Saltindhold" : "Salinity"}
-                </Text>
-                {showSalinity && <Ionicons name="checkmark" size={18} color="#000" />}
+                <View style={[styles.oceanOverlayIcon, showSalinity && styles.oceanOverlayIconActive]}>
+                  <Ionicons name="flask" size={16} color={showSalinity ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.oceanOverlayLabel}>{language === "da" ? "Saltindhold" : "Salinity"}</Text>
+                {showSalinity && <Ionicons name="checkmark" size={18} color={THEME.graphYellow} />}
               </Pressable>
 
               <Pressable
-                style={[styles.overlayPopupRow, showWaterLevel && styles.overlayPopupRowActive]}
+                style={styles.oceanOverlayRow}
                 onPress={() => {
                   setShowCurrents(false);
                   setShowSalinity(false);
@@ -1218,14 +1358,33 @@ export default function SpotWeatherScreen() {
                   setOverlayPopupVisible(false);
                 }}
               >
-                <Ionicons name="trending-up" size={18} color={showWaterLevel ? "#000" : "#3B82F6"} />
-                <Text style={[styles.overlayPopupText, showWaterLevel && styles.overlayPopupTextActive]}>
-                  {language === "da" ? "Vandstand" : "Water level"}
-                </Text>
-                {showWaterLevel && <Ionicons name="checkmark" size={18} color="#000" />}
+                <View style={[styles.oceanOverlayIcon, showWaterLevel && styles.oceanOverlayIconActive]}>
+                  <Ionicons name="trending-up" size={16} color={showWaterLevel ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.oceanOverlayLabel}>{language === "da" ? "Vandstand" : "Water level"}</Text>
+                {showWaterLevel && <Ionicons name="checkmark" size={18} color={THEME.graphYellow} />}
               </Pressable>
+
+              {(showWind || showCurrents || showWaves || showSalinity || showWaterLevel) && (
+                <Pressable
+                  style={[styles.oceanOverlayRow, { borderBottomWidth: 0 }]}
+                  onPress={() => {
+                    setShowCurrents(false);
+                    setShowSalinity(false);
+                    setShowWaves(false);
+                    setShowWaterLevel(false);
+                    setShowWind(false);
+                    setOverlayPopupVisible(false);
+                  }}
+                >
+                  <View style={styles.oceanOverlayIconOff}>
+                    <Ionicons name="eye-off" size={16} color="#666" />
+                  </View>
+                  <Text style={styles.oceanOverlayLabelOff}>{language === "da" ? "Sluk alle" : "Turn off"}</Text>
+                </Pressable>
+              )}
             </View>
-          </Pressable>
+          </>
         )}
 
         {/* Lille UI når en lokation er valgt på kortet (ikke spot) */}
@@ -1251,7 +1410,7 @@ export default function SpotWeatherScreen() {
                   setShowForecast(true);
                 }}
               >
-                <Ionicons name="cloud" size={16} color="#000" />
+                <Ionicons name="cloud" size={16} color={THEME.graphYellow} />
                 <Text style={styles.locationPrimaryBtnText}>{t("getWeather")}</Text>
               </Pressable>
 
@@ -1263,7 +1422,7 @@ export default function SpotWeatherScreen() {
                   setAddSpotModalVisible(true);
                 }}
               >
-                <Ionicons name="bookmark-outline" size={16} color={THEME.text} />
+                <Ionicons name="bookmark-outline" size={16} color={THEME.graphYellow} />
                 <Text style={styles.locationSecondaryBtnText}>{t("saveSpot")}</Text>
               </Pressable>
             </View>
@@ -1428,6 +1587,20 @@ export default function SpotWeatherScreen() {
                       label={t("cloudCover")}
                       unit="%"
                       color={THEME.textSec}
+                      showWeatherIcons={true}
+                      iconType="cloud"
+                    />
+                  )}
+                  {edrData.precipitationSeries && edrData.precipitationSeries.length > 0 && (
+                    <ScrollableGraph
+                      series={edrData.precipitationSeries}
+                      label={t("precipitation")}
+                      unit="mm/h"
+                      color="#60A5FA"
+                      showAsBars={true}
+                      pixelsPerPoint={35}
+                      showWeatherIcons={true}
+                      iconType="rain"
                     />
                   )}
                   {edrData.waveHeightSeries.length > 0 && (
@@ -1454,111 +1627,65 @@ export default function SpotWeatherScreen() {
         )}
       </View>
 
-      {/* Layer-modal */}
-      <Modal
-        transparent
-        visible={layerModalVisible}
-        animationType="fade"
-        onRequestClose={() => setLayerModalVisible(false)}
-      >
-        <View style={styles.popupBackdrop}>
-          <View style={styles.popupCard}>
-            {/* Header */}
-            <View style={styles.popupHeader}>
-              <View style={styles.popupTitleRow}>
-                <View style={styles.popupIconCircle}>
-                  <Ionicons name="layers" size={20} color="#000" />
-                </View>
-                <Text style={styles.popupTitle}>{t("mapLayer")}</Text>
-              </View>
+      {/* Layer settings - Floating Card (same style as Ocean overlay) */}
+      {layerModalVisible && (
+        <>
+          <Pressable
+            style={styles.oceanOverlayDismiss}
+            onPress={() => setLayerModalVisible(false)}
+          />
+          <View style={[styles.oceanOverlayCard, { top: Platform.OS === "ios" ? 120 : 100 }]}>
+            <View style={styles.oceanOverlayHeader}>
+              <Text style={styles.oceanOverlayTitle}>
+                {language === "da" ? "Kortindstillinger" : "Map Settings"}
+              </Text>
               <Pressable
-                style={styles.popupCloseBtn}
+                style={styles.oceanOverlayCloseBtn}
                 onPress={() => setLayerModalVisible(false)}
               >
-                <Ionicons name="close" size={20} color={THEME.textSec} />
+                <Ionicons name="close" size={16} color={THEME.textSec} />
               </Pressable>
             </View>
 
-            {/* Options */}
-            <View style={styles.popupSection}>
-              <Pressable
-                style={[
-                  styles.layerOptionCard,
-                  mapLayer === "standard" && styles.layerOptionCardActive,
-                ]}
-                onPress={() => {
-                  setMapLayer("standard");
-                  setLayerModalVisible(false);
-                }}
-              >
-                <View style={styles.layerOptionLeft}>
-                  <Ionicons name="map-outline" size={20} color={mapLayer === "standard" ? THEME.graphYellow : THEME.textSec} />
-                  <Text style={[styles.layerOptionLabel, mapLayer === "standard" && styles.layerOptionLabelActive]}>{t("standardMap")}</Text>
-                </View>
-                {mapLayer === "standard" && (
-                  <Ionicons name="checkmark-circle" size={22} color={THEME.graphYellow} />
-                )}
-              </Pressable>
+            <Pressable
+              style={styles.oceanOverlayRow}
+              onPress={() => setShowSpots((v) => !v)}
+            >
+              <View style={[styles.oceanOverlayIcon, showSpots && styles.oceanOverlayIconActive]}>
+                <Ionicons name="location" size={16} color={showSpots ? "#000" : THEME.graphYellow} />
+              </View>
+              <Text style={styles.oceanOverlayLabel}>{t("showYourSpots")}</Text>
+              {showSpots && <Ionicons name="checkmark" size={18} color={THEME.graphYellow} />}
+            </Pressable>
 
-              <Pressable
-                style={[
-                  styles.layerOptionCard,
-                  mapLayer === "orto" && styles.layerOptionCardActive,
-                ]}
-                onPress={() => {
-                  setMapLayer("orto");
-                  setLayerModalVisible(false);
-                }}
-              >
-                <View style={styles.layerOptionLeft}>
-                  <Ionicons name="earth" size={20} color={mapLayer === "orto" ? THEME.graphYellow : THEME.textSec} />
-                  <Text style={[styles.layerOptionLabel, mapLayer === "orto" && styles.layerOptionLabelActive]}>{t("orthoMap")}</Text>
-                </View>
-                {mapLayer === "orto" && (
-                  <Ionicons name="checkmark-circle" size={22} color={THEME.graphYellow} />
-                )}
-              </Pressable>
-            </View>
+            <Pressable
+              style={styles.oceanOverlayRow}
+              onPress={() => setShowFredningsbaelter((v) => !v)}
+            >
+              <View style={[styles.oceanOverlayIcon, showFredningsbaelter && { backgroundColor: "#EF4444" }]}>
+                <Ionicons name="warning" size={16} color={showFredningsbaelter ? "#FFF" : "#EF4444"} />
+              </View>
+              <Text style={styles.oceanOverlayLabel}>
+                {language === "da" ? "Fredningsbælter" : "Protection zones"}
+              </Text>
+              {showFredningsbaelter && <Ionicons name="checkmark" size={18} color="#EF4444" />}
+            </Pressable>
 
-            {/* Additional layers section */}
-            <Text style={styles.overlaysSectionTitle}>{language === "da" ? "Ekstra lag" : "Additional layers"}</Text>
-            <View style={styles.overlaysSection}>
-              <Pressable
-                style={[styles.overlayRow, showSpots && styles.overlayRowChecked]}
-                onPress={() => setShowSpots((v) => !v)}
-              >
-                <Ionicons name="location" size={20} color={showSpots ? THEME.graphYellow : THEME.textSec} />
-                <Text style={[styles.overlayRowText, showSpots && { color: THEME.graphYellow }]}>
-                  {t("showYourSpots")}
-                </Text>
-                {showSpots && <Ionicons name="checkmark" size={20} color={THEME.graphYellow} />}
-              </Pressable>
-
-              <Pressable
-                style={[styles.overlayRow, showFredningsbaelter && styles.overlayRowChecked]}
-                onPress={() => setShowFredningsbaelter((v) => !v)}
-              >
-                <Ionicons name="warning" size={20} color={showFredningsbaelter ? "#EF4444" : THEME.textSec} />
-                <Text style={[styles.overlayRowText, showFredningsbaelter && { color: "#EF4444" }]}>
-                  {language === "da" ? "Fredningsbælter" : "Protection zones"}
-                </Text>
-                {showFredningsbaelter && <Ionicons name="checkmark" size={20} color="#EF4444" />}
-              </Pressable>
-
-              <Pressable
-                style={[styles.overlayRow, showDmiStations && styles.overlayRowChecked]}
-                onPress={() => setShowDmiStations((v) => !v)}
-              >
-                <Ionicons name="analytics" size={20} color={showDmiStations ? "#3B82F6" : THEME.textSec} />
-                <Text style={[styles.overlayRowText, showDmiStations && { color: "#3B82F6" }]}>
-                  {language === "da" ? "DMI Stationer" : "DMI Stations"}
-                </Text>
-                {showDmiStations && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
-              </Pressable>
-            </View>
+            <Pressable
+              style={[styles.oceanOverlayRow, { borderBottomWidth: 0 }]}
+              onPress={() => setShowDmiStations((v) => !v)}
+            >
+              <View style={[styles.oceanOverlayIcon, showDmiStations && { backgroundColor: "#3B82F6" }]}>
+                <Ionicons name="analytics" size={16} color={showDmiStations ? "#FFF" : "#3B82F6"} />
+              </View>
+              <Text style={styles.oceanOverlayLabel}>
+                {language === "da" ? "DMI Stationer" : "DMI Stations"}
+              </Text>
+              {showDmiStations && <Ionicons name="checkmark" size={18} color="#3B82F6" />}
+            </Pressable>
           </View>
-        </View>
-      </Modal>
+        </>
+      )}
 
       {/* Fuldskærms søge-overlay */}
       <Modal
@@ -1573,7 +1700,7 @@ export default function SpotWeatherScreen() {
             <View style={styles.popupHeader}>
               <View style={styles.popupTitleRow}>
                 <View style={styles.popupIconCircle}>
-                  <Ionicons name="search" size={20} color="#000" />
+                  <Ionicons name="search" size={20} color={THEME.graphYellow} />
                 </View>
                 <Text style={styles.popupTitle}>{t("searchPlace")}</Text>
               </View>
@@ -1605,10 +1732,10 @@ export default function SpotWeatherScreen() {
               disabled={searchLoading}
             >
               {searchLoading ? (
-                <ActivityIndicator color="#000" />
+                <ActivityIndicator color={THEME.graphYellow} />
               ) : (
                 <>
-                  <Ionicons name="search" size={18} color="#000" />
+                  <Ionicons name="search" size={18} color={THEME.graphYellow} />
                   <Text style={styles.popupPrimaryBtnText}>{t("search")}</Text>
                 </>
               )}
@@ -1630,7 +1757,7 @@ export default function SpotWeatherScreen() {
               {/* Header */}
               <View style={styles.popupHeader}>
                 <View style={styles.popupTitleRow}>
-                  <View style={[styles.popupIconCircle, { backgroundColor: THEME.success }]}>
+                  <View style={[styles.popupIconCircle, { backgroundColor: THEME.graphYellow }]}>
                     <Ionicons name="add" size={20} color="#000" />
                   </View>
                   <Text style={styles.popupTitle}>{t("addSpot")}</Text>
@@ -1663,11 +1790,38 @@ export default function SpotWeatherScreen() {
                 />
               </View>
 
+              {/* Coast Direction Selector */}
+              <View style={styles.coastDirSection}>
+                <View style={styles.coastDirHeader}>
+                  <Ionicons name="compass-outline" size={16} color={THEME.graphYellow} />
+                  <Text style={styles.coastDirTitle}>{language === "da" ? "Kystretning" : "Coast Direction"}</Text>
+                </View>
+                <Text style={styles.coastDirDesc}>
+                  {language === "da" ? "Hvilken retning vender vandet?" : "Which direction does the water face?"}
+                </Text>
+                <View style={styles.coastDirGrid}>
+                  {(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const).map((dir) => (
+                    <Pressable
+                      key={dir}
+                      style={[styles.coastDirBtn, newSpotCoastDir === dir && styles.coastDirBtnActive]}
+                      onPress={() => setNewSpotCoastDir(newSpotCoastDir === dir ? null : dir)}
+                    >
+                      <Text style={[styles.coastDirBtnText, newSpotCoastDir === dir && styles.coastDirBtnTextActive]}>
+                        {dir}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
               {/* Buttons */}
               <View style={styles.popupBtnRow}>
                 <Pressable
                   style={styles.popupSecondaryBtn}
-                  onPress={() => setAddSpotModalVisible(false)}
+                  onPress={() => {
+                    setAddSpotModalVisible(false);
+                    setNewSpotCoastDir(null);
+                  }}
                 >
                   <Text style={styles.popupSecondaryBtnText}>{t("cancel")}</Text>
                 </Pressable>
@@ -1681,10 +1835,12 @@ export default function SpotWeatherScreen() {
                         name: newSpotName.trim() || t("spot"),
                         lat: pos.latitude,
                         lng: pos.longitude,
+                        coastDirection: newSpotCoastDir,
                       });
                       setSpots((prev) => [created, ...prev]);
                       setAddSpotModalVisible(false);
                       setShowLocationActions(false);
+                      setNewSpotCoastDir(null);
                     } catch (e) {
                       // console.log("Could not create spot", e);
                     } finally {
@@ -1693,10 +1849,10 @@ export default function SpotWeatherScreen() {
                   }}
                 >
                   {addingSpot ? (
-                    <ActivityIndicator color="#000" />
+                    <ActivityIndicator color={THEME.graphYellow} />
                   ) : (
                     <>
-                      <Ionicons name="checkmark" size={18} color="#000" />
+                      <Ionicons name="checkmark" size={18} color={THEME.graphYellow} />
                       <Text style={styles.popupPrimaryBtnText}>{t("saveSpot")}</Text>
                     </>
                   )}
@@ -1735,7 +1891,7 @@ export default function SpotWeatherScreen() {
                 style={styles.popupPrimaryBtn}
                 onPress={() => setPermissionModalVisible(false)}
               >
-                <Ionicons name="checkmark" size={18} color="#000" />
+                <Ionicons name="checkmark" size={18} color={THEME.graphYellow} />
                 <Text style={styles.popupPrimaryBtnText}>OK</Text>
               </Pressable>
             </View>
@@ -1770,18 +1926,17 @@ export default function SpotWeatherScreen() {
                   </Text>
                 </View>
                 <View style={styles.spotSheetActions}>
-                  {isAndroid && (
-                    <Pressable
-                      style={styles.spotEditBtn}
-                      onPress={() => {
-                        if (renameLoading || spotDeleteLoading) return;
-                        setRenameTarget(selectedSpot);
-                        setRenameValue(selectedSpot.name || "");
-                      }}
-                    >
-                      <Ionicons name="create-outline" size={18} color="#000" />
-                    </Pressable>
-                  )}
+                  <Pressable
+                    style={styles.spotEditBtn}
+                    onPress={() => {
+                      if (renameLoading || spotDeleteLoading) return;
+                      const spotToEdit = selectedSpot;
+                      setSelectedSpot(null);
+                      setTimeout(() => openRenameModal(spotToEdit), 100);
+                    }}
+                  >
+                    <Ionicons name="create-outline" size={18} color="#000" />
+                  </Pressable>
                   <Pressable
                     style={styles.spotCloseBtn}
                     onPress={() => setSelectedSpot(null)}
@@ -1886,6 +2041,20 @@ export default function SpotWeatherScreen() {
                         label={t("cloudCover")}
                         unit="%"
                         color={THEME.textSec}
+                        showWeatherIcons={true}
+                        iconType="cloud"
+                      />
+                    )}
+                    {spotEdrData.precipitationSeries && spotEdrData.precipitationSeries.length > 0 && (
+                      <ScrollableGraph
+                        series={spotEdrData.precipitationSeries}
+                        label={t("precipitation")}
+                        unit="mm/h"
+                        color="#60A5FA"
+                        showAsBars={true}
+                        pixelsPerPoint={35}
+                        showWeatherIcons={true}
+                        iconType="rain"
                       />
                     )}
                     {spotEdrData.waveHeightSeries.length > 0 && (
@@ -1963,6 +2132,31 @@ export default function SpotWeatherScreen() {
               />
             </View>
 
+            {/* Coast Direction Selector */}
+            <View style={styles.coastDirSection}>
+              <View style={styles.coastDirHeader}>
+                <Ionicons name="compass-outline" size={16} color={THEME.graphYellow} />
+                <Text style={styles.coastDirTitle}>{language === "da" ? "Kystretning" : "Coast Direction"}</Text>
+              </View>
+              <Text style={styles.coastDirDesc}>
+                {language === "da" ? "Hvilken retning vender vandet?" : "Which direction does the water face?"}
+              </Text>
+              <View style={styles.coastDirGrid}>
+                {(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const).map((dir) => (
+                  <Pressable
+                    key={dir}
+                    style={[styles.coastDirBtn, renameCoastDir === dir && styles.coastDirBtnActive]}
+                    onPress={() => setRenameCoastDir(renameCoastDir === dir ? null : dir)}
+                    disabled={renameLoading}
+                  >
+                    <Text style={[styles.coastDirBtnText, renameCoastDir === dir && styles.coastDirBtnTextActive]}>
+                      {dir}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
             {renameError && (
               <View style={styles.popupErrorBox}>
                 <Ionicons name="alert-circle" size={16} color={THEME.danger} />
@@ -1985,10 +2179,10 @@ export default function SpotWeatherScreen() {
                 disabled={renameLoading}
               >
                 {renameLoading ? (
-                  <ActivityIndicator color="#000" />
+                  <ActivityIndicator color={THEME.graphYellow} />
                 ) : (
                   <>
-                    <Ionicons name="checkmark" size={18} color="#000" />
+                    <Ionicons name="checkmark" size={18} color={THEME.graphYellow} />
                     <Text style={styles.popupPrimaryBtnText}>{t("saveName")}</Text>
                   </>
                 )}
@@ -2229,19 +2423,21 @@ function SpotDeleteConfirm({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: THEME.bg },
 
-  // Top buttons
+  // Top buttons - Modern glassmorphism with green accent
   topButtonsRow: {
     position: "absolute",
     top: Platform.OS === "ios" ? 60 : 40,
     right: 16,
     flexDirection: "column",
-    gap: 10,
+    gap: 12,
   },
   iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: THEME.graphYellow,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.3)",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -2253,51 +2449,150 @@ const styles = StyleSheet.create({
 
   // Active state for icon buttons
   iconBtnActive: {
-    backgroundColor: "#3B82F6",
+    backgroundColor: THEME.accentMuted,
+    borderColor: THEME.accent,
+    shadowColor: THEME.accent,
+    shadowOpacity: 0.3,
   },
 
-  // Ocean overlay popup
-  overlayPopupBackdrop: {
+  // Floating Map Type Selector - Premium design
+  mapTypeSelectorContainer: {
+    position: "absolute",
+    bottom: 24,
+    left: 16,
+    flexDirection: "row",
+    gap: 8,
+  },
+  mapTypeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+    gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  mapTypeCardActive: {
+    backgroundColor: THEME.accentMuted,
+    borderColor: THEME.accentBorder,
+    borderWidth: 1.5,
+  },
+  mapTypeIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapTypeIconWrapActive: {
+    backgroundColor: THEME.accent,
+  },
+  mapTypeLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: THEME.textSec,
+    letterSpacing: 0.2,
+  },
+  mapTypeLabelActive: {
+    color: THEME.text,
+    fontWeight: "700",
+  },
+
+  // Floating Ocean Overlay Card - Premium compact design
+  oceanOverlayDismiss: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 99,
   },
-  overlayPopup: {
+  oceanOverlayCard: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 270 : 250,
-    right: 16,
-    backgroundColor: "rgba(30, 30, 30, 0.95)",
+    top: Platform.OS === "ios" ? 180 : 160,
+    right: 70,
+    backgroundColor: "rgba(20, 20, 25, 0.98)",
     borderRadius: 16,
-    paddingVertical: 8,
-    minWidth: 160,
+    padding: 6,
+    minWidth: 180,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
-    zIndex: 101,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 10,
   },
-  overlayPopupRow: {
+  oceanOverlayHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
   },
-  overlayPopupRowActive: {
-    backgroundColor: THEME.graphYellow,
-  },
-  overlayPopupText: {
-    flex: 1,
+  oceanOverlayTitle: {
+    fontSize: 13,
+    fontWeight: "700",
     color: THEME.text,
-    fontSize: 14,
-    fontWeight: "500",
+    letterSpacing: 0.3,
   },
-  overlayPopupTextActive: {
-    color: "#000",
+  oceanOverlayCloseBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  oceanOverlayRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.05)",
+  },
+  oceanOverlayIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  oceanOverlayIconActive: {
+    backgroundColor: THEME.accentMuted,
+  },
+  oceanOverlayIconOff: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  oceanOverlayLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "500",
+    color: THEME.text,
+  },
+  oceanOverlayLabelOff: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#666",
   },
 
   // Pin marker
@@ -2305,7 +2600,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: THEME.accent,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
@@ -2323,69 +2618,74 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
 
-  // Hint card
+  // Hint card - Modern glassmorphism
   hintCard: {
     position: "absolute",
     left: 20,
     right: 20,
     bottom: "5%",
-    backgroundColor: THEME.card,
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: "rgba(15, 15, 20, 0.9)",
+    borderRadius: 20,
+    padding: 18,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: "rgba(255, 255, 255, 0.12)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 12,
     elevation: 6,
   },
   hintIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
   hintText: {
     flex: 1,
-    color: THEME.textSec,
-    fontSize: 13,
-    lineHeight: 18,
+    color: THEME.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "500",
   },
 
-  // Location action card
+  // Location action card - Modern glassmorphism
   locationCard: {
     position: "absolute",
     left: 20,
     right: 20,
     bottom: "5%",
-    backgroundColor: THEME.card,
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: "rgba(15, 15, 20, 0.92)",
+    borderRadius: 24,
+    padding: 18,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: "rgba(255, 255, 255, 0.12)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
-    shadowRadius: 10,
+    shadowRadius: 16,
     elevation: 8,
   },
   locationCardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     marginBottom: 16,
   },
   locationCardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2411,45 +2711,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: THEME.graphYellow,
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: 8,
+    backgroundColor: THEME.accent,
+    height: 56,
+    borderRadius: 16,
   },
   locationPrimaryBtnText: {
-    color: "#000",
-    fontSize: 14,
-    fontWeight: "700",
+    color: THEME.primaryText,
+    fontSize: 15,
+    fontWeight: "600",
   },
   locationSecondaryBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: THEME.inputBg,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.border,
+    gap: 8,
+    backgroundColor: THEME.elevated,
+    height: 56,
+    borderRadius: 16,
   },
   locationSecondaryBtnText: {
-    color: THEME.text,
-    fontSize: 14,
+    color: THEME.textSec,
+    fontSize: 15,
     fontWeight: "600",
   },
 
-  // Weather bottom sheet
+  // Weather bottom sheet - Modern glassmorphism
   weatherSheet: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: THEME.card,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: "rgba(15, 15, 20, 0.97)",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     borderTopWidth: 1,
-    borderColor: THEME.border,
+    borderColor: "rgba(255, 255, 255, 0.1)",
     paddingTop: 8,
     maxHeight: "75%",
   },
@@ -2458,19 +2756,21 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   weatherSheetHandle: {
-    width: 40,
+    width: 48,
     height: 4,
-    backgroundColor: "#444",
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
     borderRadius: 2,
   },
   weatherSheetCloseBtn: {
     position: "absolute",
     right: 16,
     top: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: THEME.inputBg,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2484,7 +2784,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2503,11 +2803,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: THEME.inputBg,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.border,
+    backgroundColor: THEME.elevated,
+    padding: 14,
+    borderRadius: 16,
   },
   sunTimeLabel: {
     color: THEME.textSec,
@@ -2555,12 +2853,10 @@ const styles = StyleSheet.create({
   },
   dayForecastRow: {
     flexDirection: "row",
-    backgroundColor: THEME.inputBg,
+    backgroundColor: THEME.elevated,
     borderRadius: 16,
-    padding: 12,
+    padding: 14,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: THEME.border,
   },
   dayForecastItem: {
     flex: 1,
@@ -2585,8 +2881,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     padding: 16,
-    backgroundColor: THEME.inputBg,
-    borderRadius: 12,
+    backgroundColor: THEME.elevated,
+    borderRadius: 16,
     marginTop: 8,
   },
   weatherLoadingText: {
@@ -2617,111 +2913,170 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Popup/Modal styles (shared)
+  // Popup/Modal styles (shared) - Modern glassmorphism
   popupBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.85)",
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
     justifyContent: "center",
     padding: 20,
   },
   popupCard: {
-    backgroundColor: THEME.card,
-    borderRadius: 24,
-    padding: 20,
+    backgroundColor: "rgba(20, 20, 25, 0.98)",
+    borderRadius: 28,
+    padding: 22,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
   },
   popupHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 18,
   },
   popupTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
   },
   popupIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: THEME.graphYellow,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
   },
   popupTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     color: THEME.text,
+    letterSpacing: 0.3,
   },
   popupCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: THEME.inputBg,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
   popupDescription: {
-    color: THEME.textSec,
+    color: "rgba(255, 255, 255, 0.7)",
     fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
+    lineHeight: 21,
+    marginBottom: 18,
   },
   popupSection: {
-    gap: 8,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 18,
   },
   popupInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: THEME.inputBg,
-    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: THEME.border,
-    paddingHorizontal: 14,
-    marginBottom: 16,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+    paddingHorizontal: 16,
+    marginBottom: 18,
   },
   popupInput: {
     flex: 1,
     color: THEME.text,
-    fontSize: 15,
-    paddingVertical: 14,
+    fontSize: 16,
+    paddingVertical: 16,
   },
   popupBtnRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
   },
   popupPrimaryBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: THEME.graphYellow,
-    paddingVertical: 14,
-    borderRadius: 14,
+    gap: 8,
+    backgroundColor: THEME.accent,
+    height: 56,
+    borderRadius: 16,
   },
   popupPrimaryBtnText: {
-    color: "#000",
-    fontSize: 15,
-    fontWeight: "700",
+    color: THEME.primaryText,
+    fontSize: 16,
+    fontWeight: "600",
   },
   popupSecondaryBtn: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: THEME.inputBg,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: "rgba(255, 255, 255, 0.15)",
   },
   popupSecondaryBtnText: {
-    color: THEME.text,
-    fontSize: 15,
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 16,
     fontWeight: "600",
   },
+
+  // Coast Direction Selector
+  coastDirSection: {
+    marginBottom: 18,
+  },
+  coastDirHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  coastDirTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: THEME.text,
+  },
+  coastDirDesc: {
+    fontSize: 12,
+    color: THEME.textSec,
+    marginBottom: 12,
+  },
+  coastDirGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  coastDirBtn: {
+    width: 44,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  coastDirBtnActive: {
+    backgroundColor: THEME.accentMuted,
+    borderColor: THEME.accentBorder,
+    borderWidth: 1.5,
+  },
+  coastDirBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: THEME.textSec,
+  },
+  coastDirBtnTextActive: {
+    color: THEME.text,
+  },
+
   popupDangerBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -2752,11 +3107,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: THEME.inputBg,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: THEME.border,
+    backgroundColor: THEME.elevated,
+    padding: 16,
+    borderRadius: 16,
   },
   popupToggleLeft: {
     flexDirection: "row",
@@ -2769,100 +3122,99 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Layer option cards
+  // Layer option cards - Modern glassmorphism
   layerOptionCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: THEME.inputBg,
-    padding: 14,
-    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    padding: 16,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   layerOptionCardActive: {
-    borderColor: THEME.graphYellow,
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    borderColor: THEME.accent,
+    borderWidth: 2,
+    backgroundColor: THEME.accentMuted,
   },
   layerOptionLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
   },
   layerOptionLabel: {
-    color: THEME.text,
-    fontSize: 15,
+    color: THEME.textSec,
+    fontSize: 16,
     fontWeight: "500",
   },
   layerOptionLabelActive: {
-    color: THEME.graphYellow,
+    color: THEME.accent,
     fontWeight: "600",
   },
 
-  // Toggle
+  // Toggle - Nero style
   toggleTrack: {
     width: 52,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#444",
+    backgroundColor: THEME.elevated,
     padding: 2,
     justifyContent: "center",
   },
   toggleTrackActive: {
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: THEME.accentMuted,
   },
   toggleThumb: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#222",
+    backgroundColor: THEME.textTertiary,
   },
   toggleThumbActive: {
-    backgroundColor: "#000",
+    backgroundColor: THEME.accent,
     marginLeft: "auto",
   },
 
-  // Windy-style overlay section
+  // Overlay section - Nero style
   overlaysSectionTitle: {
-    color: THEME.textSec,
+    color: THEME.accent,
     fontSize: 11,
     fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginTop: 16,
-    marginBottom: 8,
+    letterSpacing: 1,
+    marginTop: 20,
+    marginBottom: 12,
     marginLeft: 4,
   },
   overlaysSection: {
-    backgroundColor: "rgba(30, 30, 30, 0.8)",
-    borderRadius: 12,
+    backgroundColor: THEME.card,
+    borderRadius: 20,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
   },
   overlayRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    gap: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.06)",
+    borderBottomColor: "rgba(245, 158, 11, 0.1)",
   },
   overlayRowActive: {
-    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
   },
   overlayRowChecked: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: THEME.accentMuted,
   },
   overlayRowText: {
     flex: 1,
-    color: THEME.text,
+    color: THEME.textSec,
     fontSize: 15,
     fontWeight: "500",
   },
   overlayRowTextActive: {
-    color: "#fff",
+    color: THEME.text,
     fontWeight: "600",
   },
 
@@ -2872,31 +3224,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     alignSelf: "flex-start",
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    backgroundColor: THEME.accentMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
     marginBottom: 16,
   },
   coordBadgeText: {
-    color: THEME.graphYellow,
+    color: THEME.accent,
     fontSize: 12,
     fontWeight: "600",
   },
 
   // Delete spot
   deleteSpotInfo: {
-    backgroundColor: THEME.inputBg,
+    backgroundColor: THEME.elevated,
     padding: 16,
-    borderRadius: 14,
+    borderRadius: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: THEME.border,
   },
   deleteSpotName: {
     color: THEME.text,
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
     marginBottom: 6,
   },
   deleteSpotDesc: {
@@ -2911,13 +3261,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     backgroundColor: THEME.danger,
-    paddingVertical: 14,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: 16,
   },
   deleteConfirmBtnText: {
     color: "#fff",
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "600",
   },
 
   // Spot sheet
@@ -2967,7 +3317,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: THEME.accent,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2975,7 +3325,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: THEME.inputBg,
+    backgroundColor: THEME.elevated,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2984,20 +3334,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     alignSelf: "flex-start",
-    backgroundColor: THEME.graphYellow,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: THEME.accent,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     marginBottom: 8,
   },
   bestSpotBadgeText: {
-    color: "#000",
+    color: THEME.primaryText,
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   spotStatsGrid: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     marginBottom: 16,
   },
   spotStatCard: {
@@ -3005,38 +3355,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: THEME.inputBg,
+    backgroundColor: THEME.elevated,
     padding: 14,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: THEME.border,
   },
   spotStatIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    backgroundColor: THEME.accentMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   spotStatValue: {
     color: THEME.text,
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "200",
+    fontVariant: ["tabular-nums"],
   },
   spotStatLabel: {
-    color: THEME.textSec,
-    fontSize: 11,
+    color: THEME.textTertiary,
+    fontSize: 10,
     textTransform: "uppercase",
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
   spotLoadingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     padding: 16,
-    backgroundColor: THEME.inputBg,
-    borderRadius: 12,
+    backgroundColor: THEME.elevated,
+    borderRadius: 16,
     marginBottom: 16,
   },
   spotLoadingText: {

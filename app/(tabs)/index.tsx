@@ -19,12 +19,15 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
+  Easing,
   AppState,
+  TextInput,
+  KeyboardAvoidingView,
+  Keyboard,
 } from "react-native";
 import Constants from "expo-constants";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
-import SunCalc from "suncalc";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, {
   Marker,
@@ -35,8 +38,8 @@ import MapView, {
   UrlTile,
 } from "react-native-maps";
 import { Link, useRouter } from "expo-router";
-import { saveTrip, listTrips, statsTrips, listYears } from "../../lib/trips";
-import { listSpots, getWindType, type SpotRow, type CoastDirection } from "../../lib/spots";
+import { saveTrip, listTrips } from "../../lib/trips";
+import { listSpots, type SpotRow } from "../../lib/spots";
 import { evaluateTripWithDmi, getSpotForecastEdr } from "../../lib/dmi";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -61,8 +64,8 @@ import {
 } from "../../shared/utils/geo";
 import { fmtTime, getTripTitleParts, type TranslateFn } from "../../shared/utils/formatters";
 import { StatBox } from "../../shared/components/StatBox";
-import { TripGraph, type GraphPoint } from "../../shared/components/TripGraph";
 import { TripCard } from "../../shared/components/TripCard";
+import { BentoTrackingDashboard } from "../../shared/components/BentoTrackingDashboard";
 import { ORTO_FORAAR_URL } from "../../lib/maps";
 
 const { width } = Dimensions.get("window");
@@ -223,6 +226,221 @@ const getFilterOptions = (t: (key: any) => string) => [
   { label: t("all"), days: 0 },
 ];
 
+// === ANIMATED COMPONENTS ===
+
+// Animeret Status Indikator med pulserende glow
+function AnimatedStatusIndicator({ active }: { active: boolean }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Fade-in animation ved mount
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Pulserende glow animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.8],
+  });
+
+  const dotScale = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.2],
+  });
+
+  const glowColor = active ? THEME.startGreen : THEME.danger;
+  const bgColor = active ? "rgba(34, 197, 94, 0.15)" : "rgba(255, 69, 58, 0.15)";
+
+  return (
+    <Animated.View
+      style={[
+        styles.statusIndicator,
+        {
+          backgroundColor: bgColor,
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+        },
+      ]}
+    >
+      {/* Glow layer */}
+      <Animated.View
+        style={[
+          styles.statusGlow,
+          {
+            backgroundColor: glowColor,
+            opacity: glowOpacity,
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.statusDot,
+          active && styles.statusDotActive,
+          { transform: [{ scale: dotScale }] },
+        ]}
+      />
+    </Animated.View>
+  );
+}
+
+// Animeret Stats Overlay Box med fade-in og gold accent
+function AnimatedOverlayStatBox({
+  icon,
+  label,
+  value,
+  index,
+  color,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  index: number;
+  color: string;
+}) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(10)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Staggered entry animation
+    Animated.sequence([
+      Animated.delay(index * 100),
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+
+    // Subtil glow animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 2500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 2500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  const iconOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.8, 1],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.overlayStatBox,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <Animated.View style={{ opacity: iconOpacity }}>
+        <Ionicons name={icon as any} size={14} color={THEME.graphYellow} />
+      </Animated.View>
+      <View>
+        <Text style={styles.overlayLabel}>{label}</Text>
+        <Text style={styles.overlayValue}>{value}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+// Animated Trip Card wrapper med staggered entry
+function AnimatedTripCardWrapper({
+  children,
+  index,
+}: {
+  children: React.ReactNode;
+  index: number;
+}) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.delay(index * 50),
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 350,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ scale: scaleAnim }],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
 function pickNearest<T extends { ts: number }>(
   series: T[] | undefined,
   now = Date.now(),
@@ -243,685 +461,7 @@ function pickNearest<T extends { ts: number }>(
 }
 
 // ============================================================================
-// Vejr-/forholds-analyse til statistik
-// ============================================================================
-
-type SimpleBucket = {
-  trips: number; // her: antal fangst-events i den bøtte
-  fish: number; // her: antal fisk (fangster) i den bøtte
-};
-
-type BestBucket = {
-  label: string;
-  trips: number;
-};
-
-function waterLevelBucket(cm?: number | null, t?: TranslateFn): string {
-  if (cm == null || !Number.isFinite(cm)) return t ? t("unknown") : "ukendt";
-  if (cm < -20) return t ? t("lowWater") : "Lavvande";
-  if (cm > 20) return t ? t("highWater") : "Højvande";
-  return t ? t("midWater") : "Middel vandstand";
-}
-
-function seasonFromMonth(month: number, t?: TranslateFn): string {
-  if (month >= 2 && month <= 4) return t ? t("spring") : "Foråret";
-  if (month >= 5 && month <= 7) return t ? t("summer") : "Sommeren";
-  if (month >= 8 && month <= 10) return t ? t("autumn") : "Efteråret";
-  return t ? t("winter") : "Vinteren";
-}
-
-function filterTripsBySeason(trips: any[], seasonKey: string): any[] {
-  if (seasonKey === "all") return trips;
-  const seasonMonths: Record<string, number[]> = {
-    spring: [2, 3, 4],
-    summer: [5, 6, 7],
-    autumn: [8, 9, 10],
-    winter: [11, 0, 1],
-  };
-  const months = seasonMonths[seasonKey];
-  if (!months) return trips;
-  return trips.filter((t) => {
-    const ts = t.start_ts;
-    if (!ts) return false;
-    const d = new Date(ts);
-    const m = d.getMonth();
-    return months.includes(m);
-  });
-}
-
-function timeOfDayBucket(h: number, t?: TranslateFn): string {
-  if (h >= 5 && h < 9) return t ? t("theMorning") : "Morgenen";
-  if (h >= 9 && h < 12) return t ? t("theLateMorning") : "Formiddagen";
-  if (h >= 12 && h < 17) return t ? t("theAfternoon") : "Eftermiddagen";
-  if (h >= 17 && h < 22) return t ? t("theEvening") : "Aftenen";
-  return t ? t("theNight") : "Natten";
-}
-
-type TempBand = {
-  label: string;
-  min: number;
-  max: number;
-};
-
-const TEMP_BANDS: TempBand[] = [
-  { label: "0–4°C", min: 0, max: 4 },
-  { label: "4–8°C", min: 4, max: 8 },
-  { label: "8–12°C", min: 8, max: 12 },
-  { label: "12–16°C", min: 12, max: 16 },
-  { label: "16°C+", min: 16, max: 100 },
-];
-
-function tempBucketLabel(temp?: number | null, t?: TranslateFn): string {
-  if (temp == null || !Number.isFinite(temp)) return t ? t("unknown") : "ukendt";
-  const band = TEMP_BANDS.find((b) => temp >= b.min && temp < b.max);
-  return band ? band.label : (t ? t("unknown") : "ukendt");
-}
-
-function windSpeedBucketLabel(ms?: number | null, t?: TranslateFn): string {
-  if (ms == null || !Number.isFinite(ms)) return t ? t("unknown") : "ukendt";
-  if (ms < 4) return t ? t("weakWind") : "svag vind";
-  if (ms < 8) return t ? t("mildWind") : "mild vind";
-  if (ms < 12) return t ? t("freshWind") : "frisk vind";
-  return t ? t("hardWind") : "hård vind";
-}
-
-function coastWindLabel(raw?: string | null, t?: TranslateFn): string | null {
-  if (!raw) return null;
-  const v = raw.toLowerCase();
-
-  if (v.includes("fraland")) return t ? t("offshoreWind") : "fralandsvind";
-  if (v.includes("påland") || v.includes("på-land")) return t ? t("onshoreWind") : "pålandsvind";
-  if (v.includes("side") || v.includes("langs") || v.includes("tvaers"))
-    return t ? t("sideWind") : "sidevind";
-  if (v.includes("offshore")) return t ? t("offshoreWind") : "fralandsvind";
-  if (v.includes("onshore")) return t ? t("onshoreWind") : "pålandsvind";
-
-  if (v === "ukendt") return null;
-  return raw;
-}
-
-// Vindretning fra grader -> Nord / Nordøst / ... / Nordvest
-function windDirLabelFromDeg(deg: number, t?: TranslateFn): string {
-  const d = ((deg % 360) + 360) % 360;
-
-  if (d >= 337.5 || d < 22.5) return t ? t("north") : "Nord";
-  if (d >= 22.5 && d < 67.5) return t ? t("northEast") : "Nordøst";
-  if (d >= 67.5 && d < 112.5) return t ? t("east") : "Øst";
-  if (d >= 112.5 && d < 157.5) return t ? t("southEast") : "Sydøst";
-  if (d >= 157.5 && d < 202.5) return t ? t("south") : "Syd";
-  if (d >= 202.5 && d < 247.5) return t ? t("southWest") : "Sydvest";
-  if (d >= 247.5 && d < 292.5) return t ? t("west") : "Vest";
-  return t ? t("northWest") : "Nordvest";
-}
-
-// Nu vælger vi bøtten med flest fisk (fangster),
-// ikke “fisk pr. tur”
-function pickBestBucket(
-  stats: Record<string, SimpleBucket>,
-  minTrips: number
-): BestBucket | null {
-  const entries = Object.entries(stats);
-  if (!entries.length) return null;
-
-  const filtered = entries.filter(([, s]) => s.trips >= minTrips);
-  const list = filtered.length ? filtered : entries;
-
-  let bestLabel = list[0][0];
-  let best = list[0][1];
-
-  for (let i = 1; i < list.length; i++) {
-    const [label, s] = list[i];
-    if (s.fish > best.fish) {
-      best = s;
-      bestLabel = label;
-    }
-  }
-
-  return {
-    label: bestLabel,
-    trips: best.trips,
-  };
-}
-
-function durationBucketLabel(durationSec?: number | null, t?: TranslateFn): string | null {
-  if (!Number.isFinite(durationSec ?? null)) return null;
-  const hrs = (durationSec as number) / 3600;
-  if (hrs < 2) return t ? t("lessThan2Hours") : "<2 timer";
-  if (hrs < 4) return t ? t("hours2to4") : "2-4 timer";
-  if (hrs < 6) return t ? t("hours4to6") : "4-6 timer";
-  return t ? t("hours6plus") : "6+ timer";
-}
-
-function movementLabel(distanceM?: number | null, durationSec?: number | null, t?: TranslateFn): string | null {
-  if (!Number.isFinite(distanceM ?? null) || !Number.isFinite(durationSec ?? null)) return null;
-  const dist = distanceM as number;
-  const dur = durationSec as number;
-  if (dur <= 0) return null;
-  const speed = dist / dur; // m/s
-  if (dist <= 300) return t ? t("standingLightMovement") : "Stillestående/let bevægelse";
-  if (dist >= 1500 || speed >= 0.35) return t ? t("fishingTheWater") : "Affiskning af vand";
-  return t ? t("calmPace") : "Roligt tempo";
-}
-
-// VIGTIG DEL: nu bruger vi fangst-timestamps fra fish_events_json
-// i kombination med vejr-evaluation pr. tur
-function buildWeatherSummary(allTrips: any[], t?: TranslateFn, spots?: any[]): string | null {
-  const tripsWithFish = allTrips.filter((t) => (t.fish_count ?? 0) > 0);
-  if (!tripsWithFish.length) return null;
-
-  // Byg et map fra spot_id til coastDirection for hurtig lookup
-  const spotCoastMap = new Map<string, CoastDirection>();
-  if (spots) {
-    for (const spot of spots) {
-      if (spot.id && spot.coastDirection) {
-        spotCoastMap.set(String(spot.id), spot.coastDirection);
-      }
-    }
-  }
-
-  const tideStats: Record<string, SimpleBucket> = {};
-  const seasonStats: Record<string, SimpleBucket> = {};
-  const todStats: Record<string, SimpleBucket> = {};
-  const airTempStats: Record<string, SimpleBucket> = {};
-  const waterTempStats: Record<string, SimpleBucket> = {};
-  const coastWindStats: Record<string, SimpleBucket> = {};
-  const windSpeedStats: Record<string, SimpleBucket> = {};
-  const durationStats: Record<string, SimpleBucket> = {};
-  const movementStats: Record<string, SimpleBucket> = {};
-
-  // NYT: spot-statistik (hvilket spot giver flest fisk)
-  const spotStats: Record<string, SimpleBucket> = {};
-
-  // NYT: vindrets-statistik (Nord, Sydvest osv.)
-  const windDirStats: Record<string, SimpleBucket> = {};
-
-  const sunOffset = {
-    sumMinutes: 0,
-    count: 0,
-    sunriseCount: 0,
-    sunsetCount: 0,
-  };
-
-  const getTripLocation = (t: any): { lat: number; lng: number } | null => {
-    if (Number.isFinite(t.spot_lat) && Number.isFinite(t.spot_lng)) {
-      return { lat: t.spot_lat, lng: t.spot_lng };
-    }
-    if (t.path_json) {
-      try {
-        const parsed = JSON.parse(t.path_json);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const first = parsed[0];
-          const lat =
-            typeof first.lat === "number"
-              ? first.lat
-              : typeof first.latitude === "number"
-              ? first.latitude
-              : null;
-          const lng =
-            typeof first.lng === "number"
-              ? first.lng
-              : typeof first.longitude === "number"
-              ? first.longitude
-              : null;
-          if (lat != null && lng != null) return { lat, lng };
-        }
-      } catch {
-        // ignore parse error
-      }
-    }
-    return null;
-  };
-
-  for (const trip of tripsWithFish) {
-    const fishCount = trip.fish_count ?? 0;
-
-    let meta: any = {};
-    let evaluation: any = null;
-
-    try {
-      meta = trip.meta_json ? JSON.parse(trip.meta_json) : {};
-    } catch {
-      meta = {};
-    }
-
-    evaluation =
-      meta?.evaluation ||
-      meta?.summary?.evaluation ||
-      (meta && meta.source ? meta : null);
-
-    // Normalisering af evaluation-felter (som før)
-    if (evaluation) {
-      if (evaluation.seaTempC && !evaluation.waterTempC) {
-        evaluation.waterTempC = evaluation.seaTempC;
-      }
-      if (evaluation.waterLevelCm && !evaluation.waterLevelCM) {
-        evaluation.waterLevelCM = evaluation.waterLevelCm;
-      }
-      if (evaluation.seaTempSeries && !evaluation.waterTempSeries) {
-        evaluation.waterTempSeries = evaluation.seaTempSeries;
-      }
-      if (!evaluation.waterLevelSeries && evaluation.waterLevelCmSeries) {
-        evaluation.waterLevelSeries = evaluation.waterLevelCmSeries;
-      }
-    }
-
-    // Vejr-værdier (trip-niveau)
-    const wl =
-      evaluation?.waterLevelCM?.avg ??
-      evaluation?.waterLevelCm?.avg ??
-      null;
-    const airT = evaluation?.airTempC?.avg ?? null;
-    const waterT = evaluation?.waterTempC?.avg ?? null;
-    const windMs = evaluation?.windMS?.avg ?? null;
-
-    // Prøv vindretning i grader (flere mulige felter)
-    const windDirDeg: number | null =
-      (evaluation?.windDirDeg?.avg ??
-        evaluation?.windDeg?.avg ??
-        evaluation?.windFromDirDeg?.avg ??
-        evaluation?.windFromDir?.avg ??
-        null) ?? null;
-
-    // Hent spotets kystretning - enten fra trip eller via spot lookup
-    const tripSpotId = trip.spot_id ?? trip.spotId ?? null;
-    const spotCoastDir: CoastDirection | null =
-      trip.spot_coast_direction ??
-      trip.coastDirection ??
-      (tripSpotId ? spotCoastMap.get(String(tripSpotId)) : null) ??
-      null;
-
-    // Beregn vind ift. kyst fra vindretning + spotets kystretning
-    let cw: string | null = null;
-    if (windDirDeg != null && Number.isFinite(windDirDeg) && spotCoastDir) {
-      const windType = getWindType(windDirDeg, spotCoastDir);
-      cw = windType === 'offshore' ? (t ? t("offshoreWind") : 'fralandsvind')
-         : windType === 'onshore' ? (t ? t("onshoreWind") : 'pålandsvind')
-         : (t ? t("sideWind") : 'sidevind');
-    } else {
-      // Fallback til gammel metode hvis vi ikke har kystretning
-      const cwRaw: string | null = evaluation?.coastWind?.category ?? null;
-      cw = coastWindLabel(cwRaw);
-    }
-
-    const windDirKey =
-      windDirDeg != null && Number.isFinite(windDirDeg)
-        ? windDirLabelFromDeg(windDirDeg, t)
-        : null;
-
-    const tideKey = waterLevelBucket(wl, t);
-    const airKey = tempBucketLabel(airT, t);
-    const waterKey = tempBucketLabel(waterT, t);
-    const windSpeedKey = windSpeedBucketLabel(windMs, t);
-    const durationLabel =
-      durationBucketLabel(
-        Number.isFinite(trip.duration_sec)
-          ? trip.duration_sec
-          : trip.start_ts && trip.end_ts
-          ? Math.max(
-              0,
-              (new Date(trip.end_ts).getTime() - new Date(trip.start_ts).getTime()) /
-                1000
-            )
-          : null,
-        t
-      ) ?? null;
-    const moveLabel = movementLabel(trip.distance_m, trip.duration_sec, t);
-    const tripLocation = getTripLocation(trip);
-
-    // Fangst-timestamps:
-    // 1) Prøver fish_events_json (ISO-strenge eller ms)
-    // 2) Hvis ikke, falder vi tilbage til start_ts og fordeler fishCount dér
-    let catchMs: number[] = [];
-
-    if (trip.fish_events_json) {
-      try {
-        const raw = JSON.parse(trip.fish_events_json);
-        if (Array.isArray(raw)) {
-          for (const ev of raw) {
-            if (typeof ev === "string") {
-              const ts = Date.parse(ev);
-              if (!Number.isNaN(ts)) catchMs.push(ts);
-            } else if (typeof ev === "number" && Number.isFinite(ev)) {
-              catchMs.push(ev);
-            }
-          }
-        }
-      } catch {
-        // ignorer parse-fejl
-      }
-    }
-
-    if (!catchMs.length && fishCount > 0 && trip.start_ts) {
-      const base = new Date(trip.start_ts).getTime();
-      for (let i = 0; i < fishCount; i++) {
-        catchMs.push(base);
-      }
-    }
-
-    if (!catchMs.length) {
-      continue;
-    }
-
-    // Spotnavn til statistik
-    const spotName: string | null = trip.spot_name ?? null;
-
-    // Nu kører vi én gang pr. fangst-event
-    for (const ts of catchMs) {
-      const d = new Date(ts);
-      if (Number.isNaN(d.getTime())) continue;
-
-      const month = d.getMonth();
-      const hour = d.getHours();
-
-      // Årstid fra fangst-tid
-      if (month != null && Number.isFinite(month)) {
-        const seasonKey = seasonFromMonth(month, t);
-        if (!seasonStats[seasonKey]) {
-          seasonStats[seasonKey] = { trips: 0, fish: 0 };
-        }
-        seasonStats[seasonKey].trips += 1;
-        seasonStats[seasonKey].fish += 1;
-      }
-
-      // Tid på dagen fra fangst-tid
-      if (hour != null && Number.isFinite(hour)) {
-        const todKey = timeOfDayBucket(hour, t);
-        if (!todStats[todKey]) {
-          todStats[todKey] = { trips: 0, fish: 0 };
-        }
-        todStats[todKey].trips += 1;
-        todStats[todKey].fish += 1;
-      }
-
-      // Vejr-bøtter: vægtes pr. fangst (evaluation er stadig pr. tur)
-      if (tideKey) {
-        if (!tideStats[tideKey]) tideStats[tideKey] = { trips: 0, fish: 0 };
-        tideStats[tideKey].trips += 1;
-        tideStats[tideKey].fish += 1;
-      }
-
-      if (airKey) {
-        if (!airTempStats[airKey]) airTempStats[airKey] = { trips: 0, fish: 0 };
-        airTempStats[airKey].trips += 1;
-        airTempStats[airKey].fish += 1;
-      }
-
-      if (waterKey) {
-        if (!waterTempStats[waterKey])
-          waterTempStats[waterKey] = { trips: 0, fish: 0 };
-        waterTempStats[waterKey].trips += 1;
-        waterTempStats[waterKey].fish += 1;
-      }
-
-      if (windSpeedKey) {
-        if (!windSpeedStats[windSpeedKey])
-          windSpeedStats[windSpeedKey] = { trips: 0, fish: 0 };
-        windSpeedStats[windSpeedKey].trips += 1;
-        windSpeedStats[windSpeedKey].fish += 1;
-      }
-
-      if (cw) {
-        if (!coastWindStats[cw]) coastWindStats[cw] = { trips: 0, fish: 0 };
-        coastWindStats[cw].trips += 1;
-        coastWindStats[cw].fish += 1;
-      }
-
-      // NYT: spot-statistik (en gang pr. fangst)
-      if (spotName) {
-        if (!spotStats[spotName]) {
-          spotStats[spotName] = { trips: 0, fish: 0 };
-        }
-        spotStats[spotName].trips += 1;
-        spotStats[spotName].fish += 1;
-      }
-
-      // NYT: vindretning i grader (Nord/Sydvest osv.)
-      if (windDirKey) {
-        if (!windDirStats[windDirKey]) {
-          windDirStats[windDirKey] = { trips: 0, fish: 0 };
-        }
-        windDirStats[windDirKey].trips += 1;
-        windDirStats[windDirKey].fish += 1;
-      }
-
-      // Tur-længde
-      if (durationLabel) {
-        if (!durationStats[durationLabel]) {
-          durationStats[durationLabel] = { trips: 0, fish: 0 };
-        }
-        durationStats[durationLabel].trips += 1;
-        durationStats[durationLabel].fish += 1;
-      }
-
-      // Bevægelse / stående
-      if (moveLabel) {
-        if (!movementStats[moveLabel]) {
-          movementStats[moveLabel] = { trips: 0, fish: 0 };
-        }
-        movementStats[moveLabel].trips += 1;
-        movementStats[moveLabel].fish += 1;
-      }
-
-      // Solopgang/-nedgang offset
-      if (tripLocation) {
-        try {
-          const times = SunCalc.getTimes(d, tripLocation.lat, tripLocation.lng);
-          const sunrise = times.sunrise?.getTime() ?? null;
-          const sunset = times.sunset?.getTime() ?? null;
-          const catchTs = d.getTime();
-          const diffs: { label: "sunrise" | "sunset"; diff: number }[] = [];
-          if (sunrise != null) diffs.push({ label: "sunrise", diff: catchTs - sunrise });
-          if (sunset != null) diffs.push({ label: "sunset", diff: catchTs - sunset });
-          if (diffs.length) {
-            diffs.sort((a, b) => Math.abs(a.diff) - Math.abs(b.diff));
-            const nearest = diffs[0];
-            sunOffset.sumMinutes += nearest.diff / 60000;
-            sunOffset.count += 1;
-            if (nearest.label === "sunrise") sunOffset.sunriseCount += 1;
-            if (nearest.label === "sunset") sunOffset.sunsetCount += 1;
-          }
-        } catch {
-          // ignore suncalc errors
-        }
-      }
-    }
-  }
-
-  // MIN_TRIPS = minimum antal fangst-events i en bøtte,
-  // før vi stoler på den
-  const MIN_TRIPS = 3;
-
-  const bestTide = pickBestBucket(tideStats, MIN_TRIPS);
-  const bestSeason = pickBestBucket(seasonStats, MIN_TRIPS);
-  const bestTod = pickBestBucket(todStats, MIN_TRIPS);
-  const bestAir = pickBestBucket(airTempStats, MIN_TRIPS);
-  const bestWater = pickBestBucket(waterTempStats, MIN_TRIPS);
-  const bestCoastWind = pickBestBucket(coastWindStats, MIN_TRIPS);
-  const bestWindSpeed = pickBestBucket(windSpeedStats, MIN_TRIPS);
-  const bestDuration = pickBestBucket(durationStats, MIN_TRIPS);
-  const bestMovement = pickBestBucket(movementStats, MIN_TRIPS);
-
-  // NYT: bedste spot (flest fisk)
-  const bestSpot = pickBestBucket(spotStats, MIN_TRIPS);
-
-  // NYT: bedste vindretning (Nord, Sydvest osv.)
-  const bestWindDir = pickBestBucket(windDirStats, MIN_TRIPS);
-
-  const lines: string[] = [];
-  const unknown = t ? t("unknown") : "ukendt";
-
-  // ØVERST: Spot-navn
-  if (bestSpot && bestSpot.label !== unknown) {
-    lines.push(`${t ? t("spotLabel") : "Spot"}: ${bestSpot.label}`);
-  }
-
-  // Vejr (samlet tæt)
-  if (bestTide && bestTide.label !== unknown) {
-    lines.push(bestTide.label);
-  }
-  if (bestWindSpeed && bestWindSpeed.label !== unknown) {
-    const ws = bestWindSpeed.label;
-    // Capitalize first letter and add "styrke" for wind
-    lines.push(ws.charAt(0).toUpperCase() + ws.slice(1));
-  }
-  if (bestWindDir && bestWindDir.label !== unknown) {
-    lines.push(`${t ? t("windDirection") : "Vindretning"}: ${bestWindDir.label}`);
-  }
-  if (bestCoastWind) {
-    const key = bestCoastWind.label.toLowerCase();
-    if (key.includes("fraland") || key.includes("offshore")) {
-      lines.push(t ? t("atOffshoreWind") : "Ved fralandsvind");
-    } else if (key.includes("påland") || key.includes("på-land") || key.includes("onshore")) {
-      lines.push(t ? t("atOnshoreWind") : "Ved pålandsvind");
-    } else if (key.includes("side") || key.includes("langs") || key.includes("tvaers")) {
-      lines.push(t ? t("atSideWind") : "Ved sidevind");
-    } else {
-      lines.push(`${t ? t("windRelativeToCoast") : "Vind ift. kyst"}: ${bestCoastWind.label}`);
-    }
-  }
-  if (bestWater && bestWater.label !== unknown) {
-    lines.push(`${t ? t("seaTemp") : "Havtemperatur"}: ${bestWater.label}`);
-  }
-  if (bestAir && bestAir.label !== unknown) {
-    lines.push(`${t ? t("airTemp") : "Lufttemperatur"}: ${bestAir.label}`);
-  }
-
-  // Tid på dagen + årstid + solrelation
-  if (bestTod) {
-    lines.push(`${t ? t("inThe") : "Om"} ${bestTod.label.toLowerCase()}`);
-  }
-  if (bestSeason) {
-    lines.push(`${t ? t("inThe") : "Om"} ${bestSeason.label.toLowerCase()}`);
-  }
-  if (sunOffset.count > 0) {
-    const avg = sunOffset.sumMinutes / sunOffset.count;
-    const event =
-      sunOffset.sunriseCount >= sunOffset.sunsetCount
-        ? (t ? t("sunrise") : "solopgang")
-        : (t ? t("sunset") : "solnedgang");
-    const absMinutes = Math.abs(avg);
-
-    // Rund til 30-minutters intervaller eller timer
-    let timeLabel: string;
-    let useDirection = true;
-    if (absMinutes >= 90) {
-      // 1.5+ timer -> vis i hele timer
-      const hours = Math.round(absMinutes / 60);
-      timeLabel = t
-        ? `${hours} ${hours > 1 ? t("hours") : t("hour")}`
-        : `${hours} time${hours > 1 ? "r" : ""}`;
-    } else if (absMinutes >= 45) {
-      // 45-89 min -> "1 time"
-      timeLabel = t ? `1 ${t("hour")}` : "1 time";
-    } else {
-      // Under 45 min -> rund til nærmeste 30 min
-      const rounded = Math.round(absMinutes / 30) * 30;
-      if (rounded === 0) {
-        timeLabel = t ? t("at") : "ved";
-        useDirection = false;
-      } else {
-        timeLabel = `${rounded} min`;
-      }
-    }
-
-    if (useDirection) {
-      const dir = avg < 0 ? (t ? t("before") : "før") : (t ? t("after") : "efter");
-      lines.push(`${t ? t("typicalMinutes") : "Typisk"} ${timeLabel} ${dir} ${event}`);
-    } else {
-      lines.push(`${t ? t("typicalMinutes") : "Typisk"} ${timeLabel} ${event}`);
-    }
-  }
-
-  // Tur-setup
-  if (bestDuration) {
-    lines.push(`${t ? t("tripLength") : "Turlængde"}: ${bestDuration.label} ${t ? t("givesMostFish") : "giver flest fisk"}`);
-  }
-  if (bestMovement) {
-    const mv = bestMovement.label.toLowerCase();
-    if (mv.includes("affiskning") || mv.includes("fishing")) {
-      lines.push(`${t ? t("mostFishAt") : "Flest fisk ved"} ${t ? t("fishingWater") : "affiskning af vand"}`);
-    } else if (mv.includes("still") || mv.includes("standing")) {
-      lines.push(`${t ? t("mostFishAt") : "Flest fisk ved"} ${t ? t("standingStill") : "stillestående/rolig placering"}`);
-    } else {
-      lines.push(`${t ? t("mostFishAt") : "Flest fisk ved"} ${bestMovement.label.toLowerCase()}`);
-    }
-  }
-
-  // Prognose-match guide (hint til brugeren)
-  const forecastHints: string[] = [];
-  if (bestWindSpeed && bestWindSpeed.label !== unknown) {
-    forecastHints.push(bestWindSpeed.label);
-  }
-  if (bestTide && bestTide.label !== unknown) {
-    forecastHints.push(bestTide.label);
-  }
-  if (bestWater && bestWater.label !== unknown) {
-    forecastHints.push(`${t ? t("seaTemp") : "Havtemp"} ${bestWater.label}`);
-  }
-  if (forecastHints.length) {
-    lines.push(
-      `${t ? t("forecastLookFor") : "Prognose: kig efter"} ${forecastHints.slice(0, 3).join(", ")} ${t ? t("forBestMatch") : "for bedste match"}`
-    );
-  }
-
-  if (!lines.length) return null;
-  return lines.join("\n");
-}
-
-function patternIcon(line: string): keyof typeof Ionicons.glyphMap {
-  const lower = line.toLowerCase();
-
-  if (lower.startsWith("spot:")) return "location-outline";
-  if (lower.includes("prognose")) return "trending-up-outline";
-  if (lower.includes("turlængde")) return "timer-outline";
-
-  if (lower.includes("flest fisk")) {
-    if (lower.includes("affiskning")) return "walk-outline";
-    if (lower.includes("stillestående") || lower.includes("rolig"))
-      return "pause-circle-outline";
-    return "fish-outline";
-  }
-
-  if (lower.includes("solopgang") || lower.includes("solnedgang"))
-    return "sunny-outline";
-
-  if (lower.includes("havtemp") || lower.includes("havtemperatur"))
-    return "water-outline";
-  if (lower.includes("lufttemp") || lower.includes("lufttemperatur"))
-    return "thermometer-outline";
-
-  if (lower.includes("vindretning")) return "compass-outline";
-  if (lower.includes("vind") || lower.includes("vindstyrke"))
-    return "flag-outline";
-
-  if (
-    lower.includes("vandstand") ||
-    lower.includes("højvande") ||
-    lower.includes("lavvande")
-  )
-    return "water-outline";
-
-  if (lower.includes("morgen") || lower.includes("formiddag")) return "time-outline";
-  if (lower.includes("eftermiddag") || lower.includes("aften") || lower.includes("nat"))
-    return "time-outline";
-
-  if (
-    lower.includes("foråret") ||
-    lower.includes("sommeren") ||
-    lower.includes("efteråret") ||
-    lower.includes("vinteren") ||
-    lower.includes("hele året")
-  ) {
-    if (lower.includes("sommer")) return "sunny-outline";
-    if (lower.includes("vinter")) return "cloud-outline";
-    return "leaf-outline";
-  }
-
-  return "information-circle-outline";
-}
-
-// ============================================================================
-// Resten af filen (tracking, statistik, UI)
+// Tracking og ture UI
 // ============================================================================
 
 export default function Track() {
@@ -978,34 +518,32 @@ export default function Track() {
   const [recent, setRecent] = useState<any[]>([]);
   const [daysFilter, setDaysFilter] = useState<number>(14);
 
-  const thisYear = new Date().getFullYear();
-  const [years, setYears] = useState<number[]>([thisYear]);
-  const [year, setYear] = useState<number>(thisYear);
-  const [yearStats, setYearStats] = useState<any | null>(null);
-  const [allStats, setAllStats] = useState<any | null>(null);
-  const [showAll, setShowAll] = useState(false);
-
-  const [yearGraphData, setYearGraphData] = useState<GraphPoint[]>([]);
-  const [allTimeGraphData, setAllTimeGraphData] = useState<GraphPoint[]>([]);
-
   const [permissionModalVisible, setPermissionModalVisible] =
     useState(false);
 
-  const [yearWeatherSummary, setYearWeatherSummary] =
-    useState<string | null>(null);
-  const [allTimeWeatherSummary, setAllTimeWeatherSummary] =
-    useState<string | null>(null);
-  const [yearPickerVisible, setYearPickerVisible] = useState(false);
   const [catchToastVisible, setCatchToastVisible] = useState(false);
-  const [seasonPickerVisible, setSeasonPickerVisible] = useState(false);
-  const [selectedSeasonKey, setSelectedSeasonKey] = useState("all");
   const [spotsModalVisible, setSpotsModalVisible] = useState(false);
   const [noSpotsModalVisible, setNoSpotsModalVisible] = useState(false);
+  const [noNearbySpots, setNoNearbySpots] = useState(false); // true = spots findes, men ingen inden for 2km
+  const [pendingStartLocation, setPendingStartLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [spotsWithVisits, setSpotsWithVisits] = useState<
     Array<SpotRow & { visitCount: number; fishCount: number }>
   >([]);
   const [loadingSpots, setLoadingSpots] = useState(false);
   const lastLiveFetchRef = useRef<number | null>(null);
+
+  // Selvmålte vandtemperaturer (timestamps ligesom fangster)
+  const [waterTempModalVisible, setWaterTempModalVisible] = useState(false);
+  const [manualWaterTemps, setManualWaterTemps] = useState<{ ts: number; temp: number }[]>([]);
+  const [waterTempInput, setWaterTempInput] = useState("");
+  const [waterTempToastVisible, setWaterTempToastVisible] = useState(false);
+  const waterTempToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fail-safe: stop tracking hvis brugeren kører væk
+  const [drivingAwayModalVisible, setDrivingAwayModalVisible] = useState(false);
+  const highSpeedCountRef = useRef(0);
+  const CAR_SPEED_THRESHOLD = 12; // m/s (~43 km/h) - hastighed der indikerer kørsel
+  const HIGH_SPEED_TRIGGER_COUNT = 4; // Antal consecutive high-speed readings før advarsel
 
   useEffect(() => {
     if (!liveWeather || liveWeather.trend === null) return;
@@ -1101,51 +639,6 @@ export default function Track() {
     return () => clearInterval(id);
   }, [fetchLiveFromDevice]);
 
-  const renderFishPattern = (summary?: string | null) => {
-    if (!summary) {
-      return (
-        <View style={styles.fishPatternChipWrap}>
-          <View style={styles.fishPatternChip}>
-            <Ionicons
-              name="information-circle-outline"
-              size={14}
-              color={theme.primary}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.fishPatternChipText}>
-              Ingen data endnu for valgt årstid.
-            </Text>
-          </View>
-        </View>
-      );
-    }
-
-    const items = summary.split("\n").filter(Boolean);
-    return (
-      <View style={styles.fishPatternChipWrap}>
-        {items.map((line, idx) => (
-          <View key={idx} style={styles.fishPatternChip}>
-            <Ionicons
-              name={patternIcon(line)}
-              size={14}
-              color={theme.primary}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.fishPatternChipText}>{line}</Text>
-          </View>
-        ))}
-      </View>
-    );
-  };
-  const seasonOptions = useMemo(() => [
-    { key: "all", label: t("wholeYear") },
-    { key: "spring", label: t("spring") },
-    { key: "summer", label: t("summer") },
-    { key: "autumn", label: t("autumn") },
-    { key: "winter", label: t("winter") },
-  ], [t]);
-  const getSeasonLabel = useCallback((key: string) =>
-    seasonOptions.find((s) => s.key === key)?.label ?? t("wholeYear"), [seasonOptions, t]);
   const filterOptions = useMemo(() => getFilterOptions(t), [t]);
 
   const reminderIdRef = useRef<string | null>(null);
@@ -1196,6 +689,7 @@ export default function Track() {
     setPoints((arr) => {
       if (arr.length === 0) {
         setDistanceM(0);
+        highSpeedCountRef.current = 0;
         return [p];
       }
       const last = arr[arr.length - 1];
@@ -1203,14 +697,33 @@ export default function Track() {
 
       // Ignorer små bevægelser (GPS-jitter når man står stille)
       if (step < MIN_WAYPOINT_DISTANCE) {
+        // Reset high-speed counter ved stillestående
+        highSpeedCountRef.current = 0;
         return arr;
       }
 
-      // Ignorer urealistiske hop (teleportation/GPS-spike)
+      // Beregn hastighed
       const dtMs = Math.max(1, p.t - last.t);
       const speed = step / (dtMs / 1000);
+
+      // Ignorer urealistiske hop (teleportation/GPS-spike)
       if (step > MAX_WAYPOINT_DISTANCE || speed > MAX_WAYPOINT_SPEED_MS) {
         return arr;
+      }
+
+      // Fail-safe: Detekter hvis brugeren kører væk (bil-hastighed)
+      if (speed > CAR_SPEED_THRESHOLD) {
+        highSpeedCountRef.current += 1;
+        // Hvis vi har set høj hastighed flere gange i træk, vis advarsel
+        if (highSpeedCountRef.current >= HIGH_SPEED_TRIGGER_COUNT) {
+          // Kun vis modal én gang
+          if (highSpeedCountRef.current === HIGH_SPEED_TRIGGER_COUNT) {
+            setDrivingAwayModalVisible(true);
+          }
+        }
+      } else {
+        // Reset counter hvis hastigheden falder
+        highSpeedCountRef.current = 0;
       }
 
       const newDist = step;
@@ -1331,94 +844,6 @@ export default function Track() {
     setRecent(await listTrips(50, daysFilter));
   }, [daysFilter]);
 
-  function buildGraphs(allTrips: any[], selectedYear: number) {
-    const monthNames = [
-      t("jan"),
-      t("feb"),
-      t("mar"),
-      t("apr"),
-      t("may"),
-      t("jun"),
-      t("jul"),
-      t("aug"),
-      t("sep"),
-      t("oct"),
-      t("nov"),
-      t("dec"),
-    ];
-    const months: number[] = new Array(12).fill(0);
-
-    allTrips.forEach((t) => {
-      const ts = t.start_ts;
-      if (!ts) return;
-      const d = new Date(ts);
-      if (d.getFullYear() !== selectedYear) return;
-      const m = d.getMonth();
-      const fish = t.fish_count ?? 0;
-      months[m] += fish;
-    });
-
-    const yearData: GraphPoint[] = months.map((val, idx) => ({
-      label: monthNames[idx],
-      value: val,
-    }));
-    setYearGraphData(yearData);
-
-    const perYear: Record<string, number> = {};
-    allTrips.forEach((t) => {
-      const ts = t.start_ts;
-      if (!ts) return;
-      const d = new Date(ts);
-      const y = String(d.getFullYear());
-      const fish = t.fish_count ?? 0;
-      perYear[y] = (perYear[y] ?? 0) + fish;
-    });
-
-    const allYears = Object.keys(perYear).sort(
-      (a, b) => Number(a) - Number(b)
-    );
-    const allData: GraphPoint[] = allYears.map((y) => ({
-      label: y,
-      value: perYear[y],
-    }));
-    setAllTimeGraphData(allData);
-  }
-
-async function refreshYearsAndStats(
-    selectedYear?: number,
-    seasonKey = selectedSeasonKey
-  ) {
-    const ys = await listYears();
-    setYears(ys.length ? ys : [thisYear]);
-
-    const targetYear = selectedYear ?? thisYear;
-    setYear(targetYear);
-    setYearStats(await statsTrips(targetYear));
-    setAllStats(await statsTrips());
-
-    const allTrips = await listTrips(1000, 0);
-    buildGraphs(allTrips, targetYear);
-
-    const yearTrips = allTrips.filter((t) => {
-      const ts = t.start_ts;
-      if (!ts) return false;
-      const d = new Date(ts);
-      return d.getFullYear() === targetYear;
-    });
-
-    const filteredYearTrips = filterTripsBySeason(yearTrips, seasonKey);
-    const filteredAllTrips = filterTripsBySeason(allTrips, seasonKey);
-
-    // Hent spots til at beregne vind ift. kyst
-    const spots = await listSpots();
-
-    const yearSummary = buildWeatherSummary(filteredYearTrips, t, spots);
-    const allSummary = buildWeatherSummary(filteredAllTrips, t, spots);
-
-    setYearWeatherSummary(yearSummary);
-    setAllTimeWeatherSummary(allSummary);
-  }
-
   async function loadSpotsWithVisits() {
     setLoadingSpots(true);
     try {
@@ -1459,7 +884,6 @@ async function refreshYearsAndStats(
         }
         await hydrateTrackFromStorage();
         await refreshLists();
-        await refreshYearsAndStats();
       })();
       return () => {};
     }, [refreshLists, hydrateTrackFromStorage])
@@ -1498,11 +922,6 @@ async function refreshYearsAndStats(
       cancelReminder();
     };
   }, []);
-
-  useEffect(() => {
-    // Rehent summaries når årstid skiftes
-    refreshYearsAndStats(year, selectedSeasonKey);
-  }, [selectedSeasonKey]);
 
   useEffect(() => {
     if (!running || !startIsoRef.current) {
@@ -1598,14 +1017,7 @@ async function refreshYearsAndStats(
 
     (async () => {
       try {
-        // Tjek om der findes spots - påkrævet for statistik
-        const spots = await listSpots();
-        if (!spots || spots.length === 0) {
-          setStarting(false);
-          setNoSpotsModalVisible(true);
-          return;
-        }
-
+        // Først: hent brugerens position
         const { status } =
           await Location.requestForegroundPermissionsAsync();
 
@@ -1676,6 +1088,7 @@ async function refreshYearsAndStats(
         setCatchMarks([]);
         setCursorMs(null);
         setSelectedCatchIndex(null);
+        highSpeedCountRef.current = 0; // Reset fail-safe counter
 
         let loc: Location.LocationObject | null = null;
         try {
@@ -1692,6 +1105,44 @@ async function refreshYearsAndStats(
           } catch (err) {
             // console.log("Kunne ikke hente sidste kendte position:", err);
           }
+        }
+
+        // Tjek om der er spots inden for 2km af brugerens position
+        const NEARBY_RADIUS_M = 2000; // 2 km
+        const spots = await listSpots();
+
+        if (loc) {
+          const userPos = { latitude: loc.coords.latitude, longitude: loc.coords.longitude, t: 0 };
+          const nearbySpots = spots.filter((spot) => {
+            if (!spot.lat || !spot.lng) return false;
+            const spotPos = { latitude: spot.lat, longitude: spot.lng, t: 0 };
+            const distance = haversine(userPos, spotPos);
+            return distance <= NEARBY_RADIUS_M;
+          });
+
+          if (nearbySpots.length === 0) {
+            // Gem brugerens position til oprettelse af nyt spot
+            setPendingStartLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+
+            if (spots.length === 0) {
+              // Ingen spots overhovedet
+              setNoNearbySpots(false);
+            } else {
+              // Spots findes, men ingen inden for 2km
+              setNoNearbySpots(true);
+            }
+
+            setStarting(false);
+            setNoSpotsModalVisible(true);
+            return;
+          }
+        } else if (!spots || spots.length === 0) {
+          // Ingen lokation tilgængelig og ingen spots - kræv spots
+          setNoNearbySpots(false);
+          setPendingStartLocation(null);
+          setStarting(false);
+          setNoSpotsModalVisible(true);
+          return;
         }
 
         const initialPoints: Pt[] = [];
@@ -1804,7 +1255,38 @@ async function refreshYearsAndStats(
     }, 1200);
   }
 
+  function openWaterTempModal() {
+    setWaterTempInput("");
+    setWaterTempModalVisible(true);
+  }
+
+  function saveWaterTemp() {
+    Keyboard.dismiss();
+    const parsed = parseFloat(waterTempInput.replace(",", "."));
+    const isValid = !isNaN(parsed) && parsed >= -5 && parsed <= 35;
+
+    if (isValid) {
+      const now = Date.now();
+      setManualWaterTemps((prev) => [...prev, { ts: now, temp: parsed }]);
+      setWaterTempToastVisible(true);
+      if (waterTempToastTimerRef.current) {
+        clearTimeout(waterTempToastTimerRef.current);
+      }
+      waterTempToastTimerRef.current = setTimeout(() => {
+        setWaterTempToastVisible(false);
+        waterTempToastTimerRef.current = null;
+      }, 1200);
+    }
+
+    // Luk altid modalen
+    setWaterTempModalVisible(false);
+  }
+
   async function stop() {
+    // Reset fail-safe counter
+    highSpeedCountRef.current = 0;
+    setDrivingAwayModalVisible(false);
+
     if (watchRef.current) {
       watchRef.current.remove();
       watchRef.current = null;
@@ -1873,6 +1355,8 @@ async function refreshYearsAndStats(
       needs_dmi: true,
       // vigtig: gem rå fangst-tidsstempler (ms) så fiskemønster kan bruge dem
       catch_marks_ms: catchMarks,
+      // selvmålte vandtemperaturer (bruges i stedet for DMI hvis der er målinger)
+      manual_water_temps: manualWaterTemps.length > 0 ? manualWaterTemps : undefined,
     };
 
     // Kør gem i baggrunden; UI er allerede lukket
@@ -1891,6 +1375,22 @@ async function refreshYearsAndStats(
           if (ev) evaluation = ev;
         } catch (e: any) {
           // console.log("Fejl ved DMI-evaluering (online-forsøg):", e?.message || e);
+        }
+
+        // Hvis brugeren har målt vandtemperatur selv, brug det i stedet for DMI
+        if (manualWaterTemps.length > 0 && evaluation) {
+          const temps = manualWaterTemps.map((m) => m.temp);
+          const avg = temps.reduce((a, b) => a + b, 0) / temps.length;
+          evaluation.waterTempC = {
+            avg,
+            min: Math.min(...temps),
+            max: Math.max(...temps),
+          };
+          evaluation.waterTempSeries = manualWaterTemps.map((m) => ({
+            ts: m.ts,
+            v: m.temp,
+          }));
+          evaluation.manualWaterTemp = true; // Marker at det er selvmålt
         }
 
         if (!evaluation) {
@@ -1925,12 +1425,12 @@ async function refreshYearsAndStats(
         setCatchMarks([]);
         setCursorMs(null);
         setSelectedCatchIndex(null);
+        setManualWaterTemps([]);
 
         try {
           await refreshLists();
-          await refreshYearsAndStats(year);
         } catch (e) {
-          // console.log("Kunne ikke opdatere lister/stats efter gem:", e);
+          // console.log("Kunne ikke opdatere lister efter gem:", e);
         }
       } catch (e) {
         // Failsafe: Hvis alt andet fejler, prøv at køe turen en sidste gang
@@ -2011,7 +1511,7 @@ async function refreshYearsAndStats(
 
   return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.bg} />
+      <StatusBar barStyle="light-content" backgroundColor="#0D0D0F" />
       {catchToastVisible && (
         <View pointerEvents="box-none" style={styles.toastOverlay}>
           <View style={styles.toastBox}>
@@ -2022,99 +1522,71 @@ async function refreshYearsAndStats(
           </View>
         </View>
       )}
+      {waterTempToastVisible && (
+        <View pointerEvents="box-none" style={styles.toastOverlay}>
+          <View style={[styles.toastBox, { backgroundColor: THEME.graphBlue }]}>
+            <View style={styles.toastIcon}>
+              <Ionicons name="thermometer" size={18} color={THEME.bg} />
+            </View>
+            <Text style={styles.toastText}>{t("waterTempSaved")}</Text>
+          </View>
+        </View>
+      )}
       <ScrollView
-        style={{ flex: 1, backgroundColor: THEME.bg }}
+        style={{ flex: 1, backgroundColor: "#0D0D0F" }}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
-        {/* === LIVE TRACKING CARD === */}
-        <View style={styles.heroCard}>
-          {/* Header med status */}
-          <View style={styles.heroHeader}>
-            <View style={styles.heroTitleRow}>
-              <View style={[styles.statusIndicator, running && styles.statusIndicatorActive]}>
-                <View style={[styles.statusDot, running && styles.statusDotActive]} />
+        {/* === LIVE TRACKING === */}
+        {running ? (
+          /* Bento Dashboard - Modern 2026 UI */
+          <BentoTrackingDashboard
+            elapsedSec={sec}
+            distanceM={distanceM}
+            catchCount={catchMarks.length}
+            points={points}
+            region={region}
+            onRegionChange={setRegion}
+            mapProvider={trackingMapProvider}
+            spotName={undefined}
+            weather={undefined}
+            onMarkCatch={markCatchNow}
+            onMeasureTemp={openWaterTempModal}
+            onStopTrip={() => setStopConfirmVisible(true)}
+            manualTempCount={manualWaterTemps.length}
+            lastManualTemp={manualWaterTemps.length > 0 ? manualWaterTemps[manualWaterTemps.length - 1].temp : undefined}
+            t={t}
+          />
+        ) : (
+          /* Start Trip Card */
+          <View style={styles.heroCard}>
+            <View style={styles.heroHeader}>
+              <View style={styles.heroTitleRow}>
+                <AnimatedStatusIndicator active={running} />
+                <Text style={styles.heroTitle}>{t("liveTracking")}</Text>
               </View>
-              <Text style={styles.heroTitle}>{t("liveTracking")}</Text>
             </View>
-            {running && (
-              <View style={styles.activeBadge}>
-                <View style={styles.activePulse} />
-                <Text style={styles.activeBadgeText}>{t("active")}</Text>
-              </View>
-            )}
-          </View>
 
-          {/* Kort */}
-          <View style={styles.mapContainer}>
-            <MapView
-              style={{ flex: 1 }}
-              initialRegion={DEFAULT_TRACK_REGION}
-              region={region}
-              onRegionChangeComplete={setRegion}
-              userInterfaceStyle={MAP_UI_STYLE}
-              provider={trackingMapProvider}
-              mapType="none"
-            >
-              {/* Orto map tiles - always on */}
-              <UrlTile
-                urlTemplate={ORTO_FORAAR_URL}
-                maximumZ={21}
-                tileSize={256}
-              />
-              {points.length > 0 && (
-                <>
-                  <Polyline
-                    coordinates={points.map((p) => ({
-                      latitude: p.latitude,
-                      longitude: p.longitude,
-                    }))}
-                    strokeWidth={4}
-                    strokeColor={THEME.danger}
-                  />
-                  <Marker
-                    coordinate={{
-                      latitude: points[points.length - 1].latitude,
-                      longitude: points[points.length - 1].longitude,
-                    }}
-                    pinColor="white"
-                  />
-                </>
-              )}
-            </MapView>
-
-            {/* Stats overlay */}
-            <View style={styles.mapOverlay}>
-              <View style={styles.overlayStatBox}>
-                <Ionicons name="time-outline" size={14} color={theme.primary} />
-                <View>
-                  <Text style={styles.overlayLabel}>{t("time")}</Text>
-                  <Text style={styles.overlayValue}>{fmtTime(sec)}</Text>
-                </View>
-              </View>
-              <View style={styles.overlayStatBox}>
-                <Ionicons name="navigate-outline" size={14} color={theme.primary} />
-                <View>
-                  <Text style={styles.overlayLabel}>{t("distance").toUpperCase()}</Text>
-                  <Text style={styles.overlayValue}>
-                    {(distanceM / 1000).toFixed(2)} km
-                  </Text>
-                </View>
-              </View>
-              {running && (
-                <View style={styles.overlayStatBox}>
-                  <Ionicons name="fish" size={14} color={theme.primary} />
-                  <View>
-                    <Text style={styles.overlayLabel}>{t("catch")}</Text>
-                    <Text style={styles.overlayValue}>{catchMarks.length}</Text>
-                  </View>
-                </View>
-              )}
+            {/* Kort preview */}
+            <View style={styles.mapContainer}>
+              <MapView
+                style={{ flex: 1 }}
+                initialRegion={DEFAULT_TRACK_REGION}
+                region={region}
+                onRegionChangeComplete={setRegion}
+                userInterfaceStyle={MAP_UI_STYLE}
+                provider={trackingMapProvider}
+                mapType="none"
+              >
+                <UrlTile
+                  urlTemplate={ORTO_FORAAR_URL}
+                  maximumZ={21}
+                  tileSize={256}
+                />
+              </MapView>
             </View>
-          </View>
 
-          {/* Knapper */}
-          <View style={styles.heroActions}>
-            {!running ? (
+            {/* Start knap */}
+            <View style={styles.heroActions}>
               <Pressable
                 style={[
                   styles.startButton,
@@ -2137,240 +1609,9 @@ async function refreshYearsAndStats(
                   </View>
                 </View>
               </Pressable>
-            ) : (
-              <View style={styles.runningActions}>
-                {/* Fangst knap - stor og fremtrædende */}
-                <Pressable style={styles.catchButtonLarge} onPress={markCatchNow}>
-                  <View style={styles.catchIconCircle}>
-                    <Ionicons name="fish" size={24} color="#000" />
-                  </View>
-                  <Text style={styles.catchButtonLargeText}>{t("catchBtn")}</Text>
-                </Pressable>
-
-                {/* Stop knap */}
-                <Pressable
-                  style={[styles.stopButtonNew, savingTrip && { opacity: 0.6 }]}
-                  onPress={() => setStopConfirmVisible(true)}
-                  disabled={savingTrip}
-                >
-                  <Ionicons name="stop-circle" size={22} color={THEME.danger} />
-                  <Text style={styles.stopButtonNewText}>{t("finish")}</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* === GRID STATS (Year) + FISKEMØNSTER === */}
-        <View style={styles.sectionHeader}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={styles.sectionTitle}>{t("statistics")}</Text>
-            <View style={styles.yearPill}>
-              <Text style={styles.yearPillText}>{year}</Text>
             </View>
           </View>
-          <Pressable
-            style={styles.yearPickerBtn}
-            onPress={() => setYearPickerVisible(true)}
-          >
-            <Ionicons name="calendar-outline" size={14} color={THEME.textSec} />
-            <Text style={styles.yearPickerBtnText}>{t("changeYear")}</Text>
-          </Pressable>
-        </View>
-
-        {yearStats ? (
-          <View style={styles.card}>
-            {/* 2x3 Symmetrisk grid */}
-            <View style={styles.statsGridSymmetric}>
-              <View style={styles.statCell}>
-                <Text style={styles.statCellValue}>{yearStats.trips}</Text>
-                <Text style={styles.statCellLabel}>{t("trips")}</Text>
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statCellValue}>{yearStats.total_fish}</Text>
-                <Text style={styles.statCellLabel}>{t("fish")}</Text>
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statCellValue}>{yearStats.fangstrate}%</Text>
-                <Text style={styles.statCellLabel}>{t("catchRate")}</Text>
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statCellValue}>{yearStats.catch_trips}</Text>
-                <Text style={styles.statCellLabel}>{t("catchTrips")}</Text>
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statCellValue}>{yearStats.null_trips}</Text>
-                <Text style={styles.statCellLabel}>{t("nullTrips")}</Text>
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statCellValue}>
-                  {(yearStats.total_sec / 3600).toFixed(0)}
-                </Text>
-                <Text style={styles.statCellLabel}>{t("hoursLabel")}</Text>
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statCellValue}>
-                  {(yearStats.total_m / 1000).toFixed(1)}
-                </Text>
-                <Text style={styles.statCellLabel}>{t("kmFished")}</Text>
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statCellValue}>
-                  {yearStats.fish_per_hour ?? "0"}
-                </Text>
-                <Text style={styles.statCellLabel}>{t("fishPerHour")}</Text>
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statCellValue}>
-                  {yearStats.multi_fish_rate ?? "0"}%
-                </Text>
-                <Text style={styles.statCellLabel}>{t("multiFish")}</Text>
-              </View>
-            </View>
-
-            {/* Fiskemønster */}
-            <View style={styles.fishPatternCard}>
-              <View style={styles.fishPatternHeader}>
-                <Text style={styles.fishPatternTitle}>{t("fishingPattern")}</Text>
-                <Pressable
-                  style={styles.seasonBtn}
-                  onPress={() => setSeasonPickerVisible(true)}
-                >
-                  <Text style={styles.seasonBtnText}>
-                    {getSeasonLabel(selectedSeasonKey)}
-                  </Text>
-                  <Ionicons name="chevron-down" size={12} color={THEME.textSec} />
-                </Pressable>
-              </View>
-              <View style={{ marginTop: 10 }}>
-                {renderFishPattern(yearWeatherSummary)}
-              </View>
-            </View>
-
-            {/* Mine Spots knap */}
-            <Pressable
-              style={styles.spotsButton}
-              onPress={() => {
-                loadSpotsWithVisits();
-                setSpotsModalVisible(true);
-              }}
-            >
-              <Ionicons name="location" size={18} color={theme.primary} />
-              <Text style={styles.spotsButtonTitle}>{t("myFishingSpots")}</Text>
-              <Ionicons name="chevron-forward" size={16} color={THEME.textTertiary} />
-            </Pressable>
-          </View>
-        ) : (
-          <Text style={{ color: THEME.textSec, marginBottom: 16 }}>
-            {t("noData")}
-          </Text>
         )}
-
-        {/* === GRAF (BARS) === */}
-        <View style={[styles.card, { marginTop: 20 }]}>
-          <View style={styles.cardHeader}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Ionicons name="bar-chart-outline" size={16} color={THEME.textSec} />
-              <Text style={styles.cardTitle}>{t("monthlyOverview")}</Text>
-            </View>
-          </View>
-          <TripGraph label="Årsfangster" unit="" data={yearGraphData} />
-        </View>
-
-        {/* === ALL-TIME === */}
-        <Pressable
-          style={[styles.expandableCard, { marginTop: 24 }]}
-          onPress={() => setShowAll(!showAll)}
-        >
-          <View style={styles.expandableHeader}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Ionicons name="trophy-outline" size={18} color={theme.primary} />
-              <Text style={styles.cardTitle}>All-Time</Text>
-            </View>
-            <Ionicons
-              name={showAll ? "chevron-up" : "chevron-down"}
-              size={20}
-              color={THEME.textTertiary}
-            />
-          </View>
-
-          {showAll && allStats && (
-            <View style={{ marginTop: 16 }}>
-              {/* 2x3 Symmetrisk grid */}
-              <View style={styles.statsGridSymmetric}>
-                <View style={styles.statCell}>
-                  <Text style={styles.statCellValue}>{allStats.trips}</Text>
-                  <Text style={styles.statCellLabel}>{t("trips")}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statCellValue}>{allStats.total_fish}</Text>
-                  <Text style={styles.statCellLabel}>{t("fish")}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statCellValue}>{allStats.fangstrate}%</Text>
-                  <Text style={styles.statCellLabel}>{t("catchRate")}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statCellValue}>{allStats.catch_trips}</Text>
-                  <Text style={styles.statCellLabel}>{t("catchTrips")}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statCellValue}>{allStats.null_trips}</Text>
-                  <Text style={styles.statCellLabel}>{t("nullTrips")}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statCellValue}>
-                    {(allStats.total_sec / 3600).toFixed(0)}
-                  </Text>
-                  <Text style={styles.statCellLabel}>{t("hoursLabel")}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statCellValue}>
-                    {(allStats.total_m / 1000).toFixed(0)}
-                  </Text>
-                  <Text style={styles.statCellLabel}>{t("kmFished")}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statCellValue}>
-                    {allStats.fish_per_hour ?? "0"}
-                  </Text>
-                  <Text style={styles.statCellLabel}>{t("fishPerHour")}</Text>
-                </View>
-                <View style={styles.statCell}>
-                  <Text style={styles.statCellValue}>
-                    {allStats.multi_fish_rate ?? "0"}%
-                  </Text>
-                  <Text style={styles.statCellLabel}>{t("multiFish")}</Text>
-                </View>
-              </View>
-
-              {/* Graf */}
-              <View style={styles.allTimeGraphSection}>
-                <Text style={styles.allTimeGraphTitle}>{t("catchesPerYear")}</Text>
-                <TripGraph label="All-time" unit="" data={allTimeGraphData} />
-              </View>
-
-              {/* Fiskemønster */}
-              <View style={styles.fishPatternCard}>
-                <View style={styles.fishPatternHeader}>
-                  <Text style={styles.fishPatternTitle}>{t("fishingPattern")}</Text>
-                  <Pressable
-                    style={styles.seasonBtn}
-                    onPress={() => setSeasonPickerVisible(true)}
-                  >
-                    <Text style={styles.seasonBtnText}>
-                      {getSeasonLabel(selectedSeasonKey)}
-                    </Text>
-                    <Ionicons name="chevron-down" size={12} color={THEME.textSec} />
-                  </Pressable>
-                </View>
-                <View style={{ marginTop: 10 }}>
-                  {renderFishPattern(allTimeWeatherSummary)}
-                </View>
-              </View>
-            </View>
-          )}
-        </Pressable>
 
         {/* === SENESTE TURE === */}
         <View
@@ -2407,74 +1648,20 @@ async function refreshYearsAndStats(
           </ScrollView>
         </View>
 
-        {/* === ÅRSVÆLGER MODAL === */}
-        <Modal
-          visible={yearPickerVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setYearPickerVisible(false)}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalBox}>
-              <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalTitle}>{t("selectYear")}</Text>
-                <Pressable
-                  onPress={() => setYearPickerVisible(false)}
-                  style={styles.modalCloseBtn}
-                >
-                  <Ionicons name="close" size={20} color={THEME.text} />
-                </Pressable>
-              </View>
-              <ScrollView style={{ maxHeight: 300 }}>
-                {years
-                  .sort((a, b) => b - a)
-                  .map((y) => {
-                    const active = y === year;
-                    return (
-                      <Pressable
-                        key={y}
-                        style={[
-                          styles.seasonRow,
-                          active && styles.seasonRowActive,
-                        ]}
-                        onPress={() => {
-                          setYearPickerVisible(false);
-                          refreshYearsAndStats(y, selectedSeasonKey);
-                        }}
-                      >
-                        <View
-                          style={[
-                            styles.seasonRadio,
-                            active && styles.seasonRadioActive,
-                          ]}
-                        />
-                        <Text
-                          style={
-                            active
-                              ? styles.seasonRowTextActive
-                              : styles.seasonRowText
-                          }
-                        >
-                          {y}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-
         <FlatList
           data={recent}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <TripCard trip={item} t={t} />}
+          renderItem={({ item, index }) => (
+            <AnimatedTripCardWrapper index={index}>
+              <TripCard trip={item} t={t} />
+            </AnimatedTripCardWrapper>
+          )}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           ListEmptyComponent={
             <Text
               style={{
-                color: THEME.textSec,
-                fontStyle: "italic",
+                color: "#606068",
+                fontSize: 14,
                 marginTop: 10,
               }}
             >
@@ -2706,57 +1893,6 @@ async function refreshYearsAndStats(
           </View>
         </Modal>
 
-        {/* === ÅRSTIDSVÆLGER === */}
-        <Modal visible={seasonPickerVisible} transparent animationType="fade">
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>{t("selectSeason")}</Text>
-              <View style={{ gap: 10, marginTop: 6 }}>
-                {seasonOptions.map((opt) => {
-                  const active = opt.key === selectedSeasonKey;
-                  return (
-                    <Pressable
-                      key={opt.key}
-                      style={[
-                        styles.seasonRow,
-                        active && styles.seasonRowActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedSeasonKey(opt.key);
-                        setSeasonPickerVisible(false);
-                      }}
-                    >
-                      <View
-                        style={[
-                          styles.seasonRadio,
-                          active && styles.seasonRadioActive,
-                        ]}
-                      />
-                      <Text
-                        style={
-                          active
-                            ? styles.seasonRowTextActive
-                            : styles.seasonRowText
-                        }
-                      >
-                        {opt.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <View style={styles.modalBtnRow}>
-                <Pressable
-                  style={[styles.btn, styles.ghost]}
-                  onPress={() => setSeasonPickerVisible(false)}
-                >
-                  <Text style={styles.ghostText}>Luk</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </Modal>
-
         {/* === ANNULLÉR-TUR BEKRÆFTELSESMODAL === */}
         <Modal
           visible={cancelConfirmVisible}
@@ -2947,33 +2083,45 @@ async function refreshYearsAndStats(
             <View style={styles.noSpotsModal}>
               {/* Ikon */}
               <View style={styles.noSpotsIconCircle}>
-                <Ionicons name="map" size={32} color={theme.primary} />
+                <Ionicons name={noNearbySpots ? "location" : "map"} size={32} color={theme.primary} />
               </View>
 
               {/* Titel */}
               <Text style={styles.noSpotsTitle}>
-                {language === "da" ? "Opret et spot først" : "Create a spot first"}
+                {noNearbySpots
+                  ? (language === "da" ? "Intet spot i nærheden" : "No spot nearby")
+                  : (language === "da" ? "Opret et spot først" : "Create a spot first")}
               </Text>
 
               {/* Beskrivelse */}
               <Text style={styles.noSpotsDescription}>
-                {language === "da"
-                  ? "For at tracke ture skal du først oprette mindst ét fiskeplads-spot."
-                  : "To track trips, you need to create at least one fishing spot."}
+                {noNearbySpots
+                  ? (language === "da"
+                    ? "Der er ingen spots inden for 2 km af din position. Opret et nyt spot her for at tracke din tur."
+                    : "There are no spots within 2 km of your position. Create a new spot here to track your trip.")
+                  : (language === "da"
+                    ? "For at tracke ture skal du først oprette mindst ét fiskeplads-spot."
+                    : "To track trips, you need to create at least one fishing spot.")}
               </Text>
 
-              {/* Vejrkort badge */}
-              <View style={styles.noSpotsAppBadge}>
-                <Ionicons name="map-outline" size={16} color={theme.primary} />
-                <Text style={styles.noSpotsAppBadgeText}>
-                  {language === "da" ? "Vejrkort" : "Weather Map"}
-                </Text>
-              </View>
+              {/* Position badge (kun hvis vi har en position) */}
+              {pendingStartLocation && (
+                <View style={styles.noSpotsAppBadge}>
+                  <Ionicons name="navigate" size={16} color={theme.primary} />
+                  <Text style={styles.noSpotsAppBadgeText}>
+                    {pendingStartLocation.latitude.toFixed(4)}, {pendingStartLocation.longitude.toFixed(4)}
+                  </Text>
+                </View>
+              )}
 
               <Text style={styles.noSpotsHint}>
-                {language === "da"
-                  ? "Tryk på kortet i Vejrkort for at oprette spots, som dine ture automatisk tilknyttes."
-                  : "Tap on the map in Weather Map to create spots that your trips will automatically be linked to."}
+                {noNearbySpots
+                  ? (language === "da"
+                    ? "Tryk 'Opret spot her' for at gemme denne position som et nyt fiskested."
+                    : "Tap 'Create spot here' to save this location as a new fishing spot.")
+                  : (language === "da"
+                    ? "Tryk på kortet i Vejrkort for at oprette spots, som dine ture automatisk tilknyttes."
+                    : "Tap on the map in Weather Map to create spots that your trips will automatically be linked to.")}
               </Text>
 
               {/* Knapper */}
@@ -2982,12 +2130,25 @@ async function refreshYearsAndStats(
                   style={styles.noSpotsButtonPrimary}
                   onPress={() => {
                     setNoSpotsModalVisible(false);
-                    router.push("/spot-weather");
+                    if (pendingStartLocation) {
+                      // Naviger til spot-weather med koordinater som parameter
+                      router.push({
+                        pathname: "/spot-weather",
+                        params: {
+                          createSpotLat: pendingStartLocation.latitude.toString(),
+                          createSpotLng: pendingStartLocation.longitude.toString(),
+                        },
+                      });
+                    } else {
+                      router.push("/spot-weather");
+                    }
                   }}
                 >
-                  <Ionicons name="map" size={18} color="#000" />
+                  <Ionicons name={noNearbySpots ? "add-circle" : "map"} size={18} color="#000" />
                   <Text style={styles.noSpotsButtonPrimaryText}>
-                    {language === "da" ? "Åbn Vejrkort" : "Open Weather Map"}
+                    {noNearbySpots
+                      ? (language === "da" ? "Opret spot her" : "Create spot here")
+                      : (language === "da" ? "Åbn Vejrkort" : "Open Weather Map")}
                   </Text>
                 </Pressable>
 
@@ -3002,6 +2163,134 @@ async function refreshYearsAndStats(
               </View>
             </View>
           </View>
+        </Modal>
+
+        {/* === KØRER VÆK ADVARSEL MODAL === */}
+        <Modal
+          visible={drivingAwayModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDrivingAwayModalVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.drivingAwayModal}>
+              {/* Ikon */}
+              <View style={styles.drivingAwayIconCircle}>
+                <Ionicons name="car" size={32} color={THEME.danger} />
+              </View>
+
+              {/* Titel */}
+              <Text style={styles.drivingAwayTitle}>
+                {language === "da" ? "Kører du væk?" : "Driving away?"}
+              </Text>
+
+              {/* Beskrivelse */}
+              <Text style={styles.drivingAwayDescription}>
+                {language === "da"
+                  ? "Det ser ud til at du bevæger dig med høj hastighed. Har du glemt at stoppe din tur?"
+                  : "It looks like you're moving at high speed. Did you forget to stop your trip?"}
+              </Text>
+
+              {/* Hastigheds-indikator */}
+              <View style={styles.drivingAwaySpeedBadge}>
+                <Ionicons name="speedometer" size={16} color={THEME.danger} />
+                <Text style={styles.drivingAwaySpeedText}>
+                  {language === "da" ? "Høj hastighed detekteret" : "High speed detected"}
+                </Text>
+              </View>
+
+              {/* Knapper */}
+              <View style={styles.drivingAwayButtons}>
+                <Pressable
+                  style={styles.drivingAwayButtonDanger}
+                  onPress={() => {
+                    setDrivingAwayModalVisible(false);
+                    highSpeedCountRef.current = 0;
+                    stop();
+                  }}
+                >
+                  <Ionicons name="stop-circle" size={18} color="#FFF" />
+                  <Text style={styles.drivingAwayButtonDangerText}>
+                    {language === "da" ? "Stop tur" : "Stop trip"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.drivingAwayButtonSecondary}
+                  onPress={() => {
+                    setDrivingAwayModalVisible(false);
+                    // Reset counter så vi ikke spammer brugeren
+                    highSpeedCountRef.current = 0;
+                  }}
+                >
+                  <Text style={styles.drivingAwayButtonSecondaryText}>
+                    {language === "da" ? "Fortsæt tracking" : "Continue tracking"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* === VANDTEMPERATUR MODAL === */}
+        <Modal
+          visible={waterTempModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            Keyboard.dismiss();
+            setWaterTempModalVisible(false);
+          }}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.modalBackdrop}
+          >
+            <View style={styles.waterTempModal}>
+              <View style={styles.waterTempIconCircle}>
+                <Ionicons name="thermometer" size={28} color={THEME.graphBlue} />
+              </View>
+
+              <Text style={styles.waterTempModalTitle}>{t("waterTempTitle")}</Text>
+              <Text style={styles.waterTempModalHint}>{t("waterTempHint")}</Text>
+
+              <View style={styles.waterTempInputRow}>
+                <TextInput
+                  style={styles.waterTempInput}
+                  value={waterTempInput}
+                  onChangeText={setWaterTempInput}
+                  keyboardType="decimal-pad"
+                  placeholder="12.5"
+                  placeholderTextColor={THEME.textTertiary}
+                  maxLength={5}
+                  autoFocus
+                />
+                <Text style={styles.waterTempUnit}>{t("waterTempUnit")}</Text>
+              </View>
+
+              <View style={styles.waterTempButtons}>
+                <Pressable
+                  style={styles.waterTempButtonPrimary}
+                  onPress={saveWaterTemp}
+                >
+                  <Ionicons name="checkmark" size={20} color="#000" />
+                  <Text style={styles.waterTempButtonPrimaryText}>{t("save")}</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.waterTempButtonSecondary}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setWaterTempModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.waterTempButtonSecondaryText}>
+                    {language === "da" ? "Annuller" : "Cancel"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
         </Modal>
       </ScrollView>
 
@@ -3018,76 +2307,85 @@ async function refreshYearsAndStats(
 
 const styles = StyleSheet.create({
   heroCard: {
-    backgroundColor: THEME.card,
+    backgroundColor: "#161618",
     borderRadius: 24,
-    padding: 18,
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
   heroHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 24,
   },
   heroTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
   heroTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: THEME.text,
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#A0A0A8",
   },
   statusIndicator: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255, 69, 58, 0.15)",
-    alignItems: "center",
-    justifyContent: "center",
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF3B30",
+    marginRight: 8,
   },
   statusIndicatorActive: {
-    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    backgroundColor: "#F59E0B",
+  },
+  statusGlow: {
+    display: "none",
   },
   statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: THEME.danger,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF3B30",
   },
   statusDotActive: {
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
   },
   activeBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    gap: 8,
+    backgroundColor: "#F59E0B20",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 12,
   },
   activePulse: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
+  },
+  activePulseAnimated: {
+    shadowColor: "#F59E0B",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 3,
   },
   activeBadgeText: {
-    color: THEME.startGreen,
+    color: "#F59E0B",
     fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+    fontWeight: "600",
+    letterSpacing: 0.3,
   },
 
   mapContainer: {
     height: 180,
-    borderRadius: 18,
+    borderRadius: 16,
     overflow: "hidden",
-    backgroundColor: "#18181B",
+    backgroundColor: "#1E1E21",
     position: "relative",
   },
   mapOverlay: {
@@ -3095,11 +2393,15 @@ const styles = StyleSheet.create({
     bottom: 10,
     left: 10,
     right: 10,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    borderRadius: 14,
-    padding: 10,
+    backgroundColor: "rgba(22, 22, 24, 0.95)",
+    borderRadius: 12,
+    padding: 12,
     flexDirection: "row",
     justifyContent: "space-around",
+    overflow: "hidden",
+  },
+  mapOverlayGlow: {
+    display: "none",
   },
   overlayStatBox: {
     flexDirection: "row",
@@ -3107,57 +2409,55 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   overlayLabel: {
-    color: THEME.textSec,
-    fontSize: 9,
-    fontWeight: "600",
+    color: "#606068",
+    fontSize: 10,
+    fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
   overlayValue: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
     fontVariant: ["tabular-nums"],
   },
 
   heroActions: {
-    marginTop: 16,
+    marginTop: 20,
   },
   startButton: {
-    backgroundColor: THEME.startGreen,
-    borderRadius: 20,
-    padding: 6,
-    shadowColor: THEME.startGreen,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
+    backgroundColor: "#F59E0B",
+    height: 56,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   startButtonInner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    justifyContent: "center",
+    gap: 12,
   },
   startIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.95)",
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(13, 13, 15, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
   startTextContainer: {
-    flex: 1,
+    flexDirection: "column",
   },
   startButtonText: {
-    color: "#FFF",
-    fontSize: 20,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+    color: "#0D0D0F",
+    fontSize: 17,
+    fontWeight: "600",
   },
   startButtonSubtext: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 13,
+    color: "rgba(13, 13, 15, 0.6)",
+    fontSize: 12,
     fontWeight: "500",
     marginTop: 2,
   },
@@ -3168,82 +2468,102 @@ const styles = StyleSheet.create({
   },
   catchButtonLarge: {
     flex: 1,
-    backgroundColor: THEME.graphYellow,
-    borderRadius: 18,
-    paddingVertical: 16,
+    backgroundColor: "#F59E0B",
+    borderRadius: 16,
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    shadowColor: THEME.graphYellow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
   catchIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.15)",
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(13, 13, 15, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
   catchButtonLargeText: {
-    color: "#000",
-    fontSize: 18,
-    fontWeight: "800",
+    color: "#0D0D0F",
+    fontSize: 17,
+    fontWeight: "600",
   },
   stopButtonNew: {
-    backgroundColor: "rgba(255, 69, 58, 0.15)",
-    borderRadius: 18,
-    paddingVertical: 16,
+    backgroundColor: "#FF3B3015",
+    borderRadius: 16,
+    height: 56,
     paddingHorizontal: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  stopButtonGlow: {
+    display: "none",
   },
   stopButtonNewText: {
-    color: THEME.danger,
+    color: "#FF3B30",
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "600",
+  },
+
+  waterTempButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 48,
+    paddingHorizontal: 16,
+    backgroundColor: "#1E1E21",
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  waterTempButtonText: {
+    color: "#A0A0A8",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  waterTempButtonTextActive: {
+    color: THEME.graphBlue,
   },
 
   catchButton: {
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
     borderRadius: 16,
-    paddingVertical: 14,
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
   catchButtonText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "800",
+    color: "#0D0D0F",
+    fontSize: 17,
+    fontWeight: "600",
   },
 
   stopButton: {
-    backgroundColor: THEME.danger,
+    backgroundColor: "#FF3B30",
     borderRadius: 16,
-    paddingVertical: 18,
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
   stopButtonSmall: {
-    backgroundColor: THEME.danger,
+    backgroundColor: "#FF3B30",
     borderRadius: 16,
-    paddingVertical: 14,
+    height: 48,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
   stopButtonText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "800",
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "600",
   },
   savingOverlay: {
     position: "absolute",
@@ -3251,7 +2571,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.75)",
+    backgroundColor: "rgba(13, 13, 15, 0.85)",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "column",
@@ -3259,21 +2579,22 @@ const styles = StyleSheet.create({
     zIndex: 9999,
   },
   savingText: {
-    color: "#FFF",
-    fontSize: 18,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "600",
   },
 
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: THEME.text,
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    letterSpacing: -0.3,
   },
   statsGridSymmetric: {
     flexDirection: "row",
@@ -3285,13 +2606,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   statCellValue: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 24,
-    fontWeight: "700",
+    fontWeight: "600",
     letterSpacing: -0.5,
   },
   statCellLabel: {
-    color: THEME.textTertiary,
+    color: "#606068",
     fontSize: 11,
     fontWeight: "500",
     marginTop: 4,
@@ -3310,20 +2631,20 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   statBoxAccent: {
-    backgroundColor: "rgba(245, 158, 11, 0.08)",
+    backgroundColor: "#1E1E21",
     borderRadius: 12,
   },
   statIconWrap: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 10,
+    backgroundColor: "#1E1E21",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 8,
   },
   statLabel: {
-    color: THEME.textTertiary,
+    color: "#606068",
     fontSize: 11,
     fontWeight: "500",
     textAlign: "center",
@@ -3331,27 +2652,23 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   statValue: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "600",
     letterSpacing: -0.5,
   },
 
   card: {
-    backgroundColor: THEME.card,
+    backgroundColor: "#161618",
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
   expandableCard: {
-    backgroundColor: THEME.card,
+    backgroundColor: "#161618",
     borderRadius: 20,
     padding: 20,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
   expandableHeader: {
     flexDirection: "row",
@@ -3367,7 +2684,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 17,
     fontWeight: "600",
-    color: THEME.text,
+    color: "#FFFFFF",
     letterSpacing: -0.3,
   },
   statsHighlight: {
@@ -3376,7 +2693,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 16,
     marginBottom: 16,
-    backgroundColor: "rgba(255,255,255,0.02)",
+    backgroundColor: "#1E1E21",
     borderRadius: 16,
   },
   statsHighlightItem: {
@@ -3385,31 +2702,31 @@ const styles = StyleSheet.create({
   },
   statsHighlightValue: {
     fontSize: 28,
-    fontWeight: "700",
-    color: THEME.text,
+    fontWeight: "600",
+    color: "#FFFFFF",
     letterSpacing: -1,
   },
   statsHighlightLabel: {
     fontSize: 12,
     fontWeight: "500",
-    color: THEME.textTertiary,
+    color: "#606068",
     marginTop: 4,
   },
   statsHighlightDivider: {
     width: 1,
     height: 40,
-    backgroundColor: THEME.cardBorder,
+    backgroundColor: "#2A2A2E",
   },
   allTimeGraphSection: {
     marginTop: 20,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: THEME.cardBorder,
+    borderTopColor: "#2A2A2E",
   },
   allTimeGraphTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
-    color: THEME.textSec,
+    color: "#606068",
     marginBottom: 12,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -3419,19 +2736,19 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: THEME.cardBorder,
+    borderTopColor: "#2A2A2E",
   },
   fishPatternTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
-    color: THEME.textSec,
+    color: "#606068",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   fishPatternSubtitle: {
     fontSize: 12,
     fontWeight: "500",
-    color: THEME.textTertiary,
+    color: "#606068",
   },
   fishPatternHeader: {
     flexDirection: "row",
@@ -3440,7 +2757,7 @@ const styles = StyleSheet.create({
   },
   fishPatternItem: {
     fontSize: 14,
-    color: THEME.text,
+    color: "#FFFFFF",
     marginTop: 4,
   },
   fishPatternChipWrap: {
@@ -3451,43 +2768,34 @@ const styles = StyleSheet.create({
   fishPatternChip: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#1f1f23",
+    backgroundColor: "#1E1E21",
     borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "#2b2b32",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    elevation: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     width: "100%",
   },
   fishPatternChipText: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "600",
-    marginLeft: 6,
+    marginLeft: 8,
     flex: 1,
   },
 
   tripCard: {
-    backgroundColor: THEME.card,
+    backgroundColor: "#161618",
     borderRadius: 16,
     padding: 14,
     flexDirection: "row",
     justifyContent: "flex-start",
     gap: 12,
     alignItems: "flex-start",
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
   tripIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 12,
+    backgroundColor: "#1E1E21",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3514,26 +2822,26 @@ const styles = StyleSheet.create({
   tripSpot: {
     flex: 1,
     minWidth: 0,
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "600",
     textAlign: "left",
   },
   tripDate: {
-    color: THEME.textSec,
+    color: "#A0A0A8",
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     flexShrink: 0,
   },
   tripSub: {
-    color: THEME.textSec,
+    color: "#606068",
     fontSize: 13,
     marginTop: 2,
   },
   tripBadge: {
-    backgroundColor: THEME.graphYellow,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: "#F59E0B",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 8,
     flexDirection: "row",
     alignItems: "center",
@@ -3542,93 +2850,83 @@ const styles = StyleSheet.create({
   },
   tripBadgeText: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
+    color: "#0D0D0F",
   },
 
   chip: {
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 30,
-    backgroundColor: THEME.card,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    borderRadius: 12,
+    backgroundColor: "#1E1E21",
   },
   chipActive: {
-    backgroundColor: THEME.primary,
-    borderColor: THEME.primary,
+    backgroundColor: "#F59E0B",
   },
-  chipText: { color: THEME.text, fontWeight: "600" },
-  chipActiveText: { color: "#000", fontWeight: "700" },
+  chipText: { color: "#A0A0A8", fontWeight: "500" },
+  chipActiveText: { color: "#0D0D0F", fontWeight: "600" },
 
   filterChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: "#1E1E21",
   },
   filterChipActive: {
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: "#F59E0B",
   },
-  filterChipText: { color: THEME.textSec, fontSize: 12 },
+  filterChipText: {
+    color: "#A0A0A8",
+    fontSize: 13,
+    fontWeight: "500",
+  },
   filterChipTextActive: {
-    color: "#000",
-    fontSize: 12,
-    fontWeight: "700",
+    color: "#0D0D0F",
+    fontSize: 13,
+    fontWeight: "600",
   },
   chipFuture: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderColor: "#2d2d33",
+    backgroundColor: "#1E1E21",
     opacity: 0.5,
   },
   chipFutureText: {
-    color: "#888",
-    fontWeight: "600",
+    color: "#606068",
+    fontWeight: "500",
   },
 
-  label: { color: THEME.textSec, fontSize: 12 },
+  label: { color: "#A0A0A8", fontSize: 12 },
 
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.85)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: 20,
   },
   modalBox: {
     width: "100%",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#161618",
     borderRadius: 24,
     padding: 24,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
   },
-  // lidt højere til timeline-UI
   modalBoxTall: {
     width: "100%",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#161618",
     borderRadius: 24,
     padding: 24,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
     maxHeight: "80%",
   },
   modalTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginBottom: 10,
-    color: THEME.text,
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 12,
+    color: "#FFFFFF",
   },
   modalText: {
-    color: "#CCC",
+    color: "#A0A0A8",
     marginBottom: 20,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
   },
   modalBtnRow: {
     flexDirection: "row",
@@ -3639,49 +2937,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   modalCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#26262A",
+    backgroundColor: "#1E1E21",
   },
 
-  // No Spots Modal
   noSpotsModal: {
     width: "100%",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#161618",
     borderRadius: 24,
     padding: 28,
     alignItems: "center",
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
   },
   noSpotsIconCircle: {
     width: 72,
     height: 72,
-    borderRadius: 36,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    borderRadius: 24,
+    backgroundColor: "#F59E0B20",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
   },
   noSpotsTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: THEME.text,
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#FFFFFF",
     textAlign: "center",
     marginBottom: 12,
   },
   noSpotsDescription: {
     fontSize: 15,
-    color: THEME.textSec,
+    color: "#A0A0A8",
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 20,
@@ -3690,20 +2982,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    backgroundColor: "#1E1E21",
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 12,
     marginBottom: 12,
   },
   noSpotsAppBadgeText: {
     fontSize: 14,
     fontWeight: "600",
-    color: THEME.graphYellow,
+    color: "#F59E0B",
   },
   noSpotsHint: {
     fontSize: 13,
-    color: THEME.textSec,
+    color: "#606068",
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 24,
@@ -3718,45 +3010,207 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: THEME.graphYellow,
-    paddingVertical: 16,
-    borderRadius: 14,
+    backgroundColor: "#F59E0B",
+    height: 56,
+    borderRadius: 16,
   },
   noSpotsButtonPrimaryText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#000",
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#0D0D0F",
   },
   noSpotsButtonSecondary: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
   },
   noSpotsButtonSecondaryText: {
     fontSize: 15,
     fontWeight: "600",
-    color: THEME.textSec,
+    color: "#A0A0A8",
+  },
+
+  // Kører væk modal styles
+  drivingAwayModal: {
+    width: "100%",
+    backgroundColor: "#161618",
+    borderRadius: 24,
+    padding: 28,
+    alignItems: "center",
+  },
+  drivingAwayIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: "rgba(255, 59, 48, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  drivingAwayTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  drivingAwayDescription: {
+    fontSize: 15,
+    color: "#A0A0A8",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  drivingAwaySpeedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  drivingAwaySpeedText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FF3B30",
+  },
+  drivingAwayButtons: {
+    width: "100%",
+    gap: 12,
+  },
+  drivingAwayButtonDanger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#FF3B30",
+    height: 56,
+    borderRadius: 16,
+  },
+  drivingAwayButtonDangerText: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  drivingAwayButtonSecondary: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
+  },
+  drivingAwayButtonSecondaryText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#A0A0A8",
+  },
+
+  waterTempModal: {
+    width: "100%",
+    backgroundColor: "#161618",
+    borderRadius: 24,
+    padding: 28,
+    alignItems: "center",
+  },
+  waterTempIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: "rgba(59, 130, 246, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  waterTempModalTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  waterTempModalHint: {
+    fontSize: 14,
+    color: "#A0A0A8",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  waterTempInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 28,
+  },
+  waterTempInput: {
+    width: 120,
+    height: 56,
+    backgroundColor: "#1E1E21",
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: "#2A2A2E",
+  },
+  waterTempUnit: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#606068",
+  },
+  waterTempButtons: {
+    width: "100%",
+    gap: 12,
+  },
+  waterTempButtonPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: THEME.graphBlue,
+    height: 56,
+    borderRadius: 16,
+  },
+  waterTempButtonPrimaryText: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#0D0D0F",
+  },
+  waterTempButtonSecondary: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
+  },
+  waterTempButtonSecondaryText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#A0A0A8",
   },
 
   btn: {
-    paddingVertical: 16,
+    height: 56,
     borderRadius: 16,
     alignItems: "center",
+    justifyContent: "center",
     flex: 1,
   },
-  primary: { backgroundColor: THEME.primary },
+  primary: { backgroundColor: "#F59E0B" },
   primaryText: {
-    color: "#000",
-    fontSize: 16,
-    fontWeight: "700",
+    color: "#0D0D0F",
+    fontSize: 17,
+    fontWeight: "600",
   },
-  ghost: { backgroundColor: "#333" },
+  ghost: { backgroundColor: "#1E1E21" },
   ghostText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "600",
   },
 
   graphContainer: {
@@ -3768,7 +3222,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
     fontWeight: "500",
     backgroundColor: "transparent",
     paddingRight: 4,
@@ -3781,7 +3235,7 @@ const styles = StyleSheet.create({
   },
   graphTimeText: {
     fontSize: 11,
-    color: THEME.textSec,
+    color: "#606068",
   },
   graphGrid: {
     position: "absolute",
@@ -3795,7 +3249,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: "#ffffff30",
+    backgroundColor: "#2A2A2E",
   },
 
   sparkWrap: {
@@ -3823,23 +3277,22 @@ const styles = StyleSheet.create({
   },
   sparkLabel: {
     fontSize: 10,
-    color: THEME.textSec,
+    color: "#606068",
     marginTop: 4,
     position: "absolute",
     bottom: -18,
   },
   sparkValue: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
     paddingHorizontal: 6,
     paddingVertical: 3,
-    backgroundColor: "#ffffff20",
+    backgroundColor: "#1E1E21",
     borderRadius: 8,
     marginBottom: 6,
   },
 
-  // timeline-UI
   timelineHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -3847,19 +3300,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   timelineLabel: {
-    color: THEME.textSec,
+    color: "#606068",
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   timelineTime: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   timelineTimeBig: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 20,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   timelineWrapper: {
     marginTop: 4,
@@ -3868,8 +3321,8 @@ const styles = StyleSheet.create({
   },
   timelineBar: {
     height: 120,
-    borderRadius: 12,
-    backgroundColor: "#26262A",
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
     justifyContent: "center",
     paddingHorizontal: 0,
     overflow: "hidden",
@@ -3880,21 +3333,21 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: "#3A3A40",
+    backgroundColor: "#2A2A2E",
   },
   timelineGridLineH: {
     position: "absolute",
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: "#3A3A40",
+    backgroundColor: "#2A2A2E",
   },
   timelineCursor: {
     position: "absolute",
     top: 0,
     bottom: 0,
     width: 2,
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: "#F59E0B",
     opacity: 0.8,
   },
   timelineMarker: {
@@ -3906,28 +3359,28 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
   },
   timelineMarkerDotActive: {
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
     borderWidth: 2,
     borderColor: "#FFFFFF",
   },
   timelineMarkerLabelWrap: {
     marginBottom: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: "#00000080",
+    backgroundColor: "#F59E0B20",
   },
   timelineMarkerLabelWrapActive: {
-    backgroundColor: "#22C55E",
+    backgroundColor: "#F59E0B",
   },
   timelineMarkerLabel: {
-    color: "#FFF",
+    color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "600",
   },
@@ -3940,44 +3393,41 @@ const styles = StyleSheet.create({
   addCatchBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#1F2933",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#F59E0B20",
   },
   addCatchBtnText: {
-    color: THEME.startGreen,
+    color: "#F59E0B",
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   deleteCatchBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#3A1E21",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#FF3B3015",
   },
   deleteCatchBtnText: {
-    color: THEME.danger,
+    color: "#FF3B30",
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
   },
 
-  // NY AFSLUT TUR MODAL
   endTripModal: {
     width: "100%",
-    backgroundColor: THEME.card,
+    backgroundColor: "#161618",
     borderRadius: 24,
     padding: 20,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
   endTripHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 24,
   },
   endTripTitleRow: {
     flexDirection: "row",
@@ -3986,55 +3436,51 @@ const styles = StyleSheet.create({
   },
   endTripTitle: {
     fontSize: 20,
-    fontWeight: "700",
-    color: THEME.text,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   endTripCountBadge: {
-    backgroundColor: THEME.graphYellow,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: "#F59E0B",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 12,
   },
   endTripCountText: {
-    color: "#000",
+    color: "#0D0D0F",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   endTripTimeSelector: {
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   endTripTimeCurrent: {
     alignItems: "center",
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    backgroundColor: "#1E1E21",
+    paddingHorizontal: 28,
+    paddingVertical: 14,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.3)",
   },
   endTripTimeCurrentLabel: {
-    fontSize: 11,
-    color: THEME.textSec,
+    fontSize: 12,
+    color: "#606068",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 4,
   },
   endTripTimeCurrentValue: {
     fontSize: 32,
-    fontWeight: "700",
-    color: THEME.graphYellow,
-    letterSpacing: -1,
+    fontWeight: "200",
+    color: "#FFFFFF",
+    fontVariant: ["tabular-nums"],
   },
   endTripTimelineContainer: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   endTripTimelineBar: {
     height: 140,
     borderRadius: 16,
-    backgroundColor: "#18181B",
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    backgroundColor: "#1E1E21",
     overflow: "visible",
     position: "relative",
   },
@@ -4060,7 +3506,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 20,
     width: 2,
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: "#F59E0B",
     borderRadius: 1,
   },
   endTripCursorDot: {
@@ -4069,9 +3515,9 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: "#F59E0B",
     borderWidth: 3,
-    borderColor: THEME.card,
+    borderColor: "#161618",
   },
   endTripMarker: {
     position: "absolute",
@@ -4083,31 +3529,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: "rgba(34, 197, 94, 0.2)",
+    backgroundColor: "#F59E0B20",
     marginBottom: 4,
   },
   endTripMarkerPillActive: {
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
   },
   endTripMarkerText: {
     fontSize: 11,
     fontWeight: "600",
-    color: THEME.startGreen,
+    color: "#F59E0B",
   },
   endTripMarkerTextActive: {
-    color: "#000",
+    color: "#0D0D0F",
   },
   endTripMarkerStem: {
     width: 2,
     height: 60,
-    backgroundColor: THEME.startGreen,
-    opacity: 0.5,
+    backgroundColor: "#F59E0B",
+    opacity: 0.4,
   },
   endTripMarkerDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
     marginTop: -1,
   },
   endTripMarkerDotActive: {
@@ -4115,7 +3561,7 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     borderWidth: 3,
-    borderColor: "#fff",
+    borderColor: "#FFFFFF",
   },
   endTripTimeAxis: {
     flexDirection: "row",
@@ -4125,54 +3571,54 @@ const styles = StyleSheet.create({
   },
   endTripTimeAxisText: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
   },
   endTripActions: {
     flexDirection: "row",
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   endTripAddBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: THEME.graphYellow,
-    paddingVertical: 14,
-    borderRadius: 14,
+    gap: 8,
+    backgroundColor: "#F59E0B",
+    height: 56,
+    borderRadius: 16,
   },
   endTripAddBtnText: {
-    color: "#000",
-    fontSize: 15,
-    fontWeight: "700",
+    color: "#0D0D0F",
+    fontSize: 17,
+    fontWeight: "600",
   },
   endTripDeleteBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "rgba(255, 69, 58, 0.15)",
-    paddingVertical: 14,
+    backgroundColor: "#FF3B3015",
+    height: 56,
     paddingHorizontal: 20,
-    borderRadius: 14,
+    borderRadius: 16,
   },
   endTripDeleteBtnDisabled: {
-    backgroundColor: THEME.inputBg,
+    backgroundColor: "#1E1E21",
   },
   endTripDeleteBtnText: {
-    color: THEME.danger,
+    color: "#FF3B30",
     fontSize: 15,
     fontWeight: "600",
   },
   endTripDeleteBtnTextDisabled: {
-    color: THEME.textSec,
+    color: "#606068",
   },
   endTripHint: {
     fontSize: 13,
-    color: THEME.textSec,
+    color: "#606068",
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   endTripFooter: {
     flexDirection: "row",
@@ -4182,14 +3628,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: THEME.inputBg,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
   },
   endTripCancelBtnText: {
-    color: THEME.text,
+    color: "#A0A0A8",
     fontSize: 15,
     fontWeight: "600",
   },
@@ -4198,15 +3642,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: THEME.startGreen,
+    gap: 8,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#F59E0B",
   },
   endTripSaveBtnText: {
-    color: "#000",
-    fontSize: 15,
-    fontWeight: "700",
+    color: "#0D0D0F",
+    fontSize: 17,
+    fontWeight: "600",
   },
 
   toastOverlay: {
@@ -4217,51 +3661,44 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(13, 13, 15, 0.6)",
     zIndex: 20,
   },
   toastBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0F1720",
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 2,
-    borderColor: THEME.startGreen,
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    backgroundColor: "#161618",
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   toastIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: THEME.startGreen,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "#F59E0B",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
+    marginRight: 12,
   },
   toastText: {
-    color: THEME.text,
-    fontSize: 14,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
   },
   seasonBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    gap: 6,
+    backgroundColor: "#1E1E21",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   seasonBtnText: {
-    color: THEME.textSec,
-    fontSize: 12,
-    fontWeight: "600",
+    color: "#A0A0A8",
+    fontSize: 13,
+    fontWeight: "500",
   },
   seasonBtnSub: {
     display: "none",
@@ -4269,77 +3706,71 @@ const styles = StyleSheet.create({
   seasonRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#333",
-    backgroundColor: "#151515",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
   },
   seasonRowActive: {
-    borderColor: THEME.graphYellow,
-    backgroundColor: "#1E1E12",
+    backgroundColor: "#F59E0B20",
   },
   seasonRowText: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   seasonRowTextActive: {
-    color: THEME.graphYellow,
+    color: "#F59E0B",
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   seasonRadio: {
     width: 18,
     height: 18,
     borderRadius: 9,
     borderWidth: 2,
-    borderColor: "#555",
+    borderColor: "#2A2A2E",
     marginRight: 10,
   },
   seasonRadioActive: {
-    borderColor: THEME.graphYellow,
-    backgroundColor: THEME.graphYellow,
+    borderColor: "#F59E0B",
+    backgroundColor: "#F59E0B",
   },
   yearPickerBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#1E1E21",
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
-  },
-  yearPickerBtnText: {
-    color: THEME.textSec,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  yearPill: {
-    backgroundColor: THEME.graphYellow,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
     borderRadius: 12,
   },
+  yearPickerBtnText: {
+    color: "#A0A0A8",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  yearPill: {
+    backgroundColor: "#F59E0B",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
   yearPillText: {
-    color: "#000",
-    fontWeight: "700",
+    color: "#0D0D0F",
+    fontWeight: "600",
     fontSize: 13,
   },
 
-  // === SPOTS BUTTON & MODAL ===
   spotsButton: {
     marginTop: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 12,
+    height: 48,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    backgroundColor: "#1E1E21",
   },
   spotsButtonContent: {
     flexDirection: "row",
@@ -4351,18 +3782,18 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    backgroundColor: "#F59E0B20",
     alignItems: "center",
     justifyContent: "center",
   },
   spotsButtonTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: THEME.textSec,
+    color: "#A0A0A8",
   },
   spotsButtonSubtitle: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
     marginTop: 2,
   },
   spotListItem: {
@@ -4370,25 +3801,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.cardBorder,
+    borderBottomColor: "#2A2A2E",
     gap: 12,
   },
   spotListIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    backgroundColor: "#F59E0B20",
     alignItems: "center",
     justifyContent: "center",
   },
   spotListName: {
     fontSize: 15,
-    fontWeight: "700",
-    color: THEME.text,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   spotListNotes: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
     marginTop: 2,
   },
   spotListStats: {
@@ -4399,17 +3830,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: THEME.card,
+    backgroundColor: "#1E1E21",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
   spotStatText: {
     fontSize: 12,
-    fontWeight: "700",
-    color: THEME.text,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });
 

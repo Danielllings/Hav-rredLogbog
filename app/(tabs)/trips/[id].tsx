@@ -22,6 +22,7 @@ import MapView, {
   PROVIDER_GOOGLE,
 } from "react-native-maps";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import Svg, { Path, Defs, LinearGradient, Stop, Circle } from "react-native-svg";
 import { getTrip, TripRow, deleteTrip, updateTrip } from "../../../lib/trips";
 import { evaluateTripWithDmi } from "../../../lib/dmi";
@@ -29,24 +30,29 @@ import { evaluateTripWithDmi } from "../../../lib/dmi";
 // TILPAS DETTE IMPORT TIL DIT EKSISTERENDE spots-lib
 import { listSpots, type SpotRow } from "../../../lib/spots";
 import { useLanguage } from "../../../lib/i18n";
+import { useTheme } from "../../../lib/theme";
 
 const { width } = Dimensions.get("window");
 
-// --- TEMA (matcher Track/Index) ---
+// --- NERO TEMA ---
 const THEME = {
-  bg: "#121212",
-  card: "#1C1C1E",
-  cardBorder: "#2C2C2E",
+  bg: "#0D0D0F",
+  card: "#161618",
+  elevated: "#1E1E21",
+  cardBorder: "#2A2A2E",
   primary: "#FFFFFF",
 
-  graphYellow: "#F59E0B",
-  startGreen: "#22C55E",
+  accent: "#F59E0B",
+  accentMuted: "#F59E0B20",
+  startGreen: "#F59E0B",
 
   text: "#FFFFFF",
-  textSec: "#A1A1AA",
-  danger: "#FF453A",
-  inputBg: "#2C2C2E",
-  border: "#333333",
+  textSec: "#A0A0A8",
+  textTertiary: "#606068",
+  danger: "#FF3B30",
+  dangerMuted: "#FF3B3015",
+  inputBg: "#1E1E21",
+  border: "#2A2A2E",
 };
 
 // --- MØRKT KORT STIL ---
@@ -244,7 +250,8 @@ function degToCompass(deg?: number) {
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const { theme } = useTheme();
 
   const [trip, setTrip] = useState<TripRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -520,6 +527,17 @@ export default function TripDetailScreen() {
   const hasClimate = !!(evaluation?.stationName || evaluation?.stationId);
   const hasOcean = !!(evaluation?.oceanStationName || evaluation?.oceanStationId);
 
+  // Check if trip has GPS path data for replay
+  const hasReplayData = (() => {
+    if (!trip.path_json) return false;
+    try {
+      const parsed = JSON.parse(trip.path_json);
+      return Array.isArray(parsed) && parsed.length >= 2;
+    } catch {
+      return false;
+    }
+  })();
+
   async function handleSelectSpot(s: SpotRow | null) {
     if (!trip) {
       setSpotModalVisible(false);
@@ -550,83 +568,204 @@ export default function TripDetailScreen() {
 
   return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.bg} />
+      <StatusBar barStyle="light-content" backgroundColor="#0D0D0F" />
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        {/* TUR INFO + FANGST-TIMELINE */}
-        <View style={styles.card}>
-          {/* Header med dato */}
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardDate}>
-              {new Date(trip.start_ts).toLocaleDateString("da-DK", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </Text>
-            {(trip as any).spot_name && (
-              <View style={styles.spotBadge}>
-                <Ionicons name="location" size={12} color={THEME.graphYellow} />
-                <Text style={styles.spotBadgeText}>{(trip as any).spot_name}</Text>
+
+        {/* === HERO SECTION === */}
+        <View style={styles.heroSection}>
+          {/* Dato og lokation */}
+          <View style={styles.heroHeader}>
+            <View style={styles.heroHeaderLeft}>
+              <Text style={styles.heroDate}>
+                {new Date(trip.start_ts).toLocaleDateString("da-DK", {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                })}
+              </Text>
+              <Text style={styles.heroYear}>
+                {new Date(trip.start_ts).getFullYear()}
+              </Text>
+            </View>
+            <Pressable
+              style={styles.heroLocationBtn}
+              onPress={() => setSpotModalVisible(true)}
+            >
+              <Ionicons name="location" size={14} color="#F59E0B" />
+              <Text style={styles.heroLocationText}>
+                {(trip as any).spot_name || t("addLocation")}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#606068" />
+            </Pressable>
+          </View>
+
+          {/* Hero Stat - Varighed */}
+          <View style={styles.heroDurationWrap}>
+            <Text style={styles.heroDuration}>{fmtTime(trip.duration_sec)}</Text>
+            <Text style={styles.heroDurationLabel}>{t("duration")}</Text>
+          </View>
+
+          {/* Stats Row */}
+          <View style={styles.heroStatsRow}>
+            <View style={styles.heroStatItem}>
+              <View style={[styles.heroStatIcon, { backgroundColor: "#F59E0B20" }]}>
+                <Ionicons name="fish" size={18} color="#F59E0B" />
+              </View>
+              <Text style={styles.heroStatValue}>{fishCountDisplay}</Text>
+              <Text style={styles.heroStatLabel}>{t("fishCaughtLabel")}</Text>
+            </View>
+            <View style={styles.heroStatDivider} />
+            <View style={styles.heroStatItem}>
+              <View style={[styles.heroStatIcon, { backgroundColor: "#3B82F620" }]}>
+                <Ionicons name="navigate" size={18} color="#3B82F6" />
+              </View>
+              <Text style={styles.heroStatValue}>{(trip.distance_m / 1000).toFixed(1)}</Text>
+              <Text style={styles.heroStatLabel}>km</Text>
+            </View>
+            <View style={styles.heroStatDivider} />
+            <View style={styles.heroStatItem}>
+              <View style={[styles.heroStatIcon, { backgroundColor: "#F59E0B20" }]}>
+                <Ionicons name="time" size={18} color="#F59E0B" />
+              </View>
+              <Text style={styles.heroStatValue}>{fmtClock(trip.start_ts)}</Text>
+              <Text style={styles.heroStatLabel}>{t("start")}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* === KORT MED RUTE === */}
+        <View style={styles.mapCard}>
+          <View style={styles.mapContainer}>
+            {initialRegion ? (
+              <MapView
+                style={styles.map}
+                initialRegion={initialRegion}
+                region={initialRegion}
+                customMapStyle={MAP_STYLE}
+                userInterfaceStyle={MAP_UI_STYLE}
+                provider={MAP_PROVIDER}
+                mapType={MAP_TYPE}
+              >
+                {pathPoints.length > 0 && (
+                  <Polyline
+                    coordinates={pathPoints.map((p) => ({
+                      latitude: p.latitude,
+                      longitude: p.longitude,
+                    }))}
+                    strokeWidth={3}
+                    strokeColor="#F59E0B"
+                  />
+                )}
+                {pathPoints.length > 0 && (
+                  <Marker
+                    coordinate={{
+                      latitude: pathPoints[0].latitude,
+                      longitude: pathPoints[0].longitude,
+                    }}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                  >
+                    <View style={styles.mapMarkerStart}>
+                      <Ionicons name="play" size={10} color="#0D0D0F" />
+                    </View>
+                  </Marker>
+                )}
+                {pathPoints.length > 0 && (
+                  <Marker
+                    coordinate={{
+                      latitude: pathPoints[pathPoints.length - 1].latitude,
+                      longitude: pathPoints[pathPoints.length - 1].longitude,
+                    }}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                  >
+                    <View style={styles.mapMarkerEnd}>
+                      <View style={styles.mapMarkerEndInner} />
+                    </View>
+                  </Marker>
+                )}
+              </MapView>
+            ) : (
+              <View style={styles.noMap}>
+                <Ionicons name="map-outline" size={32} color="#606068" />
+                <Text style={styles.noMapText}>{t("noGpsData")}</Text>
               </View>
             )}
           </View>
 
-          {/* Symmetrisk 3x2 grid */}
-          <View style={styles.infoGrid}>
-            <Info label={t("fishCaughtLabel")} value={`${fishCountDisplay}`} highlight />
-            <Info label={t("duration")} value={fmtTime(trip.duration_sec)} />
-            <Info label={t("distance")} value={`${(trip.distance_m / 1000).toFixed(1)} km`} />
-          </View>
+          {/* Replay knap overlay */}
+          {hasReplayData && (
+            <Pressable
+              style={styles.replayOverlayBtn}
+              onPress={() => router.push(`/trip-replay/${id}`)}
+            >
+              <Ionicons name="play-circle" size={20} color="#FFFFFF" />
+              <Text style={styles.replayOverlayText}>{language === "da" ? "Afspil tur" : "Replay trip"}</Text>
+            </Pressable>
+          )}
+        </View>
 
-          {/* Spot redigér */}
-          <Pressable
-            style={styles.spotEditBtn}
-            onPress={() => setSpotModalVisible(true)}
-          >
-            <Ionicons name="location-outline" size={14} color={THEME.textSec} />
-            <Text style={styles.spotEditText}>
-              {(trip as any).spot_name ? t("changeLocation") : t("addLocation")}
-            </Text>
-          </Pressable>
+        {/* === FANGST TIMELINE === */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <View style={styles.sectionIcon}>
+                <Ionicons name="fish" size={16} color="#F59E0B" />
+              </View>
+              <Text style={styles.sectionTitle}>{t("catchesOnTimeline")}</Text>
+            </View>
+            <Pressable style={styles.editBtnSmall} onPress={() => setEditModalVisible(true)}>
+              <Ionicons name="create-outline" size={16} color="#A0A0A8" />
+            </Pressable>
+          </View>
 
           <FishTimeline
             startIso={trip.start_ts}
             endIso={trip.end_ts}
             fishEventsMs={fishEventsMs}
-            onEdit={() => setEditModalVisible(true)}
+            onReplay={hasReplayData ? () => router.push(`/trip-replay/${id}`) : undefined}
             t={t}
           />
-
-          <View style={styles.periodSection}>
-            <View style={styles.periodItem}>
-              <Ionicons name="play-circle-outline" size={16} color={THEME.startGreen} />
-              <Text style={styles.periodText}>{fmtDateTime(trip.start_ts)}</Text>
-            </View>
-            <View style={styles.periodItem}>
-              <Ionicons name="stop-circle-outline" size={16} color={THEME.danger} />
-              <Text style={styles.periodText}>{fmtDateTime(trip.end_ts)}</Text>
-            </View>
-          </View>
         </View>
 
-        {/* VEJRDATA (over kortet) */}
+        {/* === VEJRDATA === */}
         <View style={styles.card}>
-          <Text style={styles.title}>{t("weatherDuringFishing")}</Text>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.sectionIcon, { backgroundColor: "#3B82F620" }]}>
+                <Ionicons name="cloud" size={16} color="#3B82F6" />
+              </View>
+              <Text style={styles.sectionTitle}>{t("weatherDuringFishing")}</Text>
+            </View>
+            {evaluation && (
+              <Pressable
+                style={styles.syncBtnSmall}
+                onPress={handleSyncWeather}
+                disabled={syncingWeather}
+              >
+                {syncingWeather ? (
+                  <ActivityIndicator size="small" color="#F59E0B" />
+                ) : (
+                  <Ionicons name="sync" size={16} color="#F59E0B" />
+                )}
+              </Pressable>
+            )}
+          </View>
 
           {!evaluation ? (
             <View style={styles.noWeatherContainer}>
-              <Text style={styles.body}>{t("noWeatherForPeriod")}</Text>
+              <View style={styles.noWeatherIcon}>
+                <Ionicons name="cloud-offline-outline" size={32} color="#606068" />
+              </View>
+              <Text style={styles.noWeatherText}>{t("noWeatherForPeriod")}</Text>
               <Pressable
                 style={styles.syncWeatherBtn}
                 onPress={handleSyncWeather}
                 disabled={syncingWeather}
               >
                 {syncingWeather ? (
-                  <ActivityIndicator size="small" color="#000" />
+                  <ActivityIndicator size="small" color="#0D0D0F" />
                 ) : (
                   <>
-                    <Ionicons name="sync" size={16} color="#000" />
+                    <Ionicons name="sync" size={18} color="#0D0D0F" />
                     <Text style={styles.syncWeatherBtnText}>{t("syncWeather")}</Text>
                   </>
                 )}
@@ -641,54 +780,54 @@ export default function TripDetailScreen() {
                 disabled={syncingWeather}
               >
                 {syncingWeather ? (
-                  <ActivityIndicator size="small" color="#000" />
+                  <ActivityIndicator size="small" color="#0D0D0F" />
                 ) : (
                   <>
-                    <Ionicons name="sync" size={16} color="#000" />
+                    <Ionicons name="sync" size={18} color="#0D0D0F" />
                     <Text style={styles.syncWeatherBtnText}>{t("syncWeather")}</Text>
                   </>
                 )}
               </Pressable>
             </View>
           ) : (
-            <View style={{ gap: 6 }}>
+            <View style={{ gap: 8 }}>
               {evaluation.note && (
-                <Text style={styles.noteText}>{t("note")}: {evaluation.note}</Text>
+                <Text style={styles.noteText}>{evaluation.note}</Text>
               )}
 
-              {evaluation.airTempC && (
-                <StatLine
-                  label={t("airTempLabel")}
-                  stat={evaluation.airTempC}
-                  fmt={(v) => `${v.toFixed(1)}°C`}
-                />
-              )}
+              {/* Weather Stats Grid */}
+              <View style={styles.weatherGrid}>
+                {evaluation.airTempC && (
+                  <View style={styles.weatherStatCard}>
+                    <Ionicons name="thermometer-outline" size={20} color="#F59E0B" />
+                    <Text style={styles.weatherStatValue}>{evaluation.airTempC.avg.toFixed(1)}°</Text>
+                    <Text style={styles.weatherStatLabel}>{t("airTemp")}</Text>
+                  </View>
+                )}
+                {evaluation.windMS && (
+                  <View style={styles.weatherStatCard}>
+                    <Ionicons name="speedometer-outline" size={20} color="#3B82F6" />
+                    <Text style={styles.weatherStatValue}>{evaluation.windMS.avg.toFixed(1)}</Text>
+                    <Text style={styles.weatherStatLabel}>m/s</Text>
+                  </View>
+                )}
+                {evaluation.waterTempC && (
+                  <View style={styles.weatherStatCard}>
+                    <Ionicons name="water-outline" size={20} color="#06B6D4" />
+                    <Text style={styles.weatherStatValue}>{evaluation.waterTempC.avg.toFixed(1)}°</Text>
+                    <Text style={styles.weatherStatLabel}>{t("waterTemp")}</Text>
+                  </View>
+                )}
+                {evaluation.waterLevelCM && (
+                  <View style={styles.weatherStatCard}>
+                    <MaterialCommunityIcons name="waves" size={20} color="#8B5CF6" />
+                    <Text style={styles.weatherStatValue}>{evaluation.waterLevelCM.avg.toFixed(0)}</Text>
+                    <Text style={styles.weatherStatLabel}>cm</Text>
+                  </View>
+                )}
+              </View>
 
-              {evaluation.windMS && (
-                <StatLine
-                  label={t("windLabel")}
-                  stat={evaluation.windMS}
-                  fmt={(v) => `${v.toFixed(1)} m/s`}
-                  direction={evaluation.windDirDeg?.avg}
-                />
-              )}
-
-              {evaluation.waterTempC && (
-                <StatLine
-                  label={t("seaTempLabel")}
-                  stat={evaluation.waterTempC}
-                  fmt={(v) => `${v.toFixed(1)}°C`}
-                />
-              )}
-
-              {evaluation.waterLevelCM && (
-                <StatLine
-                  label={t("waterLevelLabel")}
-                  stat={evaluation.waterLevelCM}
-                  fmt={(v) => `${v.toFixed(0)} cm`}
-                />
-              )}
-
+              {/* Grafer */}
               {evaluation.airTempSeries?.length > 0 && (
                 <StatGraph
                   series={evaluation.airTempSeries}
@@ -729,44 +868,20 @@ export default function TripDetailScreen() {
                 />
               )}
 
+              {/* Data source */}
               <View style={styles.sourceSection}>
-                <View style={styles.sourceHeader}>
-                  <Text style={styles.sourceLabel}>{t("sourceDmi")}</Text>
-                  <View style={styles.sourceHeaderRight}>
-                    {dataTimeStr && (
-                      <Text style={styles.sourceTime}>{dataTimeStr}</Text>
-                    )}
-                    <Pressable
-                      style={styles.syncWeatherBtnSmall}
-                      onPress={handleSyncWeather}
-                      disabled={syncingWeather}
-                    >
-                      {syncingWeather ? (
-                        <ActivityIndicator size="small" color={THEME.graphYellow} />
-                      ) : (
-                        <Ionicons name="sync" size={16} color={THEME.graphYellow} />
-                      )}
-                    </Pressable>
-                  </View>
+                <View style={styles.sourceChip}>
+                  <Ionicons name="analytics" size={12} color="#606068" />
+                  <Text style={styles.sourceChipText}>DMI Open Data</Text>
                 </View>
-
                 <View style={styles.sourceStatusRow}>
-                  <View style={styles.sourceStatus}>
-                    <Ionicons
-                      name={hasClimate ? "checkmark-circle" : "close-circle"}
-                      size={16}
-                      color={hasClimate ? THEME.startGreen : THEME.danger}
-                    />
-                    <Text style={styles.sourceStatusText}>{t("weatherDataLabel")}</Text>
+                  <View style={styles.sourceStatusItem}>
+                    <View style={[styles.sourceStatusDot, hasClimate && styles.sourceStatusDotActive]} />
+                    <Text style={styles.sourceStatusLabel}>Klima</Text>
                   </View>
-
-                  <View style={styles.sourceStatus}>
-                    <Ionicons
-                      name={hasOcean ? "checkmark-circle" : "close-circle"}
-                      size={16}
-                      color={hasOcean ? THEME.startGreen : THEME.danger}
-                    />
-                    <Text style={styles.sourceStatusText}>{t("oceanDataLabel")}</Text>
+                  <View style={styles.sourceStatusItem}>
+                    <View style={[styles.sourceStatusDot, hasOcean && styles.sourceStatusDotActive]} />
+                    <Text style={styles.sourceStatusLabel}>Hav</Text>
                   </View>
                 </View>
               </View>
@@ -774,85 +889,19 @@ export default function TripDetailScreen() {
           )}
         </View>
 
-        {/* KORTET NEDERST */}
-        <View style={styles.card}>
-          <Text style={styles.title}>{t("route")}</Text>
-          <View style={styles.mapContainer}>
-            {initialRegion ? (
-              <MapView
-                style={styles.map}
-                initialRegion={initialRegion}
-                region={initialRegion}
-                customMapStyle={MAP_STYLE}
-                userInterfaceStyle={MAP_UI_STYLE}
-                provider={MAP_PROVIDER}
-                mapType={MAP_TYPE}
-              >
-                {pathPoints.length > 0 && (
-                  <Polyline
-                    coordinates={pathPoints.map((p) => ({
-                      latitude: p.latitude,
-                      longitude: p.longitude,
-                    }))}
-                    strokeWidth={4}
-                    strokeColor={THEME.primary}
-                  />
-                )}
-                {pathPoints.length > 0 && (
-                  <Marker
-                    coordinate={{
-                      latitude: pathPoints[0].latitude,
-                      longitude: pathPoints[0].longitude,
-                    }}
-                    pinColor="green"
-                    title="Start"
-                  />
-                )}
-                {pathPoints.length > 0 && (
-                  <Marker
-                    coordinate={{
-                      latitude:
-                        pathPoints[pathPoints.length - 1].latitude,
-                      longitude:
-                        pathPoints[pathPoints.length - 1].longitude,
-                    }}
-                    pinColor="red"
-                    title="Slut"
-                  />
-                )}
-              </MapView>
-            ) : (
-              <View style={styles.noMap}>
-                <Text style={styles.noMapText}>
-                  {t("noGpsData")}
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
+        {/* === SLET TUR === */}
+        {showDeleteButton && (
+          <Pressable style={styles.deleteBtn} onPress={handleDelete}>
+            <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+            <Text style={styles.deleteBtnText}>{t("deleteTrip")}</Text>
+          </Pressable>
+        )}
 
-        {/* SLET TUR / INFO */}
-        {showDeleteButton ? (
-          <View style={styles.row}>
-            <Pressable
-              style={[styles.btn, styles.danger]}
-              onPress={handleDelete}
-            >
-              <Text style={styles.dangerText}>{t("deleteTrip")}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: THEME.textSec }]}>
-              {t("tripCannotBeDeleted")}
-            </Text>
-            <Text
-              style={[
-                styles.infoVal,
-                { color: THEME.danger, fontWeight: "500", fontSize: 14 },
-              ]}
-            >
-              {t("durationOver30Min")}
+        {!showDeleteButton && (
+          <View style={styles.cannotDeleteRow}>
+            <Ionicons name="information-circle-outline" size={18} color={THEME.textTertiary} />
+            <Text style={styles.cannotDeleteText}>
+              {t("tripCannotBeDeleted")} — {t("durationOver30Min")}
             </Text>
           </View>
         )}
@@ -895,7 +944,7 @@ export default function TripDetailScreen() {
               {/* Header med ikon og tæller */}
               <View style={styles.editModalHeader}>
                 <View style={styles.editModalTitleRow}>
-                  <Ionicons name="fish" size={24} color={THEME.graphYellow} />
+                  <Ionicons name="fish" size={24} color={theme.primary} />
                   <Text style={styles.editModalTitle}>{t("editCatches")}</Text>
                 </View>
                 <View style={styles.editModalCountBadge}>
@@ -1183,7 +1232,7 @@ export default function TripDetailScreen() {
 function Info({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <View style={styles.infoItem}>
-      <Text style={[styles.infoVal, highlight && { color: THEME.graphYellow }]}>{value}</Text>
+      <Text style={[styles.infoVal, highlight && { color: "#F59E0B" }]}>{value}</Text>
       <Text style={styles.infoLabel}>{label}</Text>
     </View>
   );
@@ -1194,15 +1243,16 @@ function FishTimeline({
   startIso,
   endIso,
   fishEventsMs,
-  onEdit,
+  onReplay,
   t,
 }: {
   startIso: string;
   endIso: string;
   fishEventsMs: number[];
-  onEdit: () => void;
+  onReplay?: () => void;
   t: (key: any) => string;
 }) {
+  const { language } = useLanguage();
   const startMs = new Date(startIso).getTime();
   const endMs = new Date(endIso).getTime();
 
@@ -1217,13 +1267,6 @@ function FishTimeline({
 
   return (
     <View style={styles.timelineWrapperSmall}>
-      <View style={styles.timelineHeader}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Ionicons name="fish-outline" size={18} color={THEME.graphYellow} />
-          <Text style={styles.timelineTitle}>{t("catchesOnTimeline")}</Text>
-        </View>
-      </View>
-
       <View style={styles.timelineBox}>
         {/* lodrette “grid”-linjer */}
         <View style={styles.timelineGridRow} />
@@ -1258,17 +1301,22 @@ function FishTimeline({
         </View>
       </View>
 
-      <View style={styles.timelineEditRow}>
-        <Pressable style={styles.timelineEditBtn} onPress={onEdit}>
-          <Ionicons name="create-outline" size={16} color={THEME.textSec} />
-          <Text style={styles.timelineEditText}>{t("editCatches")}</Text>
-        </Pressable>
-      </View>
+      {onReplay && (
+        <View style={styles.timelineEditRow}>
+          <Pressable style={styles.timelineReplayBtn} onPress={onReplay}>
+            <Ionicons name="play" size={14} color="#000" />
+            <Text style={styles.timelineReplayText}>
+              {language === "da" ? "Afspil tur" : "Replay trip"}
+            </Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
 
 function WindCompass({ directionDeg }: { directionDeg?: number }) {
+  const { theme } = useTheme();
   if (directionDeg === undefined || Number.isNaN(directionDeg)) {
     return (
       <View style={styles.compass}>
@@ -1286,7 +1334,7 @@ function WindCompass({ directionDeg }: { directionDeg?: number }) {
       <Ionicons
         name="arrow-up"
         size={22}
-        color={THEME.graphYellow}
+        color={theme.primary}
         style={{ transform: [{ rotate: `${rot}deg` }] }}
       />
     </View>
@@ -1386,9 +1434,9 @@ function StatGraph({
     .toString()
     .padStart(2, "0");
 
-  const HEIGHT = 80;
-  const PADDING_X = 12;
-  const PADDING_Y = 12;
+  const HEIGHT = 100;
+  const PADDING_X = 16;
+  const PADDING_Y = 16;
   const GRAPH_H = HEIGHT - PADDING_Y * 2;
 
   const graphWidth = Math.max(layoutWidth - PADDING_X * 2, 0);
@@ -1520,8 +1568,8 @@ function StatGraph({
           <Svg width={layoutWidth} height={HEIGHT}>
             <Defs>
               <LinearGradient id={`grad-${label}`} x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={THEME.graphYellow} stopOpacity="0.25" />
-                <Stop offset="1" stopColor={THEME.graphYellow} stopOpacity="0.02" />
+                <Stop offset="0" stopColor="#F59E0B" stopOpacity="0.20" />
+                <Stop offset="1" stopColor="#F59E0B" stopOpacity="0.02" />
               </LinearGradient>
             </Defs>
 
@@ -1529,8 +1577,8 @@ function StatGraph({
             <Path
               d={linePath}
               fill="none"
-              stroke={THEME.graphYellow}
-              strokeWidth="2.5"
+              stroke="#F59E0B"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -1540,22 +1588,22 @@ function StatGraph({
               <>
                 <Path
                   d={`M ${activePoint.x},0 L ${activePoint.x},${HEIGHT}`}
-                  stroke={THEME.graphYellow}
+                  stroke="#F59E0B"
                   strokeWidth="1.5"
-                  opacity={0.8}
+                  opacity={0.6}
                 />
                 <Circle
                   cx={activePoint.x}
                   cy={activePoint.y}
-                  r="8"
-                  fill={THEME.graphYellow}
-                  opacity={0.3}
+                  r="10"
+                  fill="#F59E0B"
+                  opacity={0.2}
                 />
                 <Circle
                   cx={activePoint.x}
                   cy={activePoint.y}
                   r="5"
-                  fill={THEME.graphYellow}
+                  fill="#F59E0B"
                 />
               </>
             )}
@@ -1566,15 +1614,15 @@ function StatGraph({
                 <Circle
                   cx={lastPoint.x}
                   cy={lastPoint.y}
-                  r="6"
-                  fill={THEME.graphYellow}
-                  opacity={0.3}
+                  r="8"
+                  fill="#F59E0B"
+                  opacity={0.2}
                 />
                 <Circle
                   cx={lastPoint.x}
                   cy={lastPoint.y}
                   r="4"
-                  fill={THEME.graphYellow}
+                  fill="#F59E0B"
                 />
               </>
             )}
@@ -1631,51 +1679,355 @@ function StatGraph({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.bg,
+    backgroundColor: "#0D0D0F",
   },
   content: {
     padding: 16,
-    paddingBottom: 28,
+    paddingBottom: 40,
   },
 
-  card: {
-    backgroundColor: THEME.card,
-    borderRadius: 20,
+  // === HERO SECTION ===
+  heroSection: {
+    backgroundColor: "#161618",
+    borderRadius: 24,
     padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    marginBottom: 12,
   },
-  cardHeader: {
-    marginBottom: 16,
+  heroHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
   },
-  cardDate: {
+  heroHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+  },
+  heroDate: {
     fontSize: 15,
     fontWeight: "600",
-    color: THEME.text,
+    color: "#FFFFFF",
+  },
+  heroYear: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#606068",
+  },
+  heroLocationBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#1E1E21",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  heroLocationText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#A0A0A8",
+    maxWidth: 120,
+  },
+  heroDurationWrap: {
+    alignItems: "center",
+    marginBottom: 28,
+  },
+  heroDuration: {
+    fontSize: 64,
+    fontWeight: "100",
+    color: "#FFFFFF",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 2,
+  },
+  heroDurationLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#606068",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginTop: 4,
+  },
+  heroStatsRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    backgroundColor: "#1E1E21",
+    borderRadius: 16,
+    paddingVertical: 16,
+  },
+  heroStatItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  heroStatIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  heroStatValue: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    fontVariant: ["tabular-nums"],
+  },
+  heroStatLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#606068",
+    marginTop: 2,
+    textTransform: "uppercase",
+  },
+  heroStatDivider: {
+    width: 1,
+    height: 48,
+    backgroundColor: "#2A2A2E",
+  },
+
+  // === MAP CARD ===
+  mapCard: {
+    backgroundColor: "#161618",
+    borderRadius: 24,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+
+  // === SECTION HEADER ===
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  sectionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "#F59E0B20",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  editBtnSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#1E1E21",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  syncBtnSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#F59E0B20",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // === WEATHER GRID ===
+  weatherGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 8,
+  },
+  weatherStatCard: {
+    flex: 1,
+    minWidth: "45%",
+    backgroundColor: "#1E1E21",
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+    gap: 8,
+  },
+  weatherStatValue: {
+    fontSize: 28,
+    fontWeight: "200",
+    color: "#FFFFFF",
+    fontVariant: ["tabular-nums"],
+  },
+  weatherStatLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#606068",
+    textTransform: "uppercase",
+  },
+
+  // === NO WEATHER ===
+  noWeatherIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "#1E1E21",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  noWeatherText: {
+    fontSize: 15,
+    color: "#606068",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+
+  // === SOURCE SECTION ===
+  sourceChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#1E1E21",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+  },
+  sourceChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#606068",
+  },
+  sourceStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#606068",
+  },
+  sourceStatusDotActive: {
+    backgroundColor: "#F59E0B",
+  },
+
+  // === MAP MARKERS ===
+  mapMarkerStart: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#F59E0B",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  mapMarkerEnd: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#F59E0B20",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapMarkerEndInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#F59E0B",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+
+  // === REPLAY OVERLAY ===
+  replayOverlayBtn: {
+    position: "absolute",
+    bottom: 16,
+    left: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(245, 158, 11, 0.9)",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  replayOverlayText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0D0D0F",
+  },
+
+  // === DELETE BUTTON ===
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#FF3B3015",
+    height: 56,
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  deleteBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FF3B30",
+  },
+  cannotDeleteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#161618",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  cannotDeleteText: {
+    fontSize: 13,
+    color: "#606068",
+    fontWeight: "500",
+  },
+
+  // === LEGACY CARD (kept for compatibility) ===
+  card: {
+    backgroundColor: "#161618",
+    borderRadius: 24,
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  cardHeader: {
+    marginBottom: 20,
+  },
+  cardDate: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#FFFFFF",
     textTransform: "capitalize",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   spotBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
     alignSelf: "flex-start",
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    backgroundColor: "#F59E0B20",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   spotBadgeText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    color: THEME.graphYellow,
+    color: "#F59E0B",
   },
   title: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
-    color: THEME.textSec,
-    marginBottom: 12,
+    color: "#606068",
+    marginBottom: 16,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -1683,107 +2035,110 @@ const styles = StyleSheet.create({
   infoGrid: {
     flexDirection: "row",
     justifyContent: "space-around",
-    paddingVertical: 12,
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: THEME.cardBorder,
+    alignItems: "center",
+    paddingVertical: 16,
+    marginBottom: 16,
+    backgroundColor: "#1E1E21",
+    borderRadius: 16,
   },
   infoItem: {
     alignItems: "center",
     flex: 1,
   },
   infoLabel: {
-    color: THEME.textSec,
+    color: "#606068",
     fontSize: 11,
-    marginTop: 4,
+    marginTop: 6,
     textTransform: "uppercase",
     letterSpacing: 0.3,
+    fontWeight: "500",
   },
   infoVal: {
-    color: THEME.text,
-    fontSize: 24,
-    fontWeight: "700",
-    letterSpacing: -0.5,
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "200",
+    fontVariant: ["tabular-nums"],
   },
 
   infoRow: {
-    backgroundColor: THEME.card,
+    backgroundColor: "#161618",
     borderRadius: 16,
-    padding: 12,
+    padding: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
     marginHorizontal: 16,
     marginBottom: 20,
   },
 
   sectionLabel: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
     marginBottom: 2,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   body: {
-    color: THEME.text,
-    fontSize: 14,
+    color: "#A0A0A8",
+    fontSize: 15,
   },
   noWeatherContainer: {
     alignItems: "center",
-    gap: 16,
+    gap: 20,
   },
   syncWeatherBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    backgroundColor: THEME.graphYellow,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    minWidth: 160,
+    gap: 10,
+    backgroundColor: "#F59E0B",
+    height: 56,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    minWidth: 180,
   },
   syncWeatherBtnText: {
-    color: "#000",
-    fontSize: 14,
+    color: "#0D0D0F",
+    fontSize: 17,
     fontWeight: "600",
   },
   periodSection: {
-    marginTop: 16,
-    gap: 8,
+    marginTop: 20,
+    gap: 10,
   },
   periodItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
   periodText: {
-    color: THEME.text,
-    fontSize: 13,
+    color: "#A0A0A8",
+    fontSize: 14,
   },
   sourceSection: {
-    marginTop: 16,
-    paddingTop: 12,
+    marginTop: 20,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: THEME.cardBorder,
+    borderTopColor: "#2A2A2E",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   sourceHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   sourceLabel: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   sourceTime: {
     fontSize: 11,
-    color: THEME.textSec,
+    color: "#606068",
   },
   sourceHeaderRight: {
     flexDirection: "row",
@@ -1791,25 +2146,27 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   syncWeatherBtnSmall: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: "#F59E0B20",
   },
   sourceStatusRow: {
     flexDirection: "row",
-    gap: 20,
+    alignItems: "center",
+    gap: 16,
   },
-  sourceStatus: {
+  sourceStatusItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  sourceStatusText: {
-    fontSize: 13,
-    color: THEME.text,
+  sourceStatusLabel: {
+    fontSize: 12,
+    color: "#606068",
+    fontWeight: "500",
   },
   noteText: {
-    color: THEME.danger,
+    color: "#FF3B30",
     fontSize: 14,
     fontWeight: "500",
     paddingVertical: 4,
@@ -1817,62 +2174,59 @@ const styles = StyleSheet.create({
 
   // RUTEKORT
   mapContainer: {
-    height: 260,
-    borderRadius: 16,
-    overflow: "hidden",
-    marginTop: 8,
-    backgroundColor: "#000",
+    height: 220,
+    backgroundColor: "#1E1E21",
   },
   map: { flex: 1 },
   noMap: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: THEME.inputBg,
+    backgroundColor: "#1E1E21",
+    gap: 12,
   },
-  noMapText: { color: THEME.textSec },
+  noMapText: { color: "#606068", fontSize: 14 },
 
   // SLET TUR KNAP
   row: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 6,
+    gap: 12,
+    marginTop: 8,
     justifyContent: "flex-end",
     paddingHorizontal: 16,
     marginBottom: 20,
   },
   btn: {
     flex: 0.5,
-    paddingVertical: 14,
+    height: 56,
     borderRadius: 16,
     alignItems: "center",
+    justifyContent: "center",
   },
-  danger: { backgroundColor: THEME.danger },
-  dangerText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  danger: { backgroundColor: "#FF3B30" },
+  dangerText: { color: "#FFFFFF", fontSize: 17, fontWeight: "600" },
 
   // Lille timeline (visning)
   timelineWrapperSmall: {
-    marginTop: 8,
+    marginTop: 12,
     marginBottom: 4,
   },
   timelineHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 10,
   },
   timelineTitle: {
-    color: THEME.text,
-    fontSize: 14,
+    color: "#FFFFFF",
+    fontSize: 15,
     fontWeight: "600",
   },
   timelineBox: {
-    height: 90,
+    height: 100,
     borderRadius: 16,
-    backgroundColor: "#18181B",
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    paddingHorizontal: 10,
+    backgroundColor: "#1E1E21",
+    paddingHorizontal: 12,
     justifyContent: "center",
     overflow: "hidden",
   },
@@ -1881,90 +2235,108 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.03)",
+    borderTopColor: "#2A2A2E",
   },
   timelineAxis: {
     position: "absolute",
-    left: 10,
-    right: 10,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.25)",
+    left: 12,
+    right: 12,
+    height: 2,
+    backgroundColor: "#2A2A2E",
+    borderRadius: 1,
   },
   timelineAxisInner: {
     flexDirection: "row",
     position: "absolute",
-    left: 10,
-    right: 10,
+    left: 12,
+    right: 12,
     height: "100%",
   },
   timelineEventWrapper: {
     position: "absolute",
-    bottom: 18,
+    bottom: 20,
     width: 0,
     alignItems: "center",
   },
   timelineEvent: {
-    width: 3,
-    height: 36,
-    backgroundColor: THEME.graphYellow,
-    borderRadius: 999,
+    width: 4,
+    height: 40,
+    backgroundColor: "#F59E0B",
+    borderRadius: 2,
   },
   timelineTimeRowSmall: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 6,
+    marginTop: 10,
   },
   timelineTimeLabel: {
     fontSize: 11,
-    color: THEME.textSec,
+    color: "#606068",
+    fontWeight: "500",
   },
   timelineTimeValue: {
-    fontSize: 13,
-    color: THEME.text,
+    fontSize: 14,
+    color: "#FFFFFF",
     fontWeight: "600",
+    fontVariant: ["tabular-nums"],
   },
   timelineEditRow: {
-    marginTop: 10,
-    alignItems: "flex-end",
+    marginTop: 12,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 10,
   },
   timelineEditBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: THEME.inputBg,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 8,
+    backgroundColor: "#1E1E21",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 12,
   },
   timelineEditText: {
-    color: THEME.textSec,
+    color: "#A0A0A8",
     fontSize: 13,
     fontWeight: "500",
   },
+  timelineReplayBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F59E0B",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  timelineReplayText: {
+    color: "#0D0D0F",
+    fontSize: 13,
+    fontWeight: "600",
+  },
 
-  // EDITOR / MODAL (kopi af index.tsx stil)
+  // EDITOR / MODAL - NERO style
   timelineHeaderRow: {
     flexDirection: "row",
-    justifyContent: "spaceBetween",
+    justifyContent: "space-between",
     alignItems: "flex-end",
     marginBottom: 12,
   } as any,
   timelineLabel: {
-    color: THEME.textSec,
+    color: "#606068",
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   timelineTime: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   timelineTimeBig: {
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 20,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   timelineWrapper: {
     marginTop: 4,
@@ -1973,8 +2345,8 @@ const styles = StyleSheet.create({
   },
   timelineBar: {
     height: 120,
-    borderRadius: 12,
-    backgroundColor: "#26262A",
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
     justifyContent: "center",
     paddingHorizontal: 0,
     overflow: "hidden",
@@ -1985,21 +2357,21 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: "#3A3A40",
+    backgroundColor: "#2A2A2E",
   },
   timelineGridLineH: {
     position: "absolute",
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: "#3A3A40",
+    backgroundColor: "#2A2A2E",
   },
   timelineCursor: {
     position: "absolute",
     top: 0,
     bottom: 0,
     width: 2,
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: "#F59E0B",
     opacity: 0.8,
   },
   timelineMarker: {
@@ -2011,28 +2383,28 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
   },
   timelineMarkerDotActive: {
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
     borderWidth: 2,
     borderColor: "#FFFFFF",
   },
   timelineMarkerLabelWrap: {
     marginBottom: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: "#00000080",
+    backgroundColor: "#F59E0B20",
   },
   timelineMarkerLabelWrapActive: {
-    backgroundColor: "#22C55E",
+    backgroundColor: "#F59E0B",
   },
   timelineMarkerLabel: {
-    color: "#FFF",
+    color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "600",
   },
@@ -2045,89 +2417,90 @@ const styles = StyleSheet.create({
   addCatchBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#1F2933",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#F59E0B20",
   },
   addCatchBtnText: {
-    color: THEME.startGreen,
+    color: "#F59E0B",
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   deleteCatchBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#3A1E21",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#FF3B3015",
   },
   deleteCatchBtnText: {
-    color: THEME.danger,
+    color: "#FF3B30",
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
   },
 
-  // Sparkline grafer
+  // Sparkline grafer - NERO style
   sparklineContainer: {
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 20,
+    marginBottom: 12,
   },
   sparklineHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   sparklineLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
-    color: THEME.text,
+    color: "#FFFFFF",
   },
   sparklineValueRow: {
     alignItems: "flex-end",
   },
   sparklineValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: THEME.graphYellow,
+    fontSize: 24,
+    fontWeight: "200",
+    color: "#F59E0B",
+    fontVariant: ["tabular-nums"],
   },
   sparklineRange: {
-    fontSize: 11,
-    color: THEME.textSec,
-    marginTop: 2,
+    fontSize: 12,
+    color: "#606068",
+    marginTop: 4,
   },
   sparklineGraph: {
-    height: 80,
-    borderRadius: 12,
-    backgroundColor: "rgba(245, 158, 11, 0.05)",
+    height: 100,
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
     overflow: "hidden",
   },
   sparklineTimeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 6,
+    marginTop: 10,
     paddingHorizontal: 4,
   },
   sparklineTime: {
-    fontSize: 11,
-    color: THEME.textSec,
+    fontSize: 12,
+    color: "#606068",
+    fontVariant: ["tabular-nums"],
   },
 
-  // Grafer (legacy)
+  // Grafer (legacy) - NERO style
   statRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.border,
+    borderBottomColor: "#2A2A2E",
   },
   minMaxText: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
     marginTop: 2,
-    fontStyle: "italic",
   },
   graphHeader: {
     flexDirection: "row",
@@ -2138,15 +2511,15 @@ const styles = StyleSheet.create({
   },
   graphCurrentValue: {
     fontSize: 14,
-    fontWeight: "700",
-    color: THEME.text,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   graphContainer: {
     position: "relative",
     height: 90,
     marginBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.border,
+    borderBottomColor: "#2A2A2E",
   },
   svg: {
     position: "absolute",
@@ -2159,7 +2532,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
     fontWeight: "500",
     backgroundColor: "transparent",
     paddingRight: 4,
@@ -2172,172 +2545,154 @@ const styles = StyleSheet.create({
   },
   graphTimeText: {
     fontSize: 11,
-    color: THEME.textSec,
+    color: "#606068",
   },
 
-  // Vind + kompas
+  // Vind + kompas - NERO style
   windRight: {
     flexDirection: "row",
     alignItems: "center",
   },
   windDirText: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
     marginTop: 2,
   },
   compass: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: THEME.border,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
-    backgroundColor: THEME.inputBg,
+    backgroundColor: "#1E1E21",
   },
   compassN: {
     position: "absolute",
-    top: 3,
+    top: 4,
     fontSize: 9,
     fontWeight: "600",
-    color: THEME.textSec,
+    color: "#606068",
   },
 
-  // Modal (samme stil som Track)
+  // Modal - NERO style
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(13, 13, 15, 0.85)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: 20,
   },
   modalBox: {
     width: "100%",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#161618",
     borderRadius: 24,
     padding: 24,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
   },
   modalBoxTall: {
     width: "100%",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: "#161618",
     borderRadius: 24,
     padding: 24,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
     maxHeight: "80%",
   },
   modalTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginBottom: 10,
-    color: THEME.text,
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 12,
+    color: "#FFFFFF",
   },
   modalText: {
-    color: "#CCC",
+    color: "#A0A0A8",
     marginBottom: 20,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
   },
   modalBtnRow: {
     flexDirection: "row",
     gap: 12,
     marginTop: 16,
   },
-  ghost: { backgroundColor: "#333" },
+  ghost: { backgroundColor: "#1E1E21" },
   ghostText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "600",
   },
   primaryBtn: {
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: "#F59E0B",
   },
   primaryText: {
-    color: "#000",
-    fontSize: 16,
-    fontWeight: "700",
+    color: "#0D0D0F",
+    fontSize: 17,
+    fontWeight: "600",
   },
 
-  // NY EDIT FANGST MODAL
+  // EDIT FANGST MODAL - NERO style
   editModal: {
     width: "100%",
-    backgroundColor: THEME.card,
+    backgroundColor: "#161618",
     borderRadius: 24,
     padding: 20,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
   editModalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 24,
   },
   editModalTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
   editModalTitle: {
     fontSize: 20,
-    fontWeight: "700",
-    color: THEME.text,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   editModalCountBadge: {
-    backgroundColor: THEME.graphYellow,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: "#F59E0B",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 12,
   },
   editModalCountText: {
-    color: "#000",
+    color: "#0D0D0F",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   editTimeSelector: {
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   editTimeCurrent: {
     alignItems: "center",
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    backgroundColor: "#1E1E21",
+    paddingHorizontal: 28,
+    paddingVertical: 14,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.3)",
   },
   editTimeCurrentLabel: {
-    fontSize: 11,
-    color: THEME.textSec,
+    fontSize: 12,
+    color: "#606068",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 4,
   },
   editTimeCurrentValue: {
     fontSize: 32,
-    fontWeight: "700",
-    color: THEME.graphYellow,
-    letterSpacing: -1,
+    fontWeight: "200",
+    color: "#FFFFFF",
+    fontVariant: ["tabular-nums"],
   },
   editTimelineContainer: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   editTimelineBar: {
     height: 140,
     borderRadius: 16,
-    backgroundColor: "#18181B",
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    backgroundColor: "#1E1E21",
     overflow: "visible",
     position: "relative",
   },
@@ -2347,7 +2702,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 40,
-    backgroundColor: "rgba(245, 158, 11, 0.05)",
+    backgroundColor: "#F59E0B08",
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
   },
@@ -2363,7 +2718,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 20,
     width: 2,
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: "#F59E0B",
     borderRadius: 1,
   },
   editCursorDot: {
@@ -2372,9 +2727,9 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: THEME.graphYellow,
+    backgroundColor: "#F59E0B",
     borderWidth: 3,
-    borderColor: THEME.card,
+    borderColor: "#161618",
   },
   editMarker: {
     position: "absolute",
@@ -2386,31 +2741,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: "rgba(34, 197, 94, 0.2)",
+    backgroundColor: "#F59E0B20",
     marginBottom: 4,
   },
   editMarkerPillActive: {
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
   },
   editMarkerText: {
     fontSize: 11,
     fontWeight: "600",
-    color: THEME.startGreen,
+    color: "#F59E0B",
   },
   editMarkerTextActive: {
-    color: "#000",
+    color: "#0D0D0F",
   },
   editMarkerStem: {
     width: 2,
     height: 60,
-    backgroundColor: THEME.startGreen,
-    opacity: 0.5,
+    backgroundColor: "#F59E0B",
+    opacity: 0.4,
   },
   editMarkerDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: THEME.startGreen,
+    backgroundColor: "#F59E0B",
     marginTop: -1,
   },
   editMarkerDotActive: {
@@ -2418,64 +2773,65 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     borderWidth: 3,
-    borderColor: "#fff",
+    borderColor: "#FFFFFF",
   },
   editTimeAxis: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 8,
-    marginTop: 8,
+    marginTop: 10,
   },
   editTimeAxisText: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: "#606068",
+    fontVariant: ["tabular-nums"],
   },
   editActions: {
     flexDirection: "row",
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   editAddBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: THEME.graphYellow,
-    paddingVertical: 14,
-    borderRadius: 14,
+    gap: 8,
+    backgroundColor: "#F59E0B",
+    height: 56,
+    borderRadius: 16,
   },
   editAddBtnText: {
-    color: "#000",
-    fontSize: 15,
-    fontWeight: "700",
+    color: "#0D0D0F",
+    fontSize: 17,
+    fontWeight: "600",
   },
   editDeleteBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "rgba(255, 69, 58, 0.15)",
-    paddingVertical: 14,
+    backgroundColor: "#FF3B3015",
+    height: 56,
     paddingHorizontal: 20,
-    borderRadius: 14,
+    borderRadius: 16,
   },
   editDeleteBtnDisabled: {
-    backgroundColor: THEME.inputBg,
+    backgroundColor: "#1E1E21",
   },
   editDeleteBtnText: {
-    color: THEME.danger,
+    color: "#FF3B30",
     fontSize: 15,
     fontWeight: "600",
   },
   editDeleteBtnTextDisabled: {
-    color: THEME.textSec,
+    color: "#606068",
   },
   editHint: {
     textAlign: "center",
-    fontSize: 12,
-    color: THEME.textSec,
-    marginBottom: 16,
+    fontSize: 13,
+    color: "#606068",
+    marginBottom: 20,
   },
   editFooter: {
     flexDirection: "row",
@@ -2485,14 +2841,12 @@ const styles = StyleSheet.create({
     flex: 0.4,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: THEME.inputBg,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
   },
   editCancelBtnText: {
-    color: THEME.text,
+    color: "#A0A0A8",
     fontSize: 15,
     fontWeight: "600",
   },
@@ -2501,37 +2855,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: THEME.startGreen,
+    gap: 8,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#F59E0B",
   },
   editSaveBtnText: {
-    color: "#000",
-    fontSize: 15,
-    fontWeight: "700",
+    color: "#0D0D0F",
+    fontSize: 17,
+    fontWeight: "600",
   },
 
-  // SPOT-EDITERING
+  // SPOT-EDITERING - NERO style
   spotEditRow: {
-    marginTop: 6,
+    marginTop: 8,
     marginBottom: 4,
     alignItems: "flex-start",
   },
   spotEditBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: THEME.inputBg,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    backgroundColor: "#1E1E21",
   },
   spotEditText: {
-    color: THEME.textSec,
+    color: "#A0A0A8",
     fontSize: 13,
     fontWeight: "500",
   },
@@ -2539,41 +2891,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.border,
-    backgroundColor: THEME.inputBg,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    backgroundColor: "#1E1E21",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   spotSearchInput: {
     flex: 1,
-    color: THEME.text,
+    color: "#FFFFFF",
     fontSize: 15,
   },
   spotItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.border,
-    backgroundColor: THEME.inputBg,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
     marginBottom: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   spotItemActive: {
-    backgroundColor: THEME.primary,
-    borderColor: THEME.primary,
+    backgroundColor: "#F59E0B",
   },
   spotItemText: {
-    color: THEME.text,
-    fontSize: 14,
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "500",
   },
   spotItemTextActive: {
-    color: "#000",
-    fontSize: 14,
+    color: "#0D0D0F",
+    fontSize: 15,
     fontWeight: "600",
   },
 });

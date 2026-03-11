@@ -1,6 +1,6 @@
 // app/(tabs)/catches.tsx
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   Platform,
   ScrollView,
   StatusBar,
+  Animated,
+  Easing,
 } from "react-native";
 import { Link } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -18,21 +20,71 @@ import { listCatches } from "../../lib/catches";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { useLanguage } from "../../lib/i18n";
+import { useTheme } from "../../lib/theme";
 
-// --- TEMAFARVER ---
-const THEME = {
-  bg: "#121212", // Helt mørk baggrund
-  card: "#1E1E1E", // Lidt lysere mørk til kort
-  primary: "#FFFFFF", // HVID til aktive chips / primærknap
-  primaryText: "#000000", // SORT tekst på hvide chips
+// --- NERO TEMA ---
+const NERO = {
+  bg: "#0D0D0F",
+  card: "#161618",
+  elevated: "#1E1E21",
+  border: "#2A2A2E",
 
-  calendarAccent: "#F59E0B", // GUL til kalenderen / tema-gul
+  primary: "#FFFFFF",
+  primaryText: "#0D0D0F",
+  text: "#FFFFFF",
+  textSec: "#A0A0A8",
+  textTertiary: "#606068",
 
-  text: "#FFFFFF", // Hvid tekst generelt
-  textSec: "#A1A1AA", // Grå sekundær tekst
-  inputBg: "#2C2C2E", // Mørk input baggrund
-  border: "#333333", // Mørk kant
+  accent: "#F59E0B",
+  accentMuted: "#F59E0B20",
+  accentBorder: "#F59E0B40",
+
+  danger: "#FF3B30",
+  dangerMuted: "#FF3B3015",
 };
+
+// Animated Card wrapper med fade-in
+function AnimatedCatchCard({
+  children,
+  index,
+}: {
+  children: React.ReactNode;
+  index: number;
+}) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.delay(index * 40),
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ scale: scaleAnim }],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 
 function fmtDate(iso: string) {
   try {
@@ -59,6 +111,7 @@ const sizeFilters = [
 
 export default function Catches() {
   const { t } = useLanguage();
+  const { theme } = useTheme();
   const [rows, setRows] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [minLen, setMinLen] = useState<number>(0); // Minimumslængde (cm)
@@ -91,7 +144,7 @@ export default function Catches() {
 
   return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.bg} />
+      <StatusBar barStyle="light-content" backgroundColor={NERO.bg} />
       <View style={styles.root}>
         {/* HEADER + ACTIONS */}
         <View style={styles.header}>
@@ -103,13 +156,13 @@ export default function Catches() {
               <Ionicons
                 name="options-outline"
                 size={18}
-                color={THEME.primaryText}
+                color={NERO.primaryText}
               />
               <Text style={styles.filterToggleText}>{t("filters")}</Text>
               <Ionicons
                 name={showFilters ? "chevron-up" : "chevron-down"}
                 size={16}
-                color={THEME.primaryText}
+                color={NERO.primaryText}
               />
             </Pressable>
             <Text style={styles.headerSub}>
@@ -119,7 +172,7 @@ export default function Catches() {
 
           <Link href="/new-catch" asChild>
             <Pressable style={styles.addButton}>
-              <Ionicons name="add" size={18} color={THEME.primaryText} />
+              <Ionicons name="add" size={20} color="#000" />
               <Text style={styles.addButtonText}>{t("newCatch")}</Text>
             </Pressable>
           </Link>
@@ -140,7 +193,7 @@ export default function Catches() {
                 <Ionicons
                   name="calendar-outline"
                   size={18}
-                  color={THEME.textSec}
+                  color={NERO.textSec}
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.filterLabel}>{t("date")}</Text>
@@ -153,13 +206,13 @@ export default function Catches() {
                 <Ionicons
                   name={showPicker ? "chevron-up" : "chevron-down"}
                   size={18}
-                  color={THEME.textSec}
+                  color={NERO.textSec}
                 />
               </Pressable>
 
               {selectedDate && (
                 <Pressable style={styles.clearBtn} onPress={clearDate}>
-                  <Ionicons name="close" size={18} color={THEME.text} />
+                  <Ionicons name="close" size={18} color={NERO.text} />
                 </Pressable>
               )}
             </View>
@@ -172,7 +225,7 @@ export default function Catches() {
                   display={Platform.OS === "ios" ? "inline" : "default"}
                   themeVariant="dark"
                   textColor="#FFF"
-                  accentColor={THEME.calendarAccent}
+                  accentColor={theme.primary}
                   onChange={(e, d) => {
                     if (Platform.OS !== "ios") setShowPicker(false);
                     if (d) setSelectedDate(d);
@@ -240,7 +293,7 @@ export default function Catches() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
-                <Ionicons name="fish-outline" size={36} color={THEME.calendarAccent} />
+                <Ionicons name="fish-outline" size={36} color={theme.primary} />
               </View>
               <Text style={styles.emptyTitle}>{t("noCatches")}</Text>
               <Text style={styles.emptyText}>
@@ -248,9 +301,10 @@ export default function Catches() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <Link href={`/catch/${item.id}`} asChild>
-              <Pressable style={styles.card}>
+          renderItem={({ item, index }) => (
+            <AnimatedCatchCard index={index}>
+              <Link href={`/catch/${item.id}`} asChild>
+                <Pressable style={styles.card}>
                 {/* Billede */}
                 <View style={styles.cardImageWrapper}>
                   {item.photo_uri ? (
@@ -263,7 +317,7 @@ export default function Catches() {
                       <Ionicons
                         name="fish-outline"
                         size={32}
-                        color={THEME.textSec}
+                        color={NERO.textSec}
                       />
                     </View>
                   )}
@@ -287,7 +341,7 @@ export default function Catches() {
                     <Ionicons
                       name="chevron-forward"
                       size={20}
-                      color={THEME.textSec}
+                      color={NERO.textSec}
                     />
                   </View>
 
@@ -308,7 +362,7 @@ export default function Catches() {
                         <Ionicons
                           name="location"
                           size={14}
-                          color={THEME.calendarAccent}
+                          color={theme.primary}
                         />
                         <Text numberOfLines={1} style={styles.cardDetailText}>
                           {item.notes}
@@ -327,8 +381,9 @@ export default function Catches() {
                     )}
                   </View>
                 </View>
-              </Pressable>
-            </Link>
+                </Pressable>
+              </Link>
+            </AnimatedCatchCard>
           )}
         />
       </View>
@@ -339,7 +394,7 @@ export default function Catches() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: THEME.bg,
+    backgroundColor: NERO.bg,
   },
 
   // HEADER
@@ -354,7 +409,7 @@ const styles = StyleSheet.create({
   },
   headerSub: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: NERO.textSec,
     marginTop: 6,
   },
 
@@ -366,10 +421,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: THEME.primary,
+    backgroundColor: NERO.primary,
   },
   filterToggleText: {
-    color: THEME.primaryText,
+    color: NERO.primaryText,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -377,37 +432,37 @@ const styles = StyleSheet.create({
   addButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: THEME.calendarAccent, // TEMA-GUL TIL "NY FANGST"
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    gap: 8,
+    backgroundColor: NERO.accent,
   },
   addButtonText: {
-    color: THEME.primaryText,
+    color: NERO.primaryText,
     fontWeight: "700",
-    fontSize: 13,
+    fontSize: 14,
   },
 
-  // FILTERKORT (pop-down)
+  // FILTERKORT - Nero style
   filterCard: {
     marginHorizontal: 16,
     marginBottom: 8,
-    backgroundColor: THEME.card,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    backgroundColor: NERO.card,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: NERO.border,
   },
   filterTitle: {
-    color: THEME.text,
+    color: NERO.text,
     fontSize: 15,
-    fontWeight: "700",
-    marginBottom: 6,
+    fontWeight: "600",
+    marginBottom: 8,
   },
   filterTitleSmall: {
-    color: THEME.textSec,
+    color: NERO.textSec,
     fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -424,28 +479,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderWidth: 1,
-    borderColor: THEME.border,
-    backgroundColor: THEME.inputBg,
+    borderColor: NERO.border,
+    backgroundColor: NERO.elevated,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 12,
   },
   filterLabel: {
     fontSize: 11,
-    color: THEME.textSec,
+    color: NERO.textSec,
     textTransform: "uppercase",
   },
   filterValue: {
-    color: THEME.text,
+    color: NERO.text,
     fontSize: 14,
     marginTop: 2,
   },
   clearBtn: {
     padding: 10,
     borderRadius: 12,
-    backgroundColor: THEME.inputBg,
+    backgroundColor: NERO.elevated,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: NERO.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -453,7 +508,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: THEME.inputBg,
+    backgroundColor: NERO.elevated,
   },
   sizeFilterHeader: {
     marginTop: 12,
@@ -462,12 +517,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   filterActiveInfo: {
-    color: THEME.text,
+    color: NERO.text,
     fontSize: 12,
     fontWeight: "600",
   },
 
-  // Chips
+  // Chips med gold accent
   chipRow: {
     flexDirection: "row",
     gap: 8,
@@ -478,21 +533,21 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: 999,
-    backgroundColor: THEME.inputBg,
+    backgroundColor: NERO.elevated,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: "transparent",
   },
   chipActive: {
-    backgroundColor: THEME.primary,
-    borderColor: THEME.primary,
+    backgroundColor: NERO.accentMuted,
+    borderColor: NERO.accentBorder,
   },
   chipText: {
-    color: THEME.text,
+    color: NERO.textSec,
     fontWeight: "600",
     fontSize: 13,
   },
   chipActiveText: {
-    color: THEME.primaryText,
+    color: NERO.accent,
     fontWeight: "700",
     fontSize: 13,
   },
@@ -506,12 +561,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryLabel: {
-    color: THEME.textSec,
+    color: NERO.textSec,
     fontSize: 11,
     textTransform: "uppercase",
   },
   summaryValue: {
-    color: THEME.text,
+    color: NERO.text,
     fontSize: 14,
     fontWeight: "600",
     marginTop: 2,
@@ -524,15 +579,13 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
 
-  // Card
+  // Card - Nero style
   card: {
     flexDirection: "row",
-    backgroundColor: THEME.card,
+    backgroundColor: NERO.card,
     borderRadius: 20,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: THEME.border,
+    padding: 14,
+    marginBottom: 12,
   },
   cardImageWrapper: {
     marginRight: 14,
@@ -540,11 +593,11 @@ const styles = StyleSheet.create({
   cardImage: {
     width: 100,
     height: 120,
-    borderRadius: 14,
-    backgroundColor: "#000",
+    borderRadius: 16,
+    backgroundColor: NERO.elevated,
   },
   placeholderImage: {
-    backgroundColor: THEME.inputBg,
+    backgroundColor: NERO.elevated,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -565,21 +618,21 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
   },
   cardSize: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: THEME.text,
-    letterSpacing: -1,
+    fontSize: 32,
+    fontWeight: "200",
+    color: NERO.text,
+    fontVariant: ["tabular-nums"],
   },
   cardSizeUnit: {
     fontSize: 14,
     fontWeight: "600",
-    color: THEME.text,
+    color: NERO.text,
     marginLeft: 2,
   },
   cardWeight: {
     fontSize: 14,
     fontWeight: "500",
-    color: THEME.textSec,
+    color: NERO.textSec,
     marginLeft: 6,
   },
   cardMeta: {
@@ -591,10 +644,10 @@ const styles = StyleSheet.create({
   cardDate: {
     fontSize: 14,
     fontWeight: "600",
-    color: THEME.text,
+    color: NERO.text,
   },
   cardTimeBadge: {
-    backgroundColor: THEME.inputBg,
+    backgroundColor: NERO.elevated,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -602,7 +655,7 @@ const styles = StyleSheet.create({
   cardTimeText: {
     fontSize: 11,
     fontWeight: "600",
-    color: THEME.textSec,
+    color: NERO.textSec,
   },
   cardDetails: {
     gap: 4,
@@ -613,12 +666,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardDetailText: {
-    color: THEME.textSec,
+    color: NERO.textSec,
     fontSize: 13,
     flexShrink: 1,
   },
   agnBadge: {
-    backgroundColor: THEME.inputBg,
+    backgroundColor: NERO.elevated,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -626,7 +679,7 @@ const styles = StyleSheet.create({
   agnBadgeText: {
     fontSize: 10,
     fontWeight: "600",
-    color: THEME.textSec,
+    color: NERO.textSec,
     textTransform: "uppercase",
   },
 
@@ -641,21 +694,21 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: THEME.card,
+    backgroundColor: NERO.card,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: NERO.border,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
   },
   emptyTitle: {
-    color: THEME.text,
+    color: NERO.text,
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 8,
   },
   emptyText: {
-    color: THEME.textSec,
+    color: NERO.textSec,
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,

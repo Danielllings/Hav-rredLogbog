@@ -30,23 +30,30 @@ import { listSpots, type Spot } from "../../lib/spots";
 
 type LatLng = { latitude: number; longitude: number };
 
-// --- TEMAFARVER (matcher index.tsx) ---
+// --- NERO TEMA ---
 const THEME = {
-  bg: "#121212",
-  card: "#1C1C1E",
-  cardBorder: "#2C2C2E",
-  primary: "#FFFFFF",
-  primaryText: "#000000",
+  bg: "#0D0D0F",
+  card: "#161618",
+  elevated: "#1E1E21",
+  cardBorder: "#2A2A2E",
 
-  saveGreen: "#22C55E", // samme som startGreen
-  calendarAccent: "#F59E0B", // samme som graphYellow
+  primary: "#FFFFFF",
+  primaryText: "#0D0D0F",
+
+  accent: "#F59E0B",
+  accentMuted: "#F59E0B20",
+  accentBorder: "#F59E0B40",
 
   text: "#FFFFFF",
-  textSec: "#A1A1AA",
-  danger: "#FF453A",
-  inputBg: "#2C2C2E",
-  border: "#2C2C2E",
-  ghost: "#333333",
+  textSec: "#A0A0A8",
+  textTertiary: "#606068",
+
+  danger: "#FF3B30",
+  dangerMuted: "#FF3B3015",
+
+  inputBg: "#1E1E21",
+  border: "#2A2A2E",
+  ghost: "#1E1E21",
 };
 
 function isoDay(d: Date) {
@@ -79,7 +86,6 @@ export default function NewCatch() {
   const [bait, setBait] = useState("");
   const [locationDesc, setLocationDesc] = useState("");
   const [pos, setPos] = useState<LatLng | null>(null);
-  const [timeOfDay, setTimeOfDay] = useState<string | undefined>();
   const [showPicker, setShowPicker] = useState(false);
 
   // tracked ture / vejrdata-link
@@ -135,7 +141,6 @@ export default function NewCatch() {
     setBait("");
     setLocationDesc("");
     setPos(null);
-    setTimeOfDay(undefined);
     setShowPicker(false);
     setSelectedTripId(null);
     setSelectedTripLabel(null);
@@ -199,7 +204,7 @@ export default function NewCatch() {
         photo_uri: photo,
         lat: pos?.latitude ?? null,
         lng: pos?.longitude ?? null,
-        time_of_day: timeOfDay ?? null,
+        time_of_day: null, // Fjernet fra UI
         trip_id: selectedTripId ?? null,
       });
 
@@ -230,14 +235,6 @@ export default function NewCatch() {
     setLocationDesc("");
     setSpotModalVisible(false);
   }
-
-  const timeOptions = [
-    { key: "morning", label: t("morning") },
-    { key: "lateMorning", label: t("lateMorning") },
-    { key: "afternoon", label: t("afternoon") },
-    { key: "evening", label: t("evening") },
-    { key: "night", label: t("night") },
-  ];
 
   return (
     <>
@@ -323,7 +320,7 @@ export default function NewCatch() {
                 </Pressable>
               )}
               <Pressable
-                style={[styles.btn, styles.primaryYellow]}
+                style={[styles.btn, styles.primaryAccent]}
                 onPress={() => setTrackedModalVisible(false)}
               >
                 <Text style={styles.primaryText}>{t("close")}</Text>
@@ -421,7 +418,7 @@ export default function NewCatch() {
                 </Pressable>
               )}
               <Pressable
-                style={[styles.btn, styles.primaryYellow]}
+                style={[styles.btn, styles.primaryAccent]}
                 onPress={() => setSpotModalVisible(false)}
               >
                 <Text style={styles.primaryText}>{t("close")}</Text>
@@ -479,7 +476,7 @@ export default function NewCatch() {
               display={Platform.OS === "ios" ? "inline" : "default"}
               themeVariant="dark"
               textColor="#FFF"
-              accentColor={THEME.calendarAccent}
+              accentColor={THEME.accent}
               onChange={(e, d) => {
                 if (Platform.OS !== "ios") setShowPicker(false);
                 if (d) setDate(d);
@@ -487,44 +484,27 @@ export default function NewCatch() {
             />
           )}
 
-          {/* TRACKET DATO / TUR TIL VEJRDATA */}
-          <Text style={styles.sectionLabel}>
-            {t("trackedTripOptional")}
-          </Text>
-          <Pressable
-            style={styles.dateInput}
-            onPress={() => setTrackedModalVisible(true)}
-          >
-            <Ionicons name="time" size={18} color={THEME.textSec} />
-            <Text style={styles.dateText}>
-              {selectedTripLabel ?? t("selectTrackedTripOptional")}
+          {/* TRACKET TUR TIL VEJRDATA - Highlighted */}
+          <View style={styles.trackedTripCard}>
+            <View style={styles.trackedTripHeader}>
+              <Ionicons name="analytics" size={20} color={THEME.accent} />
+              <Text style={styles.trackedTripTitle}>
+                {t("trackedTripOptional")}
+              </Text>
+            </View>
+            <Text style={styles.trackedTripHint}>
+              {t("trackedTripHint")}
             </Text>
-          </Pressable>
-
-          <Text
-            style={{ fontSize: 12, color: THEME.textSec, marginBottom: 12 }}
-          >
-            {t("trackedTripHint")}
-          </Text>
-
-          <Text style={styles.sectionLabel}>{t("timeOfDay")}</Text>
-          <View style={styles.chipRow}>
-            {timeOptions.map((option) => {
-              const active = timeOfDay === option.label;
-              return (
-                <Pressable
-                  key={option.key}
-                  onPress={() => setTimeOfDay(active ? undefined : option.label)}
-                  style={[styles.chip, active && styles.chipActive]}
-                >
-                  <Text
-                    style={active ? styles.chipActiveText : styles.chipText}
-                  >
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            <Pressable
+              style={styles.trackedTripButton}
+              onPress={() => setTrackedModalVisible(true)}
+            >
+              <Ionicons name="navigate-circle" size={20} color={THEME.accent} />
+              <Text style={styles.trackedTripButtonText}>
+                {selectedTripLabel ?? t("selectTrackedTripOptional")}
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
+            </Pressable>
           </View>
 
           <View style={styles.row}>
@@ -561,7 +541,7 @@ export default function NewCatch() {
         <View style={styles.card}>
           <View style={styles.locationHeader}>
             <View style={styles.locationIconCircle}>
-              <Ionicons name="location" size={22} color={THEME.calendarAccent} />
+              <Ionicons name="location" size={22} color={THEME.accent} />
             </View>
             <View>
               <Text style={styles.title}>{t("location")}</Text>
@@ -575,7 +555,7 @@ export default function NewCatch() {
           {selectedSpotId && locationDesc ? (
             <View style={styles.selectedSpotCard}>
               <View style={styles.selectedSpotInfo}>
-                <Ionicons name="location" size={20} color={THEME.calendarAccent} />
+                <Ionicons name="location" size={20} color={THEME.accent} />
                 <Text style={styles.selectedSpotName}>{locationDesc}</Text>
               </View>
               <Pressable
@@ -590,7 +570,7 @@ export default function NewCatch() {
               style={styles.selectSpotBtn}
               onPress={() => setSpotModalVisible(true)}
             >
-              <Ionicons name="add-circle" size={22} color={THEME.calendarAccent} />
+              <Ionicons name="add-circle" size={22} color={THEME.accent} />
               <Text style={styles.selectSpotBtnText}>{t("selectSpot")}</Text>
               <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
             </Pressable>
@@ -640,10 +620,8 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: "hidden",
     backgroundColor: THEME.card,
-    marginBottom: 16,
+    marginBottom: 12,
     position: "relative",
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
   heroImg: { width: "100%", height: 280 },
   heroEmpty: {
@@ -651,13 +629,13 @@ const styles = StyleSheet.create({
     height: 200,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: THEME.inputBg,
+    backgroundColor: THEME.elevated,
   },
   heroIconCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: THEME.accentMuted,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
@@ -665,7 +643,7 @@ const styles = StyleSheet.create({
   heroEmptyTitle: {
     color: THEME.text,
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "600",
     marginBottom: 4,
   },
   heroEmptyText: {
@@ -676,31 +654,29 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 14,
     bottom: 14,
-    backgroundColor: THEME.calendarAccent,
+    backgroundColor: THEME.accent,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
   changePhotoBtnText: {
-    color: "#000",
-    fontWeight: "700",
+    color: THEME.primaryText,
+    fontWeight: "600",
     fontSize: 14,
   },
 
   card: {
     backgroundColor: THEME.card,
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 12,
   },
   title: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "600",
     color: THEME.text,
     marginBottom: 16,
   },
@@ -716,16 +692,17 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 10, marginTop: 6 },
   btn: {
     flex: 1,
-    paddingVertical: 16,
+    height: 56,
     borderRadius: 16,
     alignItems: "center",
+    justifyContent: "center",
   },
 
   primary: { backgroundColor: THEME.primary },
-  primaryText: { color: THEME.primaryText, fontSize: 16, fontWeight: "700" },
+  primaryText: { color: THEME.primaryText, fontSize: 15, fontWeight: "600" },
 
-  primaryYellow: {
-    backgroundColor: THEME.calendarAccent,
+  primaryAccent: {
+    backgroundColor: THEME.accent,
   },
 
   actionRow: {
@@ -738,15 +715,13 @@ const styles = StyleSheet.create({
     flex: 0.4,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
+    height: 56,
     borderRadius: 16,
-    backgroundColor: THEME.inputBg,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    backgroundColor: THEME.elevated,
   },
   cancelBtnText: {
-    color: THEME.text,
-    fontSize: 16,
+    color: THEME.textSec,
+    fontSize: 15,
     fontWeight: "600",
   },
   saveBtn: {
@@ -755,18 +730,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 16,
+    height: 56,
     borderRadius: 16,
-    backgroundColor: THEME.saveGreen,
+    backgroundColor: THEME.accent,
   },
   saveBtnText: {
-    color: "#000",
-    fontSize: 16,
-    fontWeight: "700",
+    color: THEME.primaryText,
+    fontSize: 17,
+    fontWeight: "600",
   },
 
-  ghost: { backgroundColor: THEME.ghost },
-  ghostText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
+  ghost: { backgroundColor: THEME.elevated },
+  ghostText: { color: THEME.text, fontSize: 15, fontWeight: "600" },
 
   smallBtn: {
     paddingVertical: 10,
@@ -775,9 +750,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: THEME.inputBg,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    backgroundColor: THEME.elevated,
   },
 
   locationBtnRow: {
@@ -793,9 +766,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 12,
-    backgroundColor: THEME.inputBg,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    backgroundColor: THEME.elevated,
   },
   locationBtnText: {
     color: THEME.text,
@@ -807,12 +778,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    backgroundColor: THEME.inputBg,
+    backgroundColor: THEME.elevated,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
     marginBottom: 12,
   },
   mapSearchInput: {
@@ -823,11 +792,11 @@ const styles = StyleSheet.create({
   mapSearchBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: THEME.calendarAccent,
+    backgroundColor: THEME.accent,
     borderRadius: 8,
   },
   mapSearchBtnText: {
-    color: "#000",
+    color: THEME.primaryText,
     fontWeight: "600",
     fontSize: 13,
   },
@@ -835,7 +804,7 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 16,
     overflow: "hidden",
-    backgroundColor: "#18181B",
+    backgroundColor: THEME.elevated,
   },
 
   chipRow: {
@@ -848,83 +817,112 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 12,
-    backgroundColor: THEME.inputBg,
+    backgroundColor: THEME.elevated,
     borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    borderColor: "transparent",
   },
   chipActive: {
-    backgroundColor: THEME.calendarAccent,
-    borderColor: THEME.calendarAccent,
+    backgroundColor: THEME.accentMuted,
+    borderColor: THEME.accentBorder,
   },
-  chipText: { color: THEME.text, fontWeight: "600", fontSize: 14 },
-  chipActiveText: { color: "#000", fontWeight: "700", fontSize: 14 },
+  chipText: { color: THEME.textSec, fontWeight: "600", fontSize: 14 },
+  chipActiveText: { color: THEME.accent, fontWeight: "600", fontSize: 14 },
 
   dateInput: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    backgroundColor: THEME.inputBg,
+    backgroundColor: THEME.elevated,
     paddingVertical: 14,
     paddingHorizontal: 14,
-    borderRadius: 14,
+    borderRadius: 12,
     marginBottom: 12,
   },
   dateText: { color: THEME.text, fontSize: 15, flex: 1 },
 
-  textInput: {
+  // Tracked trip card - highlighted
+  trackedTripCard: {
+    backgroundColor: THEME.accentMuted,
     borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    borderRadius: 14,
+    borderColor: THEME.accentBorder,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  trackedTripHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  trackedTripTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: THEME.accent,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  trackedTripHint: {
+    fontSize: 12,
+    color: THEME.textSec,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  trackedTripButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: THEME.elevated,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  trackedTripButtonText: {
+    color: THEME.text,
+    fontSize: 15,
+    flex: 1,
+  },
+
+  textInput: {
+    borderRadius: 12,
     padding: 14,
     fontSize: 15,
     color: THEME.text,
-    backgroundColor: THEME.inputBg,
+    backgroundColor: THEME.elevated,
   },
 
   // modal-styles
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.85)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: 20,
   },
   modalBox: {
     width: "100%",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: THEME.card,
     borderRadius: 24,
-    padding: 24,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
+    padding: 20,
   },
   modalBoxTall: {
     width: "100%",
-    backgroundColor: "#1C1C1E",
+    backgroundColor: THEME.card,
     borderRadius: 24,
-    padding: 24,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
+    padding: 20,
     maxHeight: "80%",
   },
   modalTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginBottom: 10,
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 8,
     color: THEME.text,
   },
   modalText: {
-    fontSize: 16,
-    color: "#CCC",
-    marginBottom: 20,
-    lineHeight: 24,
+    fontSize: 15,
+    color: THEME.textSec,
+    marginBottom: 16,
+    lineHeight: 22,
   },
   modalBtnRow: {
     flexDirection: "row",
@@ -934,24 +932,21 @@ const styles = StyleSheet.create({
 
   tripItem: {
     paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    marginBottom: 10,
-    backgroundColor: THEME.inputBg,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginBottom: 8,
+    backgroundColor: THEME.elevated,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   tripItemActive: {
-    backgroundColor: THEME.primary,
-    borderColor: THEME.primary,
+    backgroundColor: THEME.accent,
   },
   tripItemText: {
     color: THEME.text,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   tripItemTextActive: {
     color: THEME.primaryText,
@@ -959,16 +954,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // spot-liste (matcher trips/id)
+  // spot-liste
   spotSearchRow: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    backgroundColor: THEME.inputBg,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    backgroundColor: THEME.elevated,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   spotSearchInput: {
     flex: 1,
@@ -976,28 +969,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   spotItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    backgroundColor: THEME.inputBg,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: THEME.elevated,
     marginBottom: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   spotItemActive: {
-    backgroundColor: THEME.primary,
-    borderColor: THEME.primary,
+    backgroundColor: THEME.accent,
   },
   spotItemText: {
     color: THEME.text,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   spotItemTextActive: {
-    color: "#000",
+    color: THEME.primaryText,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -1012,8 +1002,8 @@ const styles = StyleSheet.create({
   locationIconCircle: {
     width: 48,
     height: 48,
-    borderRadius: 14,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    borderRadius: 16,
+    backgroundColor: THEME.accentMuted,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1026,11 +1016,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.3)",
+    backgroundColor: THEME.accentMuted,
+    borderRadius: 16,
+    padding: 16,
   },
   selectedSpotInfo: {
     flexDirection: "row",
@@ -1040,32 +1028,31 @@ const styles = StyleSheet.create({
   },
   selectedSpotName: {
     color: THEME.text,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
   },
   changeSpotBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: THEME.calendarAccent,
+    backgroundColor: THEME.accent,
     borderRadius: 10,
   },
   changeSpotBtnText: {
-    color: "#000",
+    color: THEME.primaryText,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   selectSpotBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: THEME.inputBg,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    backgroundColor: THEME.elevated,
+    borderRadius: 16,
+    height: 56,
+    paddingHorizontal: 16,
   },
   selectSpotBtnText: {
-    color: THEME.text,
+    color: THEME.accent,
     fontSize: 15,
     fontWeight: "600",
     flex: 1,
@@ -1078,7 +1065,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   noSpotsHintText: {
-    color: THEME.textSec,
+    color: THEME.textTertiary,
     fontSize: 13,
     flex: 1,
   },

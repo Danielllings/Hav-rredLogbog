@@ -27,21 +27,36 @@ export const Colors = {
   },
 };
 
-// --- MODERNE TEMA (brugt i index.tsx og andre steder) ---
+// --- NERO TEMA ---
 export const THEME = {
-  bg: "#121212",
-  card: "#1C1C1E",
-  cardBorder: "#2C2C2E",
-  primary: "#FFFFFF",
+  bg: "#0D0D0F",
+  card: "#161618",
+  elevated: "#1E1E21",
+  cardBorder: "#2A2A2E",
 
+  primary: "#FFFFFF",
+  primaryText: "#0D0D0F",
+
+  accent: "#F59E0B",
+  accentMuted: "#F59E0B20",
+  accentBorder: "#F59E0B40",
+
+  // Graph farver
+  graphGreen: "#22C55E",
+  graphBlue: "#3B82F6",
+
+  // Legacy aliases
   startGreen: "#22C55E",
   graphYellow: "#F59E0B",
-  danger: "#FF453A",
+
+  danger: "#FF3B30",
+  dangerMuted: "#FF3B3015",
 
   text: "#FFFFFF",
-  textSec: "#A1A1AA",
-  textTertiary: "#636366",
-  inputBg: "#2C2C2E",
+  textSec: "#A0A0A8",
+  textTertiary: "#606068",
+
+  inputBg: "#1E1E21",
 };
 
 export const Fonts = Platform.select({

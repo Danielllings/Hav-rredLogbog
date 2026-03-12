@@ -14,6 +14,49 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Rect, G, ClipPath, Defs } from "react-native-svg";
+
+// Vector Flag Components
+const DenmarkFlag = ({ size = 24 }: { size?: number }) => (
+  <Svg width={size} height={size * 0.75} viewBox="0 0 32 24">
+    <Defs>
+      <ClipPath id="flagClipDK">
+        <Rect x="0" y="0" width="32" height="24" rx="3" />
+      </ClipPath>
+    </Defs>
+    <G clipPath="url(#flagClipDK)">
+      <Rect x="0" y="0" width="32" height="24" fill="#C8102E" />
+      <Rect x="10" y="0" width="4" height="24" fill="#FFFFFF" />
+      <Rect x="0" y="10" width="32" height="4" fill="#FFFFFF" />
+    </G>
+  </Svg>
+);
+
+const UKFlag = ({ size = 24 }: { size?: number }) => (
+  <Svg width={size} height={size * 0.75} viewBox="0 0 32 24">
+    <Defs>
+      <ClipPath id="flagClipUK">
+        <Rect x="0" y="0" width="32" height="24" rx="3" />
+      </ClipPath>
+    </Defs>
+    <G clipPath="url(#flagClipUK)">
+      {/* Blue background */}
+      <Rect x="0" y="0" width="32" height="24" fill="#012169" />
+      {/* White diagonals */}
+      <Rect x="-2" y="10" width="36" height="4" fill="#FFFFFF" transform="rotate(-33.69 16 12)" />
+      <Rect x="-2" y="10" width="36" height="4" fill="#FFFFFF" transform="rotate(33.69 16 12)" />
+      {/* Red diagonals */}
+      <Rect x="-2" y="10.5" width="36" height="2.5" fill="#C8102E" transform="rotate(-33.69 16 12)" />
+      <Rect x="-2" y="11" width="36" height="2.5" fill="#C8102E" transform="rotate(33.69 16 12)" />
+      {/* White cross */}
+      <Rect x="13" y="0" width="6" height="24" fill="#FFFFFF" />
+      <Rect x="0" y="9" width="32" height="6" fill="#FFFFFF" />
+      {/* Red cross */}
+      <Rect x="14" y="0" width="4" height="24" fill="#C8102E" />
+      <Rect x="0" y="10" width="32" height="4" fill="#C8102E" />
+    </G>
+  </Svg>
+);
 import { auth, signOut, deleteUser } from "../../lib/firebase";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -31,6 +74,9 @@ import {
   buildSpotSummary,
   withTimeout,
 } from "../../lib/patternAnalysis";
+
+// Demo konto email
+const DEMO_EMAIL = "demo@havorredlogbog.dk";
 
 // --- NERO TEMA ---
 const THEME = {
@@ -1104,7 +1150,7 @@ export default function SettingsScreen() {
             <Ionicons name="chevron-back" size={22} color={THEME.text} />
           </Pressable>
           <View style={styles.headerCenter}>
-            <Ionicons name="settings-outline" size={20} color={THEME.accent} />
+            <Ionicons name="settings-outline" size={20} color={THEME.textSec} />
             <Text style={styles.headerTitle}>{t("settings")}</Text>
           </View>
           <View style={{ width: 44 }} />
@@ -1115,8 +1161,8 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>{t("account")}</Text>
           <View style={styles.card}>
             <View style={styles.row}>
-              <View style={[styles.iconContainer, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
-                <Ionicons name="person" size={18} color={THEME.accent} />
+              <View style={styles.iconContainer}>
+                <Ionicons name="person" size={18} color={THEME.textSec} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>{t("email")}</Text>
@@ -1124,7 +1170,7 @@ export default function SettingsScreen() {
                   {userEmail || t("notLoggedIn")}
                 </Text>
               </View>
-              <Ionicons name="checkmark-circle" size={20} color={THEME.success} />
+              <Ionicons name="checkmark-circle" size={20} color={THEME.textSec} />
             </View>
           </View>
         </View>
@@ -1142,8 +1188,8 @@ export default function SettingsScreen() {
                 { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
               ]}
             >
-              <View style={[styles.iconContainer, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
-                <Ionicons name="notifications" size={18} color="#F59E0B" />
+              <View style={styles.iconContainer}>
+                <Ionicons name="notifications" size={18} color={THEME.textSec} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>
@@ -1165,7 +1211,7 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>{t("aboutApp")}</Text>
           <View style={styles.card}>
             <View style={styles.row}>
-              <View style={[styles.iconContainer, { backgroundColor: "rgba(161, 161, 170, 0.15)" }]}>
+              <View style={styles.iconContainer}>
                 <Ionicons name="information" size={18} color={THEME.textSec} />
               </View>
               <Text style={[styles.label, { flex: 1 }]}>{t("version")}</Text>
@@ -1181,8 +1227,8 @@ export default function SettingsScreen() {
                 { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
               ]}
             >
-              <View style={[styles.iconContainer, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
-                <Ionicons name="heart" size={18} color={THEME.accent} />
+              <View style={styles.iconContainer}>
+                <Ionicons name="code-slash" size={18} color={THEME.textSec} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>Credits</Text>
@@ -1200,8 +1246,8 @@ export default function SettingsScreen() {
                 { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
               ]}
             >
-              <View style={[styles.iconContainer, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
-                <Ionicons name="shield-checkmark" size={18} color={THEME.success} />
+              <View style={styles.iconContainer}>
+                <Ionicons name="shield-checkmark" size={18} color={THEME.textSec} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>{t("privacyPolicy")}</Text>
@@ -1219,8 +1265,8 @@ export default function SettingsScreen() {
                 { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
               ]}
             >
-              <View style={[styles.iconContainer, { backgroundColor: "rgba(96, 165, 250, 0.15)" }]}>
-                <Ionicons name="language" size={18} color="#60A5FA" />
+              <View style={styles.iconContainer}>
+                <Ionicons name="language" size={18} color={THEME.textSec} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>{t("language")}</Text>
@@ -1229,7 +1275,7 @@ export default function SettingsScreen() {
                 </Text>
               </View>
               <View style={styles.languageBadge}>
-                <Text style={styles.languageFlag}>{language === "da" ? "🇩🇰" : "🇬🇧"}</Text>
+                {language === "da" ? <DenmarkFlag size={20} /> : <UKFlag size={20} />}
                 <Text style={styles.languageCode}>{language.toUpperCase()}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
@@ -1242,8 +1288,8 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>{t("export")}</Text>
           <View style={styles.card}>
             <View style={styles.row}>
-              <View style={[styles.iconContainer, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
-                <Ionicons name="document-text" size={18} color={THEME.accent} />
+              <View style={styles.iconContainer}>
+                <Ionicons name="document-text" size={18} color={THEME.textSec} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>{t("pdfStats")}</Text>
@@ -1307,41 +1353,43 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Slet konto */}
-          <View style={[styles.card, { marginTop: 12 }]}>
-            <View style={styles.row}>
-              <View style={[styles.iconContainer, { backgroundColor: "rgba(255, 69, 58, 0.15)" }]}>
-                <Ionicons name="person-remove" size={18} color={THEME.danger} />
+          {/* Slet konto - skjult for demo-bruger */}
+          {userEmail?.toLowerCase() !== DEMO_EMAIL && (
+            <View style={[styles.card, { marginTop: 12 }]}>
+              <View style={styles.row}>
+                <View style={[styles.iconContainer, { backgroundColor: "rgba(255, 69, 58, 0.15)" }]}>
+                  <Ionicons name="person-remove" size={18} color={THEME.danger} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>
+                    {language === "da" ? "Slet konto" : "Delete account"}
+                  </Text>
+                  <Text style={styles.value}>
+                    {language === "da"
+                      ? "Slet din konto og alle tilknyttede data permanent"
+                      : "Permanently delete your account and all associated data"}
+                  </Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.label}>
-                  {language === "da" ? "Slet konto" : "Delete account"}
-                </Text>
-                <Text style={styles.value}>
-                  {language === "da"
-                    ? "Slet din konto og alle tilknyttede data permanent"
-                    : "Permanently delete your account and all associated data"}
-                </Text>
+              <View style={styles.cardFooter}>
+                <Pressable
+                  onPress={() => {
+                    setDeleteAccountConfirmText("");
+                    setDeleteAccountModalVisible(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.dangerActionBtn,
+                    pressed ? { opacity: 0.9 } : null,
+                  ]}
+                >
+                  <Ionicons name="close-circle" size={18} color={THEME.danger} />
+                  <Text style={styles.dangerActionBtnText}>
+                    {language === "da" ? "Slet konto" : "Delete account"}
+                  </Text>
+                </Pressable>
               </View>
             </View>
-            <View style={styles.cardFooter}>
-              <Pressable
-                onPress={() => {
-                  setDeleteAccountConfirmText("");
-                  setDeleteAccountModalVisible(true);
-                }}
-                style={({ pressed }) => [
-                  styles.dangerActionBtn,
-                  pressed ? { opacity: 0.9 } : null,
-                ]}
-              >
-                <Ionicons name="close-circle" size={18} color={THEME.danger} />
-                <Text style={styles.dangerActionBtnText}>
-                  {language === "da" ? "Slet konto" : "Delete account"}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+          )}
         </View>
 
         {/* Log ud */}
@@ -1707,13 +1755,15 @@ export default function SettingsScreen() {
                 setLanguageModalVisible(false);
               }}
             >
-              <Text style={styles.languageOptionFlag}>🇩🇰</Text>
+              <View style={styles.languageOptionFlag}>
+                <DenmarkFlag size={32} />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.languageOptionTitle}>Dansk</Text>
                 <Text style={styles.languageOptionSubtitle}>Danish</Text>
               </View>
               {language === "da" && (
-                <Ionicons name="checkmark-circle" size={22} color={THEME.success} />
+                <Ionicons name="checkmark-circle" size={22} color={THEME.textSec} />
               )}
             </Pressable>
 
@@ -1728,13 +1778,15 @@ export default function SettingsScreen() {
                 setLanguageModalVisible(false);
               }}
             >
-              <Text style={styles.languageOptionFlag}>🇬🇧</Text>
+              <View style={styles.languageOptionFlag}>
+                <UKFlag size={32} />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.languageOptionTitle}>English</Text>
                 <Text style={styles.languageOptionSubtitle}>Engelsk</Text>
               </View>
               {language === "en" && (
-                <Ionicons name="checkmark-circle" size={22} color={THEME.success} />
+                <Ionicons name="checkmark-circle" size={22} color={THEME.textSec} />
               )}
             </Pressable>
 
@@ -2239,7 +2291,7 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   languageFlag: {
-    fontSize: 16,
+    // Vector flag container - no fontSize needed
   },
   languageCode: {
     fontSize: 12,
@@ -2262,7 +2314,10 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.accentMuted,
   },
   languageOptionFlag: {
-    fontSize: 28,
+    width: 32,
+    height: 24,
+    borderRadius: 3,
+    overflow: "hidden",
   },
   languageOptionTitle: {
     fontSize: 16,

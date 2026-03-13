@@ -2,11 +2,18 @@
 
 export type Pt = { latitude: number; longitude: number; t: number };
 
-// Log GPS punkter tættere for at undgå kun start/slut (mobil kan give få opdateringer)
-export const MIN_WAYPOINT_DISTANCE = 10;
-// Drop spikes; 300 m-hop giver urealistiske data og ødelægger statistik
+// Minimum afstand før vi registrerer bevægelse (filtrer GPS-jitter når man står stille)
+// 25m er nok til at ignorere typisk GPS-drift på 5-15m
+export const MIN_WAYPOINT_DISTANCE = 25;
+
+// Drop spikes; store hop giver urealistiske data og ødelægger statistik
 export const MAX_WAYPOINT_DISTANCE = 150;
-export const MAX_WAYPOINT_SPEED_MS = 8; // ~30 km/t; over det er sandsynligvis et hop
+
+// Max hastighed i m/s (~30 km/t); over det er sandsynligvis et GPS-hop
+export const MAX_WAYPOINT_SPEED_MS = 8;
+
+// Minimum GPS nøjagtighed i meter - ignorer readings med dårligere nøjagtighed
+export const MIN_GPS_ACCURACY = 30;
 
 /**
  * Calculate the distance between two points using the Haversine formula.

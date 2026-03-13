@@ -799,30 +799,38 @@ export default function TripDetailScreen() {
               <View style={styles.weatherGrid}>
                 {evaluation.airTempC && (
                   <View style={styles.weatherStatCard}>
-                    <Ionicons name="thermometer-outline" size={20} color="#F59E0B" />
                     <Text style={styles.weatherStatValue}>{evaluation.airTempC.avg.toFixed(1)}°</Text>
                     <Text style={styles.weatherStatLabel}>{t("airTemp")}</Text>
                   </View>
                 )}
                 {evaluation.windMS && (
                   <View style={styles.weatherStatCard}>
-                    <Ionicons name="speedometer-outline" size={20} color="#3B82F6" />
-                    <Text style={styles.weatherStatValue}>{evaluation.windMS.avg.toFixed(1)}</Text>
-                    <Text style={styles.weatherStatLabel}>m/s</Text>
+                    <Text style={styles.weatherStatValue}>{evaluation.windMS.avg.toFixed(1)} m/s</Text>
+                    <Text style={styles.weatherStatLabel}>{t("windSpeed")}</Text>
                   </View>
                 )}
                 {evaluation.waterTempC && (
                   <View style={styles.weatherStatCard}>
-                    <Ionicons name="water-outline" size={20} color="#06B6D4" />
                     <Text style={styles.weatherStatValue}>{evaluation.waterTempC.avg.toFixed(1)}°</Text>
                     <Text style={styles.weatherStatLabel}>{t("waterTemp")}</Text>
                   </View>
                 )}
                 {evaluation.waterLevelCM && (
                   <View style={styles.weatherStatCard}>
-                    <MaterialCommunityIcons name="waves" size={20} color="#8B5CF6" />
-                    <Text style={styles.weatherStatValue}>{evaluation.waterLevelCM.avg.toFixed(0)}</Text>
-                    <Text style={styles.weatherStatLabel}>cm</Text>
+                    <Text style={styles.weatherStatValue}>{evaluation.waterLevelCM.avg.toFixed(0)} cm</Text>
+                    <Text style={styles.weatherStatLabel}>{t("waterLevel")}</Text>
+                  </View>
+                )}
+                {evaluation.pressureHPa && (
+                  <View style={styles.weatherStatCard}>
+                    <Text style={styles.weatherStatValue}>{evaluation.pressureHPa.avg.toFixed(0)} hPa</Text>
+                    <Text style={styles.weatherStatLabel}>{t("pressure")}</Text>
+                  </View>
+                )}
+                {evaluation.humidityPct && (
+                  <View style={styles.weatherStatCard}>
+                    <Text style={styles.weatherStatValue}>{evaluation.humidityPct.avg.toFixed(0)}%</Text>
+                    <Text style={styles.weatherStatLabel}>{t("humidity")}</Text>
                   </View>
                 )}
               </View>
@@ -863,6 +871,26 @@ export default function TripDetailScreen() {
                   series={evaluation.waterLevelSeries}
                   label={t("waterLevel")}
                   unit="cm"
+                  tripStartMs={tripStartMs}
+                  tripEndMs={tripEndMs}
+                />
+              )}
+
+              {evaluation.pressureSeries?.length > 0 && (
+                <StatGraph
+                  series={evaluation.pressureSeries}
+                  label={t("pressure")}
+                  unit="hPa"
+                  tripStartMs={tripStartMs}
+                  tripEndMs={tripEndMs}
+                />
+              )}
+
+              {evaluation.humiditySeries?.length > 0 && (
+                <StatGraph
+                  series={evaluation.humiditySeries}
+                  label={t("humidity")}
+                  unit="%"
                   tripStartMs={tripStartMs}
                   tripEndMs={tripEndMs}
                 />

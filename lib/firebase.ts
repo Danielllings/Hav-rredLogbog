@@ -15,6 +15,7 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 const extra = (Constants.expoConfig?.extra as any) || {};
 
@@ -23,7 +24,10 @@ const firebaseAuthDomain = extra.firebaseAuthDomain;
 const firebaseProjectId = extra.firebaseProjectId;
 const firebaseStorageBucket = extra.firebaseStorageBucket;
 const firebaseMessagingSenderId = extra.firebaseMessagingSenderId;
-const firebaseAppId = extra.firebaseAppId;
+// Vælg den rigtige App ID baseret på platform
+const firebaseAppId = Platform.OS === "ios"
+  ? extra.firebaseAppIdIos
+  : extra.firebaseAppIdAndroid;
 
 const firebaseConfigPresence = {
   apiKey: !!firebaseApiKey,

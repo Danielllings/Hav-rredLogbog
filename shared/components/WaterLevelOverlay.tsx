@@ -229,10 +229,15 @@ export function WaterLevelOverlay({
     }
   }, []);
 
+  // Fetch data when visible or forecast hour changes (with debounce)
   useEffect(() => {
-    if (visible) {
+    if (!visible) return;
+
+    const timeoutId = setTimeout(() => {
       fetchWaterLevelData(forecastHourIndex);
-    }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
   }, [visible, forecastHourIndex, fetchWaterLevelData]);
 
   const onWebViewLoad = useCallback(() => {

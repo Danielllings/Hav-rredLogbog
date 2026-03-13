@@ -303,7 +303,7 @@ function getTempCandidatesByDistance(
     .sort((a, b) => a.distKm - b.distKm);
 }
 
-// prøv nærmeste temp-stationer indtil vi finder én med tw-data
+// OPTIMIZED: prøv top 3 nærmeste temp-stationer PARALLELT og brug den nærmeste med data
 async function fetchTwWithFallback(
   lat: number,
   lon: number,
@@ -312,10 +312,35 @@ async function fetchTwWithFallback(
 ): Promise<{ station: OceanStation | null; vals: { ts: number; value: number }[] }> {
   const candidates = getTempCandidatesByDistance(lat, lon);
   const MAX_DIST_KM = 80; // hård grænse så vi ikke ender i Esbjerg fra København
+  const PARALLEL_COUNT = 3; // Antal stationer der prøves samtidigt
 
-  for (const { station, distKm } of candidates) {
-    if (distKm > MAX_DIST_KM) break;
+  // Filtrér til stationer inden for max afstand
+  const validCandidates = candidates.filter(c => c.distKm <= MAX_DIST_KM);
 
+  if (validCandidates.length === 0) {
+    return { station: null, vals: [] };
+  }
+
+  // Tag de første N stationer og hent data parallelt
+  const batch = validCandidates.slice(0, PARALLEL_COUNT);
+
+  const results = await Promise.all(
+    batch.map(async ({ station, distKm }) => {
+      const vals = await fetchObservationValues(station.id, "tw", startIso, endIso);
+      return { station, distKm, vals };
+    })
+  );
+
+  // Find den nærmeste station der har data (sorteret efter afstand allerede)
+  for (const result of results) {
+    if (result.vals.length > 0) {
+      return { station: result.station, vals: result.vals };
+    }
+  }
+
+  // Ingen af de første 3 havde data - prøv resten sekventielt (sjældent tilfælde)
+  for (let i = PARALLEL_COUNT; i < validCandidates.length; i++) {
+    const { station } = validCandidates[i];
     const vals = await fetchObservationValues(station.id, "tw", startIso, endIso);
     if (vals.length > 0) {
       return { station, vals };
@@ -387,7 +412,8 @@ async function fetchObservationValues(
   stationId: string,
   parameterId: string,
   startIso: string,
-  endIso: string
+  endIso: string,
+  timeoutMs: number = 6000
 ): Promise<{ ts: number; value: number }[]> {
   const datetime = `${startIso}/${endIso}`;
   const url = new URL(DMI_OCEAN_BASE_URL);
@@ -397,10 +423,15 @@ async function fetchObservationValues(
   url.searchParams.set("limit", "10000");
   url.searchParams.set("sortorder", "observed,DESC"); // som i DMI-dokumentationen
 
+  // Timeout med AbortController
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
     if (!res.ok) {
-      const txt = await res.text();
       return [];
     }
 
@@ -421,6 +452,7 @@ async function fetchObservationValues(
 
     return out;
   } catch (err) {
+    clearTimeout(timeoutId);
     return [];
   }
 }
@@ -498,23 +530,21 @@ export async function fetchOceanForTrip(
   }
 
   try {
-    // 1) find temp-station med tw-data (fallback på andre temp-stationer)
-    const { station: tempStation, vals: tempVals } = await fetchTwWithFallback(
-      input.lat,
-      input.lon,
-      queryStartIso,
-      queryEndIso
-    );
-
-    // 2) hent vandstand fra nærmeste level-station
-    const [levelDvrVals, levelLnVals] = await Promise.all([
+    // OPTIMIZED: Hent temp OG vandstand PARALLELT (i stedet for sekventielt)
+    const [tempResult, levelDvrVals, levelLnVals] = await Promise.all([
+      // 1) find temp-station med tw-data (fallback på andre temp-stationer)
+      fetchTwWithFallback(input.lat, input.lon, queryStartIso, queryEndIso),
+      // 2) hent vandstand DVR fra nærmeste level-station
       levelStation
         ? fetchObservationValues(levelStation.id, "sealev_dvr", queryStartIso, queryEndIso)
         : Promise.resolve([]),
+      // 3) hent vandstand LN fra nærmeste level-station
       levelStation
         ? fetchObservationValues(levelStation.id, "sealev_ln", queryStartIso, queryEndIso)
         : Promise.resolve([]),
     ]);
+
+    const { station: tempStation, vals: tempVals } = tempResult;
 
     // Saml vandstand fra både DVR og LN
     const combinedLevelVals: { ts: number; value: number }[] = [

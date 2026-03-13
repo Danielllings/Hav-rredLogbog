@@ -16,6 +16,32 @@ const DMI_OCEAN_KEY = defineString("DMI_OCEAN_KEY");
 const DMI_EDR_KEY = defineString("DMI_EDR_KEY");
 const STAC_KEY = defineString("STAC_KEY");
 
+// Simple in-memory cache for EDR data (reduces DMI API calls)
+interface CacheEntry {
+  body: string;
+  contentType: string;
+  timestamp: number;
+}
+const edrCache = new Map<string, CacheEntry>();
+const EDR_CACHE_TTL = 30 * 60 * 1000; // 30 minutes (DMI updates hourly)
+const MAX_CACHE_SIZE = 100;
+
+function cleanOldCacheEntries() {
+  const now = Date.now();
+  for (const [key, entry] of edrCache.entries()) {
+    if (now - entry.timestamp > EDR_CACHE_TTL) {
+      edrCache.delete(key);
+    }
+  }
+  // Limit cache size
+  if (edrCache.size > MAX_CACHE_SIZE) {
+    const oldest = [...edrCache.entries()]
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .slice(0, edrCache.size - MAX_CACHE_SIZE);
+    oldest.forEach(([key]) => edrCache.delete(key));
+  }
+}
+
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
 
@@ -137,6 +163,19 @@ export const getDmiEdr = onRequest(async (req, res) => {
   const query = { ...req.query };
   delete (query as any).target;
   appendQueryParams(url, query);
+
+  // Check cache first
+  const cacheKey = url.toString();
+  cleanOldCacheEntries();
+
+  const cached = edrCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < EDR_CACHE_TTL) {
+    functions.logger.info("getDmiEdr CACHE HIT", cacheKey.substring(0, 100));
+    res.set("X-Cache", "HIT");
+    res.status(200).set("Content-Type", cached.contentType).send(cached.body);
+    return;
+  }
+
   functions.logger.info("getDmiEdr upstream", url.toString());
 
   // Bestem Accept header baseret på format
@@ -155,6 +194,22 @@ export const getDmiEdr = onRequest(async (req, res) => {
       "X-Gravitee-Api-Key": apiKey,
     },
   });
+
+  // Cache successful responses
+  if (upstreamRes.status === 200) {
+    const headers = upstreamRes.headers as any;
+    const contentType =
+      (typeof headers?.get === "function" ? headers.get("content-type") : null) ??
+      "application/json";
+    edrCache.set(cacheKey, {
+      body,
+      contentType,
+      timestamp: Date.now(),
+    });
+    functions.logger.info("getDmiEdr CACHED", cacheKey.substring(0, 100));
+    res.set("X-Cache", "MISS");
+  }
+
   sendPassthrough(res, upstreamRes as unknown as Response, body);
 });
 
@@ -185,3 +240,9 @@ export const getStac = onRequest(async (req, res) => {
   });
   sendPassthrough(res, upstreamRes as unknown as Response, body);
 });
+
+// ============================================================================
+// Weather Alerts - Push notifications for good fishing conditions
+// ============================================================================
+
+export { checkWeatherAlerts, triggerWeatherCheck } from "./weatherAlerts";

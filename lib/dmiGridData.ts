@@ -122,26 +122,14 @@ export function cellToCoords(cell: GridCell & { latDelta?: number; lngDelta?: nu
   ];
 }
 
-// --- Simple cache (per datetime) ---
-let cache: { data: OceanGridData; bounds: BoundingBox; ts: number; datetime: string } | null = null;
-const CACHE_TTL = 5 * 60 * 1000; // 5 min
+// --- Cache ---
+// OPTIMIZED: Longer TTL since DMI updates hourly
+let cache: { data: OceanGridData; datetime: string; ts: number; fetchedBounds: BoundingBox } | null = null;
+const CACHE_TTL = 30 * 60 * 1000; // 30 min (DMI updates hourly anyway)
 
-function isInCache(bounds: BoundingBox, datetime: string): boolean {
-  if (!cache) return false;
-  if (cache.datetime !== datetime) return false;
-  if (Date.now() - cache.ts > CACHE_TTL) return false;
-
-  // Tjek om bounds er inden i cached bounds (med 25% margin for pan tolerance)
-  const latMargin = (cache.bounds.maxLat - cache.bounds.minLat) * 0.25;
-  const lngMargin = (cache.bounds.maxLng - cache.bounds.minLng) * 0.25;
-
-  return (
-    bounds.minLat >= cache.bounds.minLat + latMargin &&
-    bounds.maxLat <= cache.bounds.maxLat - latMargin &&
-    bounds.minLng >= cache.bounds.minLng + lngMargin &&
-    bounds.maxLng <= cache.bounds.maxLng - lngMargin
-  );
-}
+// In-flight request deduplication
+let inFlightFetch: Promise<OceanGridData | null> | null = null;
+let inFlightKey: string | null = null;
 
 export function clearGridCache(): void {
   cache = null;
@@ -151,33 +139,22 @@ export function getAvailableForecastTimes(): string[] {
   return cache?.data.forecastTime ? [cache.data.forecastTime] : [];
 }
 
-export function getCachedGridData(bounds: BoundingBox, options: FetchGridOptions = {}): OceanGridData | null {
+export function getCachedGridData(visibleBounds: BoundingBox, options: FetchGridOptions = {}): OceanGridData | null {
   const datetime = options.datetime || getNextHourISO();
-  if (!isInCache(bounds, datetime) || !cache) return null;
 
-  const { includeCurrents = true, includeSalinity = true, includeWaves = false } = options;
+  if (!cache) return null;
+  if (cache.datetime !== datetime) return null;
+  if (Date.now() - cache.ts > CACHE_TTL) return null;
 
-  const inBounds = (c: GridCell) =>
-    c.lat >= bounds.minLat && c.lat <= bounds.maxLat &&
-    c.lng >= bounds.minLng && c.lng <= bounds.maxLng;
+  // Tjek om HELE det synlige område er dækket af fetched data
+  const covered = (
+    visibleBounds.minLat >= cache.fetchedBounds.minLat &&
+    visibleBounds.maxLat <= cache.fetchedBounds.maxLat &&
+    visibleBounds.minLng >= cache.fetchedBounds.minLng &&
+    visibleBounds.maxLng <= cache.fetchedBounds.maxLng
+  );
 
-  // Filter to visible bounds
-  const currents = includeCurrents ? cache.data.currents.filter(inBounds) : [];
-  const currentPolygons = includeCurrents ? cache.data.currentPolygons.filter(inBounds) : [];
-  const salinity = includeSalinity ? cache.data.salinity.filter(inBounds) : [];
-  const waves = includeWaves ? cache.data.waves.filter(inBounds) : [];
-
-  // Hvis filtreret data er tom men vi bad om data, returner null for at trigge ny fetch
-  const hasRequestedData =
-    (includeCurrents && currents.length > 0) ||
-    (includeSalinity && salinity.length > 0) ||
-    (includeWaves && waves.length > 0);
-
-  if (!hasRequestedData && (includeCurrents || includeSalinity || includeWaves)) {
-    return null;
-  }
-
-  return { ...cache.data, currents, currentPolygons, salinity, waves, bounds };
+  return covered ? cache.data : null;
 }
 
 // --- Fetch ---
@@ -193,57 +170,61 @@ export async function fetchOceanGridData(
   bounds: BoundingBox,
   options: FetchGridOptions = {}
 ): Promise<OceanGridData | null> {
-  const { includeCurrents = true, includeSalinity = true, includeWaves = false } = options;
+  const { includeCurrents = false, includeSalinity = false, includeWaves = false } = options;
   const datetime = options.datetime || getNextHourISO();
 
-  // Return from cache if available AND has data
-  if (isInCache(bounds, datetime) && cache) {
-    const cached = getCachedGridData(bounds, options);
-    if (cached) return cached;
-  }
+  // Returner fra cache hvis center er dækket
+  const cached = getCachedGridData(bounds, options);
+  if (cached) return cached;
 
   if (!DMI_EDR_BASE_URL) return null;
 
-  // Expand bounds significantly for pan tolerance (100% = dobbelt område i hver retning)
-  const latPad = (bounds.maxLat - bounds.minLat) * 1.0;
-  const lngPad = (bounds.maxLng - bounds.minLng) * 1.0;
-  const fetchBounds: BoundingBox = {
-    minLat: Math.max(-90, bounds.minLat - latPad),
-    maxLat: Math.min(90, bounds.maxLat + latPad),
-    minLng: Math.max(-180, bounds.minLng - lngPad),
-    maxLng: Math.min(180, bounds.maxLng + lngPad),
-  };
+  // Request deduplication - prevent multiple fetches for same data
+  const fetchKey = `${datetime}_${includeCurrents}_${includeSalinity}_${includeWaves}`;
+  if (inFlightFetch && inFlightKey === fetchKey) {
+    return inFlightFetch;
+  }
 
+  // Snap center til 20x20km grid (~0.18° lat, ~0.32° lng)
+  // Større grid = færre API kald ved panorering
+  const GRID_LAT = 0.18;
+  const GRID_LNG = 0.32;
+  const rawCenterLat = (bounds.minLat + bounds.maxLat) / 2;
+  const rawCenterLng = (bounds.minLng + bounds.maxLng) / 2;
+  const centerLat = Math.round(rawCenterLat / GRID_LAT) * GRID_LAT;
+  const centerLng = Math.round(rawCenterLng / GRID_LNG) * GRID_LNG;
+
+  // Fetch 60x60km omkring det snappede center
+  const fetchBounds: BoundingBox = {
+    minLat: centerLat - 0.27,
+    maxLat: centerLat + 0.27,
+    minLng: centerLng - 0.48,
+    maxLng: centerLng + 0.48,
+  };
   const bbox = `${fetchBounds.minLng.toFixed(3)},${fetchBounds.minLat.toFixed(3)},${fetchBounds.maxLng.toFixed(3)},${fetchBounds.maxLat.toFixed(3)}`;
 
   // Separate fetches for different data sources
   const fetchPromises: Promise<OceanGridData | null>[] = [];
 
-  // Ocean data (strøm, salinitet) fra DKSS
+  // OPTIMIZED: Only fetch from PRIMARY collection first (faster)
+  // Secondary collections only used as fallback
   if (includeCurrents || includeSalinity) {
     const oceanParams: string[] = [];
     if (includeCurrents) oceanParams.push("current-u", "current-v");
     if (includeSalinity) oceanParams.push("salinity");
 
-    const oceanCollections = ["dkss_idw", "dkss_nsbs"];
-    const oceanFetches = oceanCollections.map(collection => {
-      const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=${oceanParams.join(",")}&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-      const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
-      return tryFetchCollection(proxyUrl, collection, fetchBounds, bounds, datetime, options);
-    });
-    fetchPromises.push(Promise.any(oceanFetches).catch(() => null));
+    // Primary collection only - dkss_nsbs has better coverage
+    const query = `/collections/dkss_nsbs/cube?bbox=${bbox}&parameter-name=${oceanParams.join(",")}&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
+    const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
+    fetchPromises.push(tryFetchCollection(proxyUrl, "dkss_nsbs", fetchBounds, fetchBounds, datetime, options));
   }
 
-  // Bølge data fra WAM
+  // OPTIMIZED: Only fetch from primary WAM collection
   if (includeWaves) {
     const waveParams = ["significant-wave-height"];
-    const waveCollections = ["wam_dw", "wam_nsb"];
-    const waveFetches = waveCollections.map(collection => {
-      const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=${waveParams.join(",")}&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-      const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
-      return tryFetchCollection(proxyUrl, collection, fetchBounds, bounds, datetime, { ...options, includeCurrents: false, includeSalinity: false, includeWaves: true });
-    });
-    fetchPromises.push(Promise.any(waveFetches).catch(() => null));
+    const query = `/collections/wam_nsb/cube?bbox=${bbox}&parameter-name=${waveParams.join(",")}&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
+    const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
+    fetchPromises.push(tryFetchCollection(proxyUrl, "wam_nsb", fetchBounds, fetchBounds, datetime, { ...options, includeCurrents: false, includeSalinity: false, includeWaves: true }));
   }
 
   if (fetchPromises.length === 0) return null;
@@ -277,10 +258,10 @@ export async function fetchOceanGridData(
     bounds: fetchBounds,
   };
 
-  // Cache merged result
-  cache = { data: merged, bounds: fetchBounds, ts: Date.now(), datetime };
+  // Cache data
+  cache = { data: merged, datetime, ts: Date.now(), fetchedBounds: fetchBounds };
 
-  return getCachedGridData(bounds, options);
+  return merged;
 }
 
 async function tryFetchCollection(
@@ -290,7 +271,7 @@ async function tryFetchCollection(
   bounds: BoundingBox,
   datetime: string,
   options: FetchGridOptions,
-  timeoutMs: number = 5000
+  timeoutMs: number = 6000 // Reduced from 10s to 6s
 ): Promise<OceanGridData | null> {
   try {
     const controller = new AbortController();
@@ -304,12 +285,8 @@ async function tryFetchCollection(
     const cube = await res.json();
     const data = parseCube(cube, options);
 
-    // Cache it
-    cache = { data: { ...data, bounds: fetchBounds }, bounds: fetchBounds, ts: Date.now(), datetime };
-
-    return getCachedGridData(bounds, options);
-  } catch (err) {
-    // Ignorer timeout/abort fejl
+    return { ...data, bounds: fetchBounds };
+  } catch {
     return null;
   }
 }
@@ -345,8 +322,31 @@ export function getForecastTimeOptions(): { label: string; value: string }[] {
   return options;
 }
 
+/** Daglige prognose-tidspunkter (næste 10 dage) - til Copernicus tiles */
+export function getForecastDayOptions(): { label: string; value: string }[] {
+  const options: { label: string; value: string }[] = [];
+
+  const now = new Date();
+
+  for (let d = 0; d <= 9; d++) {
+    const date = new Date(now);
+    date.setDate(date.getDate() + d);
+    const iso = date.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    const label = date.toLocaleDateString("da-DK", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+
+    options.push({ label, value: iso });
+  }
+
+  return options;
+}
+
 function parseCube(cube: any, options: FetchGridOptions): OceanGridData {
-  const { includeCurrents = true, includeSalinity = true, includeWaves = false } = options;
+  const { includeCurrents = false, includeSalinity = false, includeWaves = false } = options;
   const rawCurrents: CurrentCell[] = [];
   const currentPolygons: CurrentPolygonCell[] = [];
   const rawSalinity: SalinityCell[] = [];
@@ -419,26 +419,21 @@ function parseCube(cube: any, options: FetchGridOptions): OceanGridData {
     }
   }
 
-  // Sample havstrøm (hver 5. pil)
+  // Sample strømpile - hver 5.
   const sampledCurrents = rawCurrents.filter((_, i) => i % 5 === 0);
 
-  // Sample salinity (hver 5. celle med overlap)
-  const sampledSalinity = rawSalinity
-    .filter((_, i) => i % 5 === 0)
-    .map(cell => ({
-      ...cell,
-      latDelta: yStep * 5 * 1.15,
-      lngDelta: xStep * 5 * 1.15,
-    }));
+  // Sample salinity - hver 8. celle (færre punkter = bedre heatmap performance)
+  const sampledSalinity = rawSalinity.filter((_, i) => i % 8 === 0).map(cell => ({
+    ...cell,
+  }));
 
-  // Sample bølger (hver 3. celle med overlap)
-  const sampledWaves = rawWaves
-    .filter((_, i) => i % 3 === 0)
-    .map(cell => ({
-      ...cell,
-      latDelta: yStep * 3 * 1.15,
-      lngDelta: xStep * 3 * 1.15,
-    }));
+  // Sample bølger - hver 5. celle med fast størrelse
+  const WAVE_CELL_SIZE = 0.025; // ~2.5km fast størrelse
+  const sampledWaves = rawWaves.filter((_, i) => i % 5 === 0).map(cell => ({
+    ...cell,
+    latDelta: WAVE_CELL_SIZE,
+    lngDelta: WAVE_CELL_SIZE * 1.7,
+  }));
 
   return {
     timestamp: Date.now(),

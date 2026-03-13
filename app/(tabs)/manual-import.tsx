@@ -20,6 +20,7 @@ import { useRouter } from "expo-router";
 import { saveTrip } from "../../lib/trips";
 import { listSpots, type SpotRow } from "../../lib/spots";
 import { useLanguage } from "../../lib/i18n";
+import { useTheme } from "../../lib/theme";
 
 type TripPayload = Parameters<typeof saveTrip>[0];
 
@@ -90,6 +91,7 @@ function clampDay(d: number) {
 export default function ManualImportScreen() {
   const router = useRouter();
   const { t, language } = useLanguage();
+  const { theme } = useTheme();
 
   const months = [
     t("jan"), t("feb"), t("mar"), t("apr"), t("may"), t("jun"),
@@ -443,13 +445,13 @@ export default function ManualImportScreen() {
               {t("importLead")}
             </Text>
             <View style={styles.bulletRow}>
-              <Ionicons name="checkmark-circle" size={16} color={THEME.primary} />
+              <Ionicons name="checkmark-circle" size={16} color={theme.primary} />
               <Text style={styles.bulletText}>
                 {t("createSpotsFirst")}
               </Text>
             </View>
             <View style={styles.bulletRow}>
-              <Ionicons name="checkmark-circle" size={16} color={THEME.primary} />
+              <Ionicons name="checkmark-circle" size={16} color={theme.primary} />
               <Text style={styles.bulletText}>
                 {t("canImportBoth")}
               </Text>
@@ -820,7 +822,7 @@ export default function ManualImportScreen() {
             >
               {spotsLoading ? (
                 <View style={{ paddingVertical: 12 }}>
-                  <ActivityIndicator color={THEME.primary} />
+                  <ActivityIndicator color={theme.primary} />
                 </View>
               ) : filteredSpots.length === 0 ? (
                 <Text style={{ color: THEME.textSec, fontSize: 14 }}>

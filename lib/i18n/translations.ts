@@ -84,6 +84,9 @@ export const da = {
   windSpeed: "Vindstyrke",
   windDir: "Vindretning",
   waterLevel: "Vandstand",
+  tide: "Tidevand",
+  season: "Årstid",
+  earlyMorning: "Tidlig morgen",
 
   // Common
   loading: "Indlæser...",
@@ -99,9 +102,11 @@ export const da = {
   clear: "Ryd",
 
   // Tab navigation
-  tabTrip: "Fisketur",
-  tabCatch: "Fangst",
+  tabTrip: "Ture",
+  tabCatch: "Ny fangst",
   tabGallery: "Galleri",
+  tabWeather: "Vejrkort",
+  tabStats: "Statistik",
 
   // Trip screen
   readyToFish: "Klar til at fiske?",
@@ -205,6 +210,11 @@ export const da = {
   startFishingTrip: "Start fisketur",
   tapToStartTracking: "Tryk for at begynde tracking",
   catchBtn: "Fangst!",
+  waterTempBtn: "Mål vandtemp",
+  waterTempTitle: "Målt vandtemperatur",
+  waterTempHint: "Indtast din målte vandtemperatur",
+  waterTempSaved: "Måling tilføjet",
+  waterTempUnit: "°C",
   finish: "Afslut",
   statistics: "Statistik",
   changeYear: "Skift år",
@@ -218,6 +228,14 @@ export const da = {
   fishPerHour: "Fisk/time",
   multiFish: "Multi-fisk",
   fishingPattern: "Fiskemønster",
+  timeAndSeason: "Tid & Sæson",
+  weatherConditions: "Vejrforhold",
+  activityAndSpot: "Aktivitet & Spot",
+  insights: "Indsigter",
+  bestTimeToFish: "Bedste tidspunkt",
+  optimalWaterTemp: "Optimal vandtemp",
+  preferredWind: "Foretrukken vind",
+  fishMoreToSeePatterns: "Fisk mere for at se mønstre",
   myFishingSpots: "Mine Fiskepladser",
   noData: "Ingen data.",
   monthlyOverview: "Månedsoversigt",
@@ -236,6 +254,11 @@ export const da = {
   yesStop: "Ja, stop",
   selectSeason: "Vælg årstid",
   selectYear: "Vælg år",
+  allSeasons: "Alle årstider",
+  notEnoughData: "Ikke nok data endnu",
+  coastWind: "Kystvind",
+  tripDuration: "Turvarighed",
+  movement: "Bevægelse",
   catchRegistered: "Fangst registreret",
 
   // Filter options
@@ -281,6 +304,27 @@ export const da = {
   atOffshoreWind: "Ved fralandsvind",
   atOnshoreWind: "Ved pålandsvind",
   atSideWind: "Ved sidevind",
+
+  // Time patterns
+  hourInterval: "Tidspunkt",
+  sunOffset: "Ift. sol",
+
+  // Moon phases
+  moonPhase: "Månefase",
+  newMoon: "Nymåne",
+  waxing: "Tiltagende",
+  fullMoon: "Fuldmåne",
+  waning: "Aftagende",
+
+  // Cloud cover
+  clearSky: "Klart",
+  partlyCloudy: "Let overskyet",
+  cloudy: "Overskyet",
+
+  // Pressure trend
+  rising: "Stigende",
+  falling: "Faldende",
+  stable: "Stabilt",
 
   // Weather errors
   cannotFetchWeather: "Kan ikke hente vejr lige nu",
@@ -462,6 +506,7 @@ export const da = {
   humidity: "Luftfugtighed",
   pressure: "Tryk",
   cloudCover: "Skydække",
+  precipitation: "Nedbør",
   waveHeight: "Bølgehøjde",
 
   // Spot weather - UI
@@ -557,11 +602,19 @@ export const da = {
   loadingOceanData: "Henter havdata...",
   noOceanData: "Ingen havdata tilgængelig",
   zoomInForData: "Zoom ind for at se data",
+
+  // Personal Records
+  personalRecords: "Personlige rekorder",
+  longestFish: "Længste fisk",
+  heaviestFish: "Tungeste fisk",
+  mostFishTrip: "Flest fisk på én tur",
+  noRecordsYet: "Ingen rekorder endnu",
+  fishOnTrip: "fisk på turen",
 };
 
 export const en: typeof da = {
   // App
-  appName: "Sea Trout Log",
+  appName: "Havørred Logbog", // Always Danish name
   appSubtitle: "Your personal catch journal",
 
   // Auth
@@ -641,6 +694,9 @@ export const en: typeof da = {
   windSpeed: "Wind speed",
   windDir: "Wind direction",
   waterLevel: "Water level",
+  tide: "Tide",
+  season: "Season",
+  earlyMorning: "Early morning",
 
   // Common
   loading: "Loading...",
@@ -656,9 +712,11 @@ export const en: typeof da = {
   clear: "Clear",
 
   // Tab navigation
-  tabTrip: "Trip",
-  tabCatch: "Catch",
+  tabTrip: "Trips",
+  tabCatch: "New catch",
   tabGallery: "Gallery",
+  tabWeather: "Weather",
+  tabStats: "Statistics",
 
   // Trip screen
   readyToFish: "Ready to fish?",
@@ -762,6 +820,11 @@ export const en: typeof da = {
   startFishingTrip: "Start fishing trip",
   tapToStartTracking: "Tap to start tracking",
   catchBtn: "Catch!",
+  waterTempBtn: "Measure temp",
+  waterTempTitle: "Measured water temp",
+  waterTempHint: "Enter your measured water temperature",
+  waterTempSaved: "Measurement added",
+  waterTempUnit: "°C",
   finish: "Finish",
   statistics: "Statistics",
   changeYear: "Change year",
@@ -775,6 +838,14 @@ export const en: typeof da = {
   fishPerHour: "Fish/hour",
   multiFish: "Multi-fish",
   fishingPattern: "Fishing pattern",
+  timeAndSeason: "Time & Season",
+  weatherConditions: "Weather Conditions",
+  activityAndSpot: "Activity & Spot",
+  insights: "Insights",
+  bestTimeToFish: "Best time to fish",
+  optimalWaterTemp: "Optimal water temp",
+  preferredWind: "Preferred wind",
+  fishMoreToSeePatterns: "Fish more to see patterns",
   myFishingSpots: "My Fishing Spots",
   noData: "No data.",
   monthlyOverview: "Monthly overview",
@@ -793,6 +864,11 @@ export const en: typeof da = {
   yesStop: "Yes, stop",
   selectSeason: "Select season",
   selectYear: "Select year",
+  allSeasons: "All seasons",
+  notEnoughData: "Not enough data yet",
+  coastWind: "Coast wind",
+  tripDuration: "Trip duration",
+  movement: "Movement",
   catchRegistered: "Catch registered",
 
   // Filter options
@@ -838,6 +914,27 @@ export const en: typeof da = {
   atOffshoreWind: "With offshore wind",
   atOnshoreWind: "With onshore wind",
   atSideWind: "With side wind",
+
+  // Time patterns
+  hourInterval: "Time",
+  sunOffset: "Vs. sun",
+
+  // Moon phases
+  moonPhase: "Moon phase",
+  newMoon: "New moon",
+  waxing: "Waxing",
+  fullMoon: "Full moon",
+  waning: "Waning",
+
+  // Cloud cover
+  clearSky: "Clear",
+  partlyCloudy: "Partly cloudy",
+  cloudy: "Cloudy",
+
+  // Pressure trend
+  rising: "Rising",
+  falling: "Falling",
+  stable: "Stable",
 
   // Weather errors
   cannotFetchWeather: "Cannot fetch weather right now",
@@ -1019,6 +1116,7 @@ export const en: typeof da = {
   humidity: "Humidity",
   pressure: "Pressure",
   cloudCover: "Cloud cover",
+  precipitation: "Precipitation",
   waveHeight: "Wave height",
 
   // Spot weather - UI
@@ -1114,6 +1212,14 @@ export const en: typeof da = {
   loadingOceanData: "Loading ocean data...",
   noOceanData: "No ocean data available",
   zoomInForData: "Zoom in to see data",
+
+  // Personal Records
+  personalRecords: "Personal records",
+  longestFish: "Longest fish",
+  heaviestFish: "Heaviest fish",
+  mostFishTrip: "Most fish on a trip",
+  noRecordsYet: "No records yet",
+  fishOnTrip: "fish on the trip",
 };
 
 export const translations = {

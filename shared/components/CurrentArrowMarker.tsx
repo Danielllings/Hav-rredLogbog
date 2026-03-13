@@ -1,23 +1,24 @@
 // shared/components/CurrentArrowMarker.tsx
-// Arrow marker that works on Android
+// Arrow marker optimized for performance
 
 import React, { memo } from "react";
-import { View, StyleSheet, Platform } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { Marker } from "react-native-maps";
 import { getCurrentSpeedColor, type CurrentCell } from "../../lib/dmiGridData";
 
 interface Props {
   cell: CurrentCell;
+  tracksViewChanges?: boolean;
 }
 
-function Arrow({ cell }: Props) {
+function Arrow({ cell, tracksViewChanges = false }: Props) {
   const color = getCurrentSpeedColor(cell.speed);
 
   return (
     <Marker
       coordinate={{ latitude: cell.lat, longitude: cell.lng }}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={Platform.OS === "android"}
+      tracksViewChanges={tracksViewChanges}
     >
       <View
         style={[styles.container, { transform: [{ rotate: `${cell.direction}deg` }] }]}

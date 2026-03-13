@@ -4,12 +4,18 @@ En React Native/Expo app til at logge havørredfiskeri med GPS-tracking, vejrdat
 
 ## Features
 
-- **GPS Tracking**: Optager din fisketur med høj præcision (5m afstand, 4s interval)
+- **GPS Tracking**: Optager din fisketur med høj præcision (20m afstand, 5s interval, 30m accuracy filter)
 - **Vejrdata fra DMI**: Automatisk hentning af temperatur, vind, havtemperatur og vandstand
 - **Offline Support**: Ture gemmes lokalt og synkroniseres når der er forbindelse
 - **Spot Management**: Gem og administrer dine favoritfiskepladser
 - **Fangstregistrering**: Log dine fangster med billeder og detaljer
 - **Flersproget**: Dansk og engelsk understøttet (i18n)
+- **Kystretning**: Beregn om vinden er på-/fralands-/sidevind baseret på kystens retning
+- **Fiskemønster-analyse**: Se under hvilke forhold du fanger flest fisk
+- **Trip Replay**: Animeret afspilning af fisketure med GPS-rute og fangster
+- **DMI Stationer**: Vis havstationer med vandtemperatur og vandstand på kortet
+- **PDF-rapporter**: Eksporter statistik som blækvenlig PDF (oversat til DA/EN)
+- **Smart Weather Alerts**: Få besked når vejret matcher dit fiskemønster
 
 ## Tech Stack
 
@@ -50,23 +56,119 @@ eas build --platform ios --profile production
 Opret `.env` fil med:
 
 ```
+# Firebase
 FIREBASE_API_KEY=...
 FIREBASE_AUTH_DOMAIN=...
 FIREBASE_PROJECT_ID=...
 FIREBASE_STORAGE_BUCKET=...
 FIREBASE_MESSAGING_SENDER_ID=...
-FIREBASE_APP_ID=...
+FIREBASE_APP_ID_IOS=1:xxx:ios:xxx      # iOS-specifik App ID
+FIREBASE_APP_ID_ANDROID=1:xxx:android:xxx  # Android-specifik App ID
+
+# Google Maps
 MAPS_API_KEY=...
-EXPO_PUBLIC_MAPS_API_KEY=...
+
+# DMI Backend URLs (Firebase Cloud Functions)
 DMI_CLIMATE_URL=...
 DMI_EDR_URL=...
 DMI_OCEAN_URL=...
 STAC_URL=...
 ```
 
+### EAS Secrets (til production builds)
+
+```bash
+# Firebase
+eas secret:create --scope project --name FIREBASE_API_KEY --value "..."
+eas secret:create --scope project --name FIREBASE_AUTH_DOMAIN --value "..."
+eas secret:create --scope project --name FIREBASE_PROJECT_ID --value "..."
+eas secret:create --scope project --name FIREBASE_STORAGE_BUCKET --value "..."
+eas secret:create --scope project --name FIREBASE_MESSAGING_SENDER_ID --value "..."
+eas secret:create --scope project --name FIREBASE_APP_ID_IOS --value "1:xxx:ios:xxx"
+eas secret:create --scope project --name FIREBASE_APP_ID_ANDROID --value "1:xxx:android:xxx"
+
+# Google Maps
+eas secret:create --scope project --name MAPS_API_KEY --value "..."
+
+# DMI URLs
+eas secret:create --scope project --name DMI_CLIMATE_URL --value "..."
+eas secret:create --scope project --name DMI_EDR_URL --value "..."
+eas secret:create --scope project --name DMI_OCEAN_URL --value "..."
+eas secret:create --scope project --name STAC_URL --value "..."
+
+# Google Services filer (base64 encoded)
+eas secret:create --scope project --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json
+eas secret:create --scope project --name GOOGLE_SERVICE_INFO_PLIST --type file --value ./GoogleService-Info.plist
+```
+
 ---
 
 ## Udviklingslog
+
+### 2026-02-21 - DMI Stationer, Fiskemønster-forbedringer & Spot-redigering
+
+**Nye features:**
+- **DMI Ocean Stationer**: Vis ~80+ DMI havstationer på kortet (vandtemp + vandstand)
+  - Blå markører med samme stil som spots (iOS custom, Android native)
+  - Toggle i lag-modalen under "DMI Stationer"
+  - Ny komponent: `shared/components/DmiStationMarker.tsx`
+
+- **Trip Replay**: Animeret afspilning af fisketure på kortet
+  - GPS-rute afspilles over tid med catch-events
+  - Playback controls: play/pause, hastighed (1x-16x), progress bar
+  - Kamera follow-mode
+  - Ny side: `app/(tabs)/trip-replay/[id].tsx`
+
+**Fiskemønster-analyse forbedringer:**
+- **Sol-tidspunkt afrunding**: Nu rundes til 30-min intervaller eller timer
+  - < 45 min → nærmeste 30 min (0, 30)
+  - 45-89 min → "1 time"
+  - 90+ min → hele timer
+  - 0 min → "ved solopgang/solnedgang"
+
+- **Vindretning ift. kyst**: Beregnes nu fra spotets `coastDirection` + vindretning
+  - Slår kystretning op fra spot-data
+  - Bruger `getWindType()` til at beregne på-/fra-/sidevind
+  - Fallback til gammel metode hvis spot mangler kystretning
+
+**UI forbedringer:**
+- **Spot-redigering på iOS**: Edit-knap nu synlig på begge platforme (før kun Android)
+- **Redigeringsmodal**: Viser koordinater-badge, navn-felt, kystretning-vælger
+- **Transparent header** på spot-weather (settings-knap bevares)
+
+**Nye oversættelser (DA/EN):**
+- `dmiStations`, `dmiStationsDesc` - DMI stationer toggle
+- `coastDirectionQuestion` - Kystretning spørgsmål
+- `hour`, `before`, `after`, `at` - Tidsbeskrivelser
+- `waterTemp`, `waterLevel` - DMI station beskrivelser
+
+**Filer oprettet/ændret:**
+- `shared/components/DmiStationMarker.tsx` (ny)
+- `app/(tabs)/trip-replay/[id].tsx` (ny)
+- `app/(tabs)/spot-weather.tsx` - DMI stationer, edit-knap fix
+- `app/(tabs)/index.tsx` - Fiskemønster med spots lookup
+- `lib/patternAnalysis.ts` - Sol-afrunding, vindretning beregning
+- `lib/i18n/translations.ts` - Nye oversættelser
+
+---
+
+### 2026-02-21 - Platform-specifik Firebase & PDF oversættelser
+
+**Udført:**
+- Splittet Firebase App ID til iOS og Android (FIREBASE_APP_ID_IOS / FIREBASE_APP_ID_ANDROID)
+- Opdateret app.config.ts og firebase.ts til at vælge App ID baseret på Platform.OS
+- Tilføjet fuld engelsk oversættelse af PDF-rapporten:
+  - Gruppe-titler (Årstid → Season, Vandstand → Water level, etc.)
+  - Labels (Foråret → Spring, Morgenen → Morning, etc.)
+  - Fiskemønster-linjer (Ved fralandsvind → With offshore wind, etc.)
+- Kystretning feature (coast direction) til spots
+- Forbedret GPS tracking stabilitet:
+  - Øget MIN_WAYPOINT_DISTANCE fra 10m til 25m
+  - Tilføjet MIN_GPS_ACCURACY filter (30m)
+  - Øget distanceInterval til 20m, timeInterval til 5s
+- Hint-box UI med to bullet points (tryk på kort / hold på spot)
+- Slow loading indikator efter 5 sekunder
+- Warning når ocean data mangler fra DMI
 
 ### 2026-02-09 - Release Build
 
@@ -143,14 +245,22 @@ sea-trout-log/
 │   ├── (tabs)/            # Tab navigation
 │   │   ├── index.tsx      # Hjem/tracking
 │   │   ├── spot-weather.tsx # Spots og vejr
-│   │   └── trips/         # Ture
+│   │   ├── trip-replay/[id].tsx # Trip replay animation
+│   │   ├── trips/[id].tsx # Tur detaljer
+│   │   └── catch/[id].tsx # Fangst detaljer
 │   └── _layout.tsx        # Root layout
-├── components/            # Genbrugelige komponenter
+├── shared/
+│   └── components/        # Delte komponenter
+│       ├── SpotMarker.tsx # Spot-markør (iOS/Android)
+│       ├── DmiStationMarker.tsx # DMI station-markør
+│       └── ScrollableGraph.tsx # Vejrgraf
 ├── lib/                   # Utilities og services
 │   ├── dmi.ts            # DMI integration
 │   ├── dmiClimate.ts     # Climate API
-│   ├── dmiOcean.ts       # Ocean API
+│   ├── dmiOcean.ts       # Ocean API (stationer)
 │   ├── dmiEdr.ts         # EDR API
+│   ├── patternAnalysis.ts # Fiskemønster-analyse
+│   ├── spots.ts          # Spot management + getWindType
 │   ├── firebase.ts       # Firebase config
 │   ├── offlineSync.ts    # Offline queue
 │   └── i18n/             # Oversættelser
@@ -161,7 +271,8 @@ sea-trout-log/
 ## GPS Tracking Indstillinger
 
 - Accuracy: High (GPS + WiFi + Cell)
-- Distance interval: 5m
-- Time interval: 4000ms
-- Waypoint filtrering: min 10m, max 150m
-- Max hastighed: 8 m/s (for at filtrere køretøjsbevægelser)
+- Distance interval: 20m
+- Time interval: 5000ms
+- Min GPS accuracy: 30m (readings med dårligere nøjagtighed ignoreres)
+- Waypoint filtrering: min 25m, max 150m
+- Max hastighed: 8 m/s (~30 km/t - filtrerer GPS-spikes)

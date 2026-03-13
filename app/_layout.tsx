@@ -8,11 +8,14 @@ import {
 import { useEffect, useState, useRef } from "react";
 import { View, StyleSheet, AppState, AppStateStatus } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { auth, onAuthStateChanged, User } from "../lib/firebase";
 import { initDB } from "../lib/db";
 import SplashScreen from "../components/SplashScreen";
+import Onboarding, { ONBOARDING_COMPLETE_KEY } from "../components/Onboarding";
 import { LanguageProvider } from "../lib/i18n";
+import { ThemeProvider } from "../lib/theme";
 import { syncOfflineTrips } from "../lib/offlineTrips";
 
 /**
@@ -53,6 +56,7 @@ export default function RootLayout() {
   // undefined = ved endnu ikke om der er en bruger
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [authReady, setAuthReady] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
   const wasConnectedRef = useRef<boolean | null>(null);
   const syncInProgressRef = useRef(false);
 
@@ -79,6 +83,10 @@ export default function RootLayout() {
     const init = async () => {
       try {
         await initDB();
+
+        // Check if onboarding has been completed
+        const onboardingDone = await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY);
+        setOnboardingComplete(onboardingDone === "true");
 
         unsubscribeAuth = onAuthStateChanged(auth, (u) => {
           // u = User eller null
@@ -135,20 +143,38 @@ export default function RootLayout() {
   // Sæt auth-beskyttelse på
   useProtectedRoute(user, authReady);
 
-  return (
-    <LanguageProvider>
-      <Stack
-        screenOptions={{ headerShown: false }}
-        // Default route – vi redirigerer alligevel ovenfor
-        initialRouteName="(auth)"
-      >
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
-      </Stack>
+  // Show splash while checking onboarding + auth state
+  const isLoading = onboardingComplete === null || user === undefined || !authReady;
 
-      {/* Splash screen mens vi finder ud af om brugeren er logget ind */}
-      {(user === undefined || !authReady) && <SplashScreen />}
-    </LanguageProvider>
+  // Show onboarding if not completed
+  if (!isLoading && onboardingComplete === false) {
+    return (
+      <ThemeProvider>
+        <LanguageProvider>
+          <Onboarding onComplete={() => setOnboardingComplete(true)} />
+        </LanguageProvider>
+      </ThemeProvider>
+    );
+  }
+
+  return (
+    <ThemeProvider>
+      <LanguageProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+          initialRouteName="(auth)"
+        >
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(tabs)" />
+        </Stack>
+
+        {/* Splash screen mens vi finder ud af om brugeren er logget ind */}
+        {isLoading && <SplashScreen />}
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }
 

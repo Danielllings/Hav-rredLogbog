@@ -22,7 +22,8 @@ const firebaseAuthDomain = readKey(["FIREBASE_AUTH_DOMAIN", "EXPO_PUBLIC_FIREBAS
 const firebaseProjectId = readKey(["FIREBASE_PROJECT_ID", "EXPO_PUBLIC_FIREBASE_PROJECT_ID"]);
 const firebaseStorageBucket = readKey(["FIREBASE_STORAGE_BUCKET", "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET"]);
 const firebaseMessagingSenderId = readKey(["FIREBASE_MESSAGING_SENDER_ID", "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"]);
-const firebaseAppId = readKey(["FIREBASE_APP_ID", "EXPO_PUBLIC_FIREBASE_APP_ID"]);
+const firebaseAppIdIos = readKey(["FIREBASE_APP_ID_IOS", "FIREBASE_APP_ID", "EXPO_PUBLIC_FIREBASE_APP_ID"]);
+const firebaseAppIdAndroid = readKey(["FIREBASE_APP_ID_ANDROID", "FIREBASE_APP_ID", "EXPO_PUBLIC_FIREBASE_APP_ID"]);
 
 // DMI/Backend URLs
 const dmiClimateUrl = readKey(["DMI_CLIMATE_URL", "EXPO_PUBLIC_DMI_CLIMATE_URL"]);
@@ -36,7 +37,8 @@ const missingFirebaseEnvVars = [
   ["FIREBASE_PROJECT_ID", firebaseProjectId],
   ["FIREBASE_STORAGE_BUCKET", firebaseStorageBucket],
   ["FIREBASE_MESSAGING_SENDER_ID", firebaseMessagingSenderId],
-  ["FIREBASE_APP_ID", firebaseAppId],
+  ["FIREBASE_APP_ID_IOS", firebaseAppIdIos],
+  ["FIREBASE_APP_ID_ANDROID", firebaseAppIdAndroid],
 ]
   .filter(([, value]) => value === undefined)
   .map(([name]) => name);
@@ -85,7 +87,8 @@ const config: ExpoConfig = {
     firebaseProjectId,
     firebaseStorageBucket,
     firebaseMessagingSenderId,
-    firebaseAppId,
+    firebaseAppIdIos,
+    firebaseAppIdAndroid,
     dmiClimateUrl,
     dmiOceanUrl,
     dmiEdrUrl,
@@ -108,6 +111,11 @@ const config: ExpoConfig = {
     bundleIdentifier: "dk.havoerred.logbog",
 
     googleServicesFile: process.env.GOOGLE_SERVICE_INFO_PLIST || "./GoogleService-Info.plist",
+
+    // GOOGLE MAPS API KEY TIL iOS (kræves for Heatmap)
+    config: {
+      googleMapsApiKey: mapsApiKey,
+    },
 
     infoPlist: {
       NSLocationWhenInUseUsageDescription:

@@ -178,6 +178,7 @@ export function WaveSwellOverlay({
 
       if (xAxis.length === 0 || yAxis.length === 0) return null;
 
+
       // Try various parameter names for wave height and direction (DMI WAM uses significant-wave-height)
       const heightData = ranges["significant-wave-height"]?.values ||
                          ranges["hs"]?.values ||
@@ -185,7 +186,8 @@ export function WaveSwellOverlay({
                          ranges["VHM0"]?.values ||
                          ranges["wave-height"]?.values ||
                          ranges["sea-surface-wave-significant-height"]?.values || [];
-      const dirData = ranges["mean-wave-direction"]?.values ||
+      const dirData = ranges["mean-wave-dir"]?.values ||
+                      ranges["mean-wave-direction"]?.values ||
                       ranges["mwd"]?.values ||
                       ranges["VMDR"]?.values ||
                       ranges["wave-direction"]?.values ||
@@ -223,52 +225,47 @@ export function WaveSwellOverlay({
 
       let converted: any[] | null = null;
 
-      // Try DMI EDR API first - use WAM collections for waves
+      // Use primary WAM collection only (wam_nsb has best coverage for Danish waters)
       if (DMI_EDR_BASE_URL) {
-        // WAM collections for wave data
-        const waveCollections = ["wam_nsb", "wam_dw"];
+        const collection = "wam_nsb";
+        // Fetch wave height AND direction from WAM model
+        const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=significant-wave-height,mean-wave-dir&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
+        const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
 
-        for (const collection of waveCollections) {
-          // Fetch wave height from WAM model (direction may not be available)
-          const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=significant-wave-height&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-          const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const response = await fetch(proxyUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
 
-            const response = await fetch(proxyUrl, { signal: controller.signal });
-            clearTimeout(timeoutId);
+          if (response.ok) {
+            const json = await response.json();
+            console.log(`WAM ${collection} response:`, JSON.stringify(json).substring(0, 500));
+            const parsed = parseCoverageJson(json);
 
-            if (response.ok) {
-              const json = await response.json();
-              console.log(`WAM ${collection} response:`, JSON.stringify(json).substring(0, 500));
-              const parsed = parseCoverageJson(json);
-
-              if (parsed && parsed.heights.length > 0) {
-                // If no direction data, generate default westerly direction
-                if (parsed.directions.length === 0) {
-                  parsed.directions = parsed.heights.map(() => 270);
-                }
-                converted = swellToVelocityData(
-                  parsed.heights,
-                  parsed.directions,
-                  parsed.bounds,
-                  parsed.nx,
-                  parsed.ny
-                );
-                if (converted) {
-                  console.log(`Got wave data from ${collection}: ${parsed.heights.length} points`);
-                  break;
-                }
+            if (parsed && parsed.heights.length > 0) {
+              // If no direction data, fallback to westerly direction
+              if (parsed.directions.length === 0) {
+                parsed.directions = parsed.heights.map(() => 270);
               }
-            } else {
-              const text = await response.text();
-              console.warn(`${collection} error:`, text.substring(0, 200));
+              converted = swellToVelocityData(
+                parsed.heights,
+                parsed.directions,
+                parsed.bounds,
+                parsed.nx,
+                parsed.ny
+              );
+              if (converted) {
+                console.log(`Got wave data from ${collection}: ${parsed.heights.length} points`);
+              }
             }
-          } catch (e) {
-            console.warn(`Failed to fetch ${collection}:`, e);
+          } else {
+            const text = await response.text();
+            console.warn(`${collection} error:`, text.substring(0, 200));
           }
+        } catch (e) {
+          console.warn(`Failed to fetch ${collection}:`, e);
         }
       }
 
@@ -285,10 +282,15 @@ export function WaveSwellOverlay({
     }
   }, []);
 
+  // Fetch data when visible or forecast hour changes (with debounce)
   useEffect(() => {
-    if (visible) {
+    if (!visible) return;
+
+    const timeoutId = setTimeout(() => {
       fetchSwellData(forecastHourIndex);
-    }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
   }, [visible, forecastHourIndex, fetchSwellData]);
 
   const onWebViewLoad = useCallback(() => {

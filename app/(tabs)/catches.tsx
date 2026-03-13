@@ -16,7 +16,11 @@ import {
 } from "react-native";
 import { Link } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { listCatches } from "../../lib/catches";
+import { listCatches, type CatchRow } from "../../lib/catches";
+import { listTrips } from "../../lib/trips";
+import { calculatePersonalRecords } from "../../lib/records";
+import type { PersonalRecords } from "../../types/records";
+import PersonalRecordsSection from "../../components/PersonalRecordsSection";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { useLanguage } from "../../lib/i18n";
@@ -112,17 +116,35 @@ const sizeFilters = [
 export default function Catches() {
   const { t } = useLanguage();
   const { theme } = useTheme();
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<CatchRow[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [minLen, setMinLen] = useState<number>(0); // Minimumslængde (cm)
   const [showPicker, setShowPicker] = useState(false);
   const [showFilters, setShowFilters] = useState(false); // pop-down filtre
+  const [records, setRecords] = useState<PersonalRecords>({
+    longestFish: null,
+    heaviestFish: null,
+    mostFishTrip: null,
+  });
 
   async function load(dateStr?: string, minLength?: number) {
     setRows(await listCatches(dateStr, minLength));
   }
 
-  // Første load uden filter
+  async function loadRecords() {
+    try {
+      const [allCatches, allTrips] = await Promise.all([
+        listCatches(), // All catches without filters
+        listTrips(1000), // Get all trips
+      ]);
+      const calculatedRecords = calculatePersonalRecords(allCatches, allTrips);
+      setRecords(calculatedRecords);
+    } catch (err) {
+      console.warn("Could not load records:", err);
+    }
+  }
+
+  // Første load uden filter (records håndteres af useFocusEffect)
   useEffect(() => {
     load();
   }, []);
@@ -131,6 +153,7 @@ export default function Catches() {
   useFocusEffect(
     useCallback(() => {
       load(selectedDate ? isoDay(selectedDate) : undefined, minLen);
+      loadRecords();
     }, [selectedDate, minLen])
   );
 
@@ -290,6 +313,9 @@ export default function Catches() {
           contentContainerStyle={styles.listContent}
           data={rows}
           keyExtractor={(x) => x.id}
+          ListHeaderComponent={
+            <PersonalRecordsSection records={records} />
+          }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>

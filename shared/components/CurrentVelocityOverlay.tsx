@@ -178,37 +178,34 @@ export function CurrentVelocityOverlay({
       // Use selected forecast time
       const datetime = getForecastValue("hourly", hourIndex) || new Date().toISOString();
 
-      // Fetch from both DKSS collections
-      const collections = ["dkss_idw", "dkss_nsbs"];
+      // Fetch from primary DKSS collection only (dkss_nsbs has best coverage)
+      const collection = "dkss_nsbs";
       const allData: any[] = [];
+      const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=current-u,current-v&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
+      const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
 
-      for (const collection of collections) {
-        const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=current-u,current-v&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-        const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const response = await fetch(proxyUrl, {
+          signal: controller.signal
+        });
 
-          const response = await fetch(proxyUrl, {
-            signal: controller.signal
-          });
+        clearTimeout(timeoutId);
 
-          clearTimeout(timeoutId);
-
-          if (response.ok) {
-            const json = await response.json();
-            const converted = coverageJsonToVelocityData(json);
-            if (converted) {
-              allData.push(...converted);
-            }
-          } else {
-            const text = await response.text();
-            console.warn(`${collection} error response:`, text.substring(0, 200));
+        if (response.ok) {
+          const json = await response.json();
+          const converted = coverageJsonToVelocityData(json);
+          if (converted) {
+            allData.push(...converted);
           }
-        } catch (e) {
-          console.warn(`Failed to fetch ${collection}:`, e);
+        } else {
+          const text = await response.text();
+          console.warn(`${collection} error response:`, text.substring(0, 200));
         }
+      } catch (e) {
+        console.warn(`Failed to fetch ${collection}:`, e);
       }
 
       if (allData.length > 0) {
@@ -225,11 +222,15 @@ export function CurrentVelocityOverlay({
     }
   }, []);
 
-  // Fetch data when visible or forecast hour changes
+  // Fetch data when visible or forecast hour changes (with debounce)
   useEffect(() => {
-    if (visible) {
+    if (!visible) return;
+
+    const timeoutId = setTimeout(() => {
       fetchCurrentData(forecastHourIndex);
-    }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
   }, [visible, forecastHourIndex, fetchCurrentData]);
 
   // Send data to WebView when ready

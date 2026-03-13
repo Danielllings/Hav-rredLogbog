@@ -2,6 +2,7 @@
 // Pattern analysis and statistics helpers for fishing data
 
 import SunCalc from "suncalc";
+import { getWindType, type CoastDirection } from "./spots";
 
 // ============================================================================
 // Types
@@ -288,9 +289,19 @@ export function buildPatternGroups(
 // Main Pattern Analysis
 // ============================================================================
 
-export function buildWeatherSummary(allTrips: any[]): PatternReport | null {
+export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternReport | null {
   const tripsWithFish = allTrips.filter((t) => (t.fish_count ?? 0) > 0);
   if (!tripsWithFish.length) return null;
+
+  // Byg et map fra spot_id til coastDirection for hurtig lookup
+  const spotCoastMap = new Map<string, CoastDirection>();
+  if (spots) {
+    for (const spot of spots) {
+      if (spot.id && spot.coastDirection) {
+        spotCoastMap.set(String(spot.id), spot.coastDirection);
+      }
+    }
+  }
 
   const tideStats: Record<string, SimpleBucket> = {};
   const seasonStats: Record<string, SimpleBucket> = {};
@@ -402,8 +413,6 @@ export function buildWeatherSummary(allTrips: any[]): PatternReport | null {
     const airT = evaluation?.airTempC?.avg ?? null;
     const waterT = evaluation?.waterTempC?.avg ?? null;
     const windMs = evaluation?.windMS?.avg ?? null;
-    const cwRaw: string | null = evaluation?.coastWind?.category ?? null;
-    const cw = coastWindLabel(cwRaw);
 
     const windDirDeg: number | null =
       (evaluation?.windDirDeg?.avg ??
@@ -411,6 +420,27 @@ export function buildWeatherSummary(allTrips: any[]): PatternReport | null {
         evaluation?.windFromDirDeg?.avg ??
         evaluation?.windFromDir?.avg ??
         null) ?? null;
+
+    // Hent spotets kystretning - enten fra trip eller via spot lookup
+    const tripSpotId = t.spot_id ?? t.spotId ?? null;
+    const spotCoastDir: CoastDirection | null =
+      t.spot_coast_direction ??
+      t.coastDirection ??
+      (tripSpotId ? spotCoastMap.get(String(tripSpotId)) : null) ??
+      null;
+
+    // Beregn vind ift. kyst fra vindretning + spotets kystretning
+    let cw: string | null = null;
+    if (windDirDeg != null && Number.isFinite(windDirDeg) && spotCoastDir) {
+      const windType = getWindType(windDirDeg, spotCoastDir);
+      cw = windType === 'offshore' ? 'fralandsvind'
+         : windType === 'onshore' ? 'pålandsvind'
+         : 'sidevind';
+    } else {
+      // Fallback til gammel metode hvis vi ikke har kystretning
+      const cwRaw: string | null = evaluation?.coastWind?.category ?? null;
+      cw = coastWindLabel(cwRaw);
+    }
 
     const windDirKey =
       windDirDeg != null && Number.isFinite(windDirDeg)
@@ -656,8 +686,28 @@ export function buildWeatherSummary(allTrips: any[]): PatternReport | null {
         ? "solopgang"
         : "solnedgang";
     const dir = avg < 0 ? "før" : "efter";
-    const minutes = Math.round(Math.abs(avg));
-    lines.push(`Typisk ${minutes} min ${dir} ${event}`);
+    const absMinutes = Math.abs(avg);
+
+    // Rund til 30-minutters intervaller eller timer
+    let timeLabel: string;
+    if (absMinutes >= 90) {
+      // 1.5+ timer -> vis i hele timer
+      const hours = Math.round(absMinutes / 60);
+      timeLabel = `${hours} time${hours > 1 ? "r" : ""}`;
+    } else if (absMinutes >= 45) {
+      // 45-89 min -> "1 time"
+      timeLabel = "1 time";
+    } else {
+      // Under 45 min -> rund til nærmeste 30 min
+      const rounded = Math.round(absMinutes / 30) * 30;
+      timeLabel = rounded === 0 ? "ved" : `${rounded} min`;
+    }
+
+    if (timeLabel === "ved") {
+      lines.push(`Typisk ${timeLabel} ${event}`);
+    } else {
+      lines.push(`Typisk ${timeLabel} ${dir} ${event}`);
+    }
   }
 
   if (bestDuration) {

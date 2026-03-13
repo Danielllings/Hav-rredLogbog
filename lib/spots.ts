@@ -13,6 +13,9 @@ import {
 } from "firebase/firestore";
 import { getUserCollectionRef, getUserId } from "./firestore";
 
+// Kystretning - hvilken vej vender vandet?
+export type CoastDirection = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW';
+
 export type SpotRow = {
   id: string;          // Firestore ID
   userId: string;      // ejerskab
@@ -20,6 +23,7 @@ export type SpotRow = {
   lat: number;
   lng: number;
   notes?: string | null;
+  coastDirection?: CoastDirection | null;  // Hvilken retning vender vandet?
   created_at: string;  // ISO
   updated_at: string;  // ISO
 };
@@ -32,7 +36,57 @@ export type NewSpotInput = {
   lat: number;
   lng: number;
   notes?: string | null;
+  coastDirection?: CoastDirection | null;
 };
+
+// Vindtype baseret på kystretning og vindretning
+export type WindType = 'onshore' | 'offshore' | 'side';
+
+// Konverter kompasretning til grader
+const DIRECTION_ANGLES: Record<CoastDirection, number> = {
+  N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315
+};
+
+/**
+ * Beregn vindtype baseret på vindretning og kystens retning
+ * @param windDirDeg - Vindretning i grader (hvor vinden kommer FRA)
+ * @param coastDir - Hvilken retning vandet vender
+ * @returns 'onshore' (pålandsvind), 'offshore' (fralandsvind), eller 'side' (sidevind)
+ */
+export function getWindType(windDirDeg: number, coastDir: CoastDirection): WindType {
+  const coastAngle = DIRECTION_ANGLES[coastDir];
+
+  // Vindretning er hvor vinden kommer FRA
+  // Pålandsvind = vind der blæser MOD kysten (fra havet)
+  // Fralandsvind = vind der blæser FRA kysten (mod havet)
+
+  // Normaliser vindretning til 0-360
+  const windDir = ((windDirDeg % 360) + 360) % 360;
+
+  // Beregn forskel mellem vindretning og kystretning
+  let diff = Math.abs(windDir - coastAngle);
+  if (diff > 180) diff = 360 - diff;
+
+  // Pålandsvind: vind kommer fra samme retning som vandet vender (±45°)
+  if (diff <= 45) return 'onshore';
+
+  // Fralandsvind: vind kommer fra modsat retning (±45° fra 180°)
+  if (diff >= 135) return 'offshore';
+
+  // Sidevind: alt derimellem
+  return 'side';
+}
+
+/**
+ * Få dansk label for vindtype
+ */
+export function getWindTypeLabel(windType: WindType, language: 'da' | 'en' = 'da'): string {
+  const labels = {
+    da: { onshore: 'pålandsvind', offshore: 'fralandsvind', side: 'sidevind' },
+    en: { onshore: 'onshore wind', offshore: 'offshore wind', side: 'side wind' }
+  };
+  return labels[language][windType];
+}
 
 const mapSnapshotToSpotRow = (snap: QueryDocumentSnapshot): SpotRow => {
   return { id: snap.id, ...(snap.data() as Omit<SpotRow, "id">) };
@@ -51,6 +105,7 @@ export async function createSpot(input: NewSpotInput): Promise<SpotRow> {
     lat: input.lat,
     lng: input.lng,
     notes: input.notes ?? null,
+    coastDirection: input.coastDirection ?? null,
     created_at: nowIso,
     updated_at: nowIso,
   };
@@ -73,10 +128,10 @@ export async function getSpot(id: string): Promise<SpotRow | null> {
   return snap.exists() ? (mapSnapshotToSpotRow(snap as any)) : null;
 }
 
-/** Opdater navn/noter på et spot */
+/** Opdater navn/noter/kystretning på et spot */
 export async function updateSpot(
   id: string,
-  data: Partial<Pick<SpotRow, "name" | "notes">>
+  data: Partial<Pick<SpotRow, "name" | "notes" | "coastDirection">>
 ): Promise<void> {
   const refDoc = doc(getUserCollectionRef("spots"), id);
   const patch: Partial<SpotRow> = {

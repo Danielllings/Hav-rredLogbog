@@ -13,6 +13,7 @@ import {
   Keyboard,
   Animated,
   Image,
+  Modal,
 } from "react-native";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "expo-router";
@@ -25,11 +26,17 @@ import {
   auth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  db,
 } from "../../lib/firebase";
+import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 
 type AuthMode = "initial" | "login" | "signup";
 const REMEMBER_EMAIL_KEY = "remember_email";
 const REMEMBER_PASSWORD_KEY = "remember_password";
+
+// Demo konto
+const DEMO_EMAIL = "demo@havorredlogbog.dk";
+const DEMO_PASSWORD = "Havlog2026";
 
 
 const THEME = {
@@ -47,7 +54,7 @@ const THEME = {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   const [mode, setMode] = useState<AuthMode>("initial");
 
   const [email, setEmail] = useState("");
@@ -56,6 +63,10 @@ export default function LoginScreen() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Demo konto state
+  const [demoModalVisible, setDemoModalVisible] = useState(false);
+  const [demoDays, setDemoDays] = useState("7");
 
   // Animationer
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -96,10 +107,22 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (loading || !email || !password) return;
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Tjek for demo-konto - vis modal i stedet for at logge ind
+    if (normalizedEmail === DEMO_EMAIL) {
+      if (password !== DEMO_PASSWORD) {
+        Alert.alert(t("loginError"), "Forkert adgangskode til demo-konto");
+        return;
+      }
+      setDemoModalVisible(true);
+      return;
+    }
+
     setLoading(true);
     setErrorText(null);
     try {
-      const normalizedEmail = email.trim();
       await signInWithEmailAndPassword(auth, normalizedEmail, password);
       if (rememberMe) {
         await AsyncStorage.setItem(REMEMBER_EMAIL_KEY, normalizedEmail);
@@ -112,6 +135,62 @@ export default function LoginScreen() {
       const msg = error?.message || "Ukendt fejl ved login";
       // console.log("Login fejl:", msg);
       setErrorText(msg);
+      Alert.alert(t("loginError"), msg);
+    }
+    setLoading(false);
+  }
+
+  // Slet al demo-data for en frisk start
+  async function clearDemoData(userId: string) {
+    const collections = ["trips", "catches", "spots"];
+    for (const colName of collections) {
+      try {
+        const colRef = collection(db, "users", userId, colName);
+        const snapshot = await getDocs(colRef);
+        for (const docSnap of snapshot.docs) {
+          await deleteDoc(doc(db, "users", userId, colName, docSnap.id));
+        }
+      } catch (err) {
+        // Ignorer fejl ved sletning
+      }
+    }
+    // Slet også lokale offline-ture
+    try {
+      await AsyncStorage.removeItem("offline_trips_v2");
+    } catch {}
+  }
+
+  // Demo login efter accept af vilkår
+  async function handleDemoAccept() {
+    const days = parseInt(demoDays, 10);
+    if (isNaN(days) || days < 1 || days > 7) {
+      Alert.alert("Ugyldig periode", "Vælg mellem 1 og 7 dage");
+      return;
+    }
+
+    setLoading(true);
+    setErrorText(null);
+
+    try {
+      const userCred = await signInWithEmailAndPassword(auth, DEMO_EMAIL, DEMO_PASSWORD);
+
+      if (userCred.user) {
+        // Slet tidligere demo-data for frisk start
+        await clearDemoData(userCred.user.uid);
+      }
+
+      // Gem demo-periode info
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + days);
+      await AsyncStorage.setItem("demo_expiry", expiryDate.toISOString());
+      await AsyncStorage.setItem("demo_days", String(days));
+
+      setDemoModalVisible(false);
+      router.replace("/(tabs)");
+    } catch (error: any) {
+      const msg = error?.message || "Ukendt fejl ved demo-login";
+      setErrorText(msg);
+      setDemoModalVisible(false);
       Alert.alert(t("loginError"), msg);
     }
     setLoading(false);
@@ -409,10 +488,121 @@ export default function LoginScreen() {
                 </View>
               </>
             )}
+
+            {/* Sprogvalg / Language selector */}
+            <View style={styles.langSection}>
+              <View style={styles.langDivider} />
+              <View style={styles.langRow}>
+                <Pressable
+                  style={[styles.langBtn, language === "da" && styles.langBtnActive]}
+                  onPress={() => setLanguage("da")}
+                >
+                  <Text style={[styles.langBtnText, language === "da" && styles.langBtnTextActive]}>
+                    Dansk
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.langBtn, language === "en" && styles.langBtnActive]}
+                  onPress={() => setLanguage("en")}
+                >
+                  <Text style={[styles.langBtnText, language === "en" && styles.langBtnTextActive]}>
+                    English
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
         </Animated.View>
       </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+
+      {/* Demo-konto modal */}
+      <Modal
+        visible={demoModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !loading && setDemoModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+            <View style={styles.modalIconCircle}>
+              <Ionicons name="fish" size={28} color={THEME.accent} />
+            </View>
+
+            <Text style={styles.modalTitle}>Demo-konto</Text>
+
+            <Text style={styles.modalText}>
+              Du er ved at logge ind på en demo-konto til test af Havørred Logbog.
+            </Text>
+
+            <View style={styles.modalBullets}>
+              <Text style={styles.modalBullet}>• Kontoen er til demonstration og test</Text>
+              <Text style={styles.modalBullet}>• Al data slettes automatisk når perioden udløber</Text>
+              <Text style={styles.modalBullet}>• Du kan selv slette data via Indstillinger</Text>
+            </View>
+
+            <Text style={styles.modalLabel}>Vælg testperiode (maks 7 dage):</Text>
+            <View style={styles.daysInputWrapper}>
+              <TextInput
+                style={styles.daysInput}
+                value={demoDays}
+                onChangeText={(text) => {
+                  const num = text.replace(/[^0-9]/g, "");
+                  if (num === "" || (parseInt(num, 10) >= 1 && parseInt(num, 10) <= 7)) {
+                    setDemoDays(num);
+                  }
+                }}
+                keyboardType="number-pad"
+                maxLength={1}
+                placeholder="7"
+                placeholderTextColor={THEME.textSec}
+              />
+              <Text style={styles.daysLabel}>dage</Text>
+            </View>
+
+            <Text style={styles.modalDisclaimer}>
+              Ved at fortsætte accepterer du disse vilkår.
+            </Text>
+
+            <View style={styles.modalBtnGroup}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalBtnPrimary,
+                  pressed && styles.btnPressed,
+                  loading && styles.btnDisabled,
+                ]}
+                onPress={handleDemoAccept}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <ActivityIndicator color="#000" size="small" />
+                    <Text style={styles.modalBtnPrimaryText}>Forbereder demo...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={20} color="#000" />
+                    <Text style={styles.modalBtnPrimaryText}>Acceptér & Login</Text>
+                  </>
+                )}
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalBtnGhost,
+                  pressed && styles.btnGhostPressed,
+                ]}
+                onPress={() => setDemoModalVisible(false)}
+                disabled={loading}
+              >
+                <Text style={styles.modalBtnGhostText}>Annuller</Text>
+              </Pressable>
+            </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -609,6 +799,153 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   btnGhostText: {
+    color: THEME.textSec,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  // Language selector
+  langSection: {
+    marginTop: 24,
+  },
+  langDivider: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    marginBottom: 16,
+  },
+  langRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
+  },
+  langBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+  },
+  langBtnActive: {
+    backgroundColor: THEME.accent,
+  },
+  langBtnText: {
+    color: THEME.textSec,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  langBtnTextActive: {
+    color: "#000",
+  },
+
+  // Demo modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: THEME.card,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  modalIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(245, 158, 11, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: THEME.text,
+    marginBottom: 12,
+  },
+  modalText: {
+    fontSize: 14,
+    color: THEME.textSec,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  modalBullets: {
+    alignSelf: "stretch",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+  },
+  modalBullet: {
+    fontSize: 13,
+    color: THEME.text,
+    lineHeight: 22,
+  },
+  modalLabel: {
+    fontSize: 13,
+    color: THEME.textSec,
+    marginBottom: 10,
+  },
+  daysInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 20,
+  },
+  daysInput: {
+    width: 60,
+    height: 50,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    fontSize: 24,
+    fontWeight: "600",
+    color: THEME.text,
+    textAlign: "center",
+  },
+  daysLabel: {
+    fontSize: 16,
+    color: THEME.text,
+  },
+  modalDisclaimer: {
+    fontSize: 12,
+    color: THEME.textSec,
+    textAlign: "center",
+    marginBottom: 20,
+    fontStyle: "italic",
+  },
+  modalBtnGroup: {
+    width: "100%",
+    gap: 10,
+  },
+  modalBtnPrimary: {
+    backgroundColor: THEME.accent,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  modalBtnPrimaryText: {
+    color: "#000",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  modalBtnGhost: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  modalBtnGhostText: {
     color: THEME.textSec,
     fontSize: 15,
     fontWeight: "600",

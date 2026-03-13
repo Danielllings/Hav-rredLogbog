@@ -4,10 +4,9 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
-  Image,
+  TextInput,
   Pressable,
   Modal,
-  TextInput,
   ScrollView,
   StyleSheet,
   Platform,
@@ -26,6 +25,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "@react-navigation/native";
+import Animated, { FadeIn, FadeInUp, FadeInDown } from "react-native-reanimated";
 import Svg, { Path, Defs, LinearGradient, Stop, Circle } from "react-native-svg";
 
 import { getCatch, deleteCatch, updateCatch } from "../../../lib/catches";
@@ -38,40 +38,22 @@ import { uploadCatchImageAsync } from "../../../lib/storage";
 import { ORTO_FORAAR_URL } from "../../../lib/maps";
 import { listSpots, type Spot } from "../../../lib/spots";
 import { useLanguage } from "../../../lib/i18n";
-import { useTheme } from "../../../lib/theme";
+
+// Komponenter
+import { GlassCard, SolidCard } from "../../../components/statistics/GlassCard";
+import {
+  CatchHeroPhoto,
+  CatchStatsRow,
+  CatchStatsDisplay,
+  CatchInputCard,
+} from "../../../components/catch";
+import { APPLE } from "../../../constants/appleTheme";
 
 type LatLng = { latitude: number; longitude: number };
 type Stat = { avg: number; min: number; max: number };
 type Serie = { ts: number; v: number };
 
-// --- NERO TEMA ---
-const THEME = {
-  bg: "#0D0D0F",
-  card: "#161618",
-  elevated: "#1E1E21",
-  cardBorder: "#2A2A2E",
-
-  primary: "#FFFFFF",
-  primaryText: "#0D0D0F",
-
-  accent: "#F59E0B",
-  accentMuted: "#F59E0B20",
-  accentBorder: "#F59E0B40",
-
-  text: "#FFFFFF",
-  textSec: "#A0A0A8",
-  textTertiary: "#606068",
-
-  danger: "#FF3B30",
-  dangerMuted: "#FF3B3015",
-
-  inputBg: "#1E1E21",
-  border: "#2A2A2E",
-  ghost: "#1E1E21",
-};
-
-// --- MØRKT KORT STIL ---
-// --- Kort stilarter (lys på Android for bedre synlighed) ---
+// --- Kort stilarter ---
 const LIGHT_MAP_STYLE = [
   { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
   { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
@@ -113,78 +95,6 @@ const LIGHT_MAP_STYLE = [
   },
 ];
 
-// --- Mørkt kort stil ---
-const DARK_MAP_STYLE = [
-  { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-  {
-    featureType: "administrative.locality",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#d59563" }],
-  },
-  {
-    featureType: "poi",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#d59563" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#263c3f" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#6b9a76" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry",
-    stylers: [{ color: "#38414e" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#212a37" }],
-  },
-  {
-    featureType: "road",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#9ca5b3" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry",
-    stylers: [{ color: "#746855" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#1f2835" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#f3d19c" }],
-  },
-  {
-    featureType: "water",
-    elementType: "geometry",
-    stylers: [{ color: "#17263c" }],
-  },
-  {
-    featureType: "water",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#515c6d" }],
-  },
-  {
-    featureType: "water",
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#17263c" }],
-  },
-];
-
 const MAP_STYLE = LIGHT_MAP_STYLE;
 const MAP_UI_STYLE = "light";
 const HAS_GOOGLE_MAPS_KEY =
@@ -219,7 +129,6 @@ const toNum = (s: string) => {
   return Number.isFinite(n) ? n : null;
 };
 
-// Label til tracked tur-chip (dato + tid)
 function fmtTripLabel(iso: string) {
   try {
     const d = new Date(iso);
@@ -236,8 +145,8 @@ function fmtTripLabel(iso: string) {
 }
 
 function degToCompass(deg?: number) {
-  if (typeof deg !== "number" || deg < 0) return "—";
-  const dirs = ["N", "NØ", "Ø", "SØ", "S", "SV", "V", "NV"];
+  if (typeof deg !== "number" || deg < 0) return "-";
+  const dirs = ["N", "NO", "O", "SO", "S", "SV", "V", "NV"];
   const ix = Math.round(deg / 45) % 8;
   return dirs[ix];
 }
@@ -246,7 +155,6 @@ export default function CatchDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useLanguage();
-  const { theme } = useTheme();
 
   const [row, setRow] = useState<any | null>(null);
   const [edit, setEdit] = useState(false);
@@ -271,7 +179,7 @@ export default function CatchDetail() {
   const [permissionMessage, setPermissionMessage] = useState("");
 
   // edit state
-  const [date, setDate] = useState(""); // YYYY-MM-DD
+  const [date, setDate] = useState("");
   const [showPicker, setShowPicker] = useState(false);
 
   const [len, setLen] = useState("");
@@ -282,7 +190,7 @@ export default function CatchDetail() {
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
 
-  // Sørg for altid at starte i visning, når skærmen får fokus
+  // Start altid i visning naar skaermen faar fokus
   useFocusEffect(
     useCallback(() => {
       setEdit(false);
@@ -290,7 +198,7 @@ export default function CatchDetail() {
     }, [])
   );
 
-  // hent og normalisér evaluation fra meta_json
+  // hent og normaliser evaluation fra meta_json
   const loadTripEvaluation = useCallback(async (tripId: string | null) => {
     if (!tripId) {
       setEvaluation(null);
@@ -331,7 +239,6 @@ export default function CatchDetail() {
 
       setEvaluation(ev || null);
     } catch (e) {
-      // console.log("Fejl ved hentning af trip/meta til fangst", e);
       setEvaluation(null);
     }
   }, []);
@@ -372,9 +279,7 @@ export default function CatchDetail() {
       try {
         const trips = await getTrackedTrips(50, 60);
         setTrackedTrips(trips);
-      } catch (e) {
-        // console.log("Fejl ved getTrackedTrips", e);
-      }
+      } catch (e) {}
     })();
   }, []);
 
@@ -384,9 +289,7 @@ export default function CatchDetail() {
       try {
         const s = await listSpots();
         setSpots(s);
-      } catch (e) {
-        // console.log("Fejl ved listSpots", e);
-      }
+      } catch (e) {}
     })();
   }, []);
 
@@ -417,9 +320,9 @@ export default function CatchDetail() {
 
   const selectedTripLabel = useMemo(() => {
     if (!selectedTripId) return null;
-    const t = trackedTrips.find((tt) => tt.id === selectedTripId);
-    if (!t) return null;
-    return fmtTripLabel(t.started_at);
+    const trip = trackedTrips.find((tt) => tt.id === selectedTripId);
+    if (!trip) return null;
+    return fmtTripLabel(trip.started_at);
   }, [selectedTripId, trackedTrips]);
 
   async function handleSelectSpot(spot: Spot) {
@@ -436,14 +339,9 @@ export default function CatchDetail() {
 
   if (!row)
     return (
-      <View
-        style={[
-          styles.container,
-          { justifyContent: "center", alignItems: "center" },
-        ]}
-      >
-        <StatusBar barStyle="light-content" backgroundColor={THEME.bg} />
-        <ActivityIndicator color={THEME.primary} size="large" />
+      <View style={[styles.container, styles.loadingContainer]}>
+        <StatusBar barStyle="light-content" backgroundColor={APPLE.bg} />
+        <ActivityIndicator color={APPLE.accent} size="large" />
       </View>
     );
 
@@ -463,16 +361,14 @@ export default function CatchDetail() {
 
     const iso = `${date}T00:00:00.000Z`;
 
-    // Håndtér billede
+    // Haandter billede
     let finalPhotoUrl: string | null = row.photo_uri ?? null;
 
     if (photoUri) {
       if (photoUri.startsWith("file://")) {
         try {
           finalPhotoUrl = await uploadCatchImageAsync(photoUri, id);
-        } catch (e) {
-          // console.log("Fejl ved upload af fangstbillede:", e);
-        }
+        } catch (e) {}
       } else {
         finalPhotoUrl = photoUri;
       }
@@ -482,7 +378,7 @@ export default function CatchDetail() {
 
     await updateCatch(id, {
       date: iso,
-      time_of_day: null, // Fjernet fra UI
+      time_of_day: null,
       length_cm: toNum(len),
       weight_kg: toNum(kg),
       bait,
@@ -495,7 +391,6 @@ export default function CatchDetail() {
 
     router.replace("/catches");
   }
-
 
   async function pickImage() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -526,7 +421,7 @@ export default function CatchDetail() {
 
   return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.bg} />
+      <StatusBar barStyle="light-content" backgroundColor={APPLE.bg} />
 
       {/* SLET-FANGST MODAL */}
       <Modal
@@ -569,7 +464,7 @@ export default function CatchDetail() {
             <Text style={styles.modalText}>{permissionMessage}</Text>
             <View style={styles.modalBtnRow}>
               <Pressable
-                style={[styles.btn, styles.primary]}
+                style={[styles.btn, styles.primaryAccent]}
                 onPress={() => setPermissionModalVisible(false)}
               >
                 <Text style={styles.primaryText}>{t("ok")}</Text>
@@ -579,7 +474,7 @@ export default function CatchDetail() {
         </View>
       </Modal>
 
-      {/* MODAL: vælg tracked tur */}
+      {/* MODAL: vaelg tracked tur */}
       <Modal
         transparent
         visible={trackedModalVisible}
@@ -598,7 +493,7 @@ export default function CatchDetail() {
               contentContainerStyle={{ paddingBottom: 4 }}
             >
               {trackedTrips.length === 0 ? (
-                <Text style={{ color: THEME.textSec, fontSize: 14 }}>
+                <Text style={{ color: APPLE.textSecondary, fontSize: 14 }}>
                   {t("noTrackedTrips")}
                 </Text>
               ) : (
@@ -613,31 +508,31 @@ export default function CatchDetail() {
                         styles.tripItem,
                         active && styles.tripItemActive,
                       ]}
-                    onPress={() => {
-                      onSelectTrip(trip.id);
-                      setTrackedModalVisible(false);
-                    }}
-                  >
-                    <Text
-                      style={
-                        active
-                          ? styles.tripItemTextActive
-                          : styles.tripItemText
-                      }
+                      onPress={() => {
+                        onSelectTrip(trip.id);
+                        setTrackedModalVisible(false);
+                      }}
                     >
-                      {label}
-                    </Text>
-                    {active && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={18}
-                        color="#000"
-                      />
-                    )}
-                  </Pressable>
-                );
-              })
-            )}
+                      <Text
+                        style={
+                          active
+                            ? styles.tripItemTextActive
+                            : styles.tripItemText
+                        }
+                      >
+                        {label}
+                      </Text>
+                      {active && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={18}
+                          color={APPLE.bg}
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })
+              )}
             </ScrollView>
 
             <View style={styles.modalBtnRow}>
@@ -653,7 +548,7 @@ export default function CatchDetail() {
                 </Pressable>
               )}
               <Pressable
-                style={[styles.btn, styles.primaryYellow]}
+                style={[styles.btn, styles.primaryAccent]}
                 onPress={() => setTrackedModalVisible(false)}
               >
                 <Text style={styles.primaryText}>{t("close")}</Text>
@@ -663,7 +558,7 @@ export default function CatchDetail() {
         </View>
       </Modal>
 
-      {/* MODAL: vælg spot / lokation */}
+      {/* MODAL: vaelg spot / lokation */}
       <Modal
         transparent
         visible={spotModalVisible}
@@ -681,13 +576,13 @@ export default function CatchDetail() {
               <Ionicons
                 name="search"
                 size={18}
-                color={THEME.textSec}
+                color={APPLE.textSecondary}
                 style={{ marginRight: 6 }}
               />
               <TextInput
                 style={styles.spotSearchInput}
                 placeholder={t("searchSpotName")}
-                placeholderTextColor={THEME.textSec}
+                placeholderTextColor={APPLE.textSecondary}
                 value={spotSearch}
                 onChangeText={setSpotSearch}
                 returnKeyType="search"
@@ -699,7 +594,7 @@ export default function CatchDetail() {
               contentContainerStyle={{ paddingBottom: 4 }}
             >
               {filteredSpots.length === 0 ? (
-                <Text style={{ color: THEME.textSec, fontSize: 14 }}>
+                <Text style={{ color: APPLE.textSecondary, fontSize: 14 }}>
                   {t("noSpotsFound")}
                 </Text>
               ) : (
@@ -729,7 +624,7 @@ export default function CatchDetail() {
                         <Ionicons
                           name="checkmark-circle"
                           size={18}
-                          color="#000"
+                          color={APPLE.bg}
                         />
                       )}
                     </Pressable>
@@ -752,7 +647,7 @@ export default function CatchDetail() {
                 </Pressable>
               )}
               <Pressable
-                style={[styles.btn, styles.primaryYellow]}
+                style={[styles.btn, styles.primaryAccent]}
                 onPress={() => setSpotModalVisible(false)}
               >
                 <Text style={styles.primaryText}>{t("close")}</Text>
@@ -766,367 +661,362 @@ export default function CatchDetail() {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
         {/* HERO FOTO */}
-        <View style={styles.hero}>
-          <Image
-            source={{ uri: photoUri ?? row.photo_uri }}
-            style={styles.heroImg}
-          />
-          <View style={styles.heroBadge}>
-            <Ionicons name="calendar-outline" size={16} color="#fff" />
-            <Text style={styles.heroBadgeText}>{fmtDateOnly(row.date)}</Text>
-          </View>
-
-          {edit && (
-            <Pressable style={styles.changePhotoBtn} onPress={pickImage}>
-              <Ionicons name="image" size={16} color="#000" />
-              <Text style={{ color: "#000", fontWeight: "700", marginLeft: 6 }}>
-                {t("changePhoto")}
-              </Text>
-            </Pressable>
-          )}
-        </View>
+        <CatchHeroPhoto
+          photoUri={photoUri ?? row.photo_uri}
+          onPickPhoto={pickImage}
+          showEditButton={edit}
+          dateBadge={!edit ? fmtDateOnly(row.date) : undefined}
+        />
 
         {!edit ? (
           <>
-            {/* FANGSTDATA (View Mode) */}
-            <View style={styles.card}>
-              {/* Card header med dato */}
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardDate}>
-                  {new Date(row.date).toLocaleDateString("da-DK", {
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </Text>
-                {row.notes && (
-                  <View style={styles.spotBadge}>
-                    <Ionicons name="location" size={12} color={theme.primary} />
-                    <Text style={styles.spotBadgeText}>{row.notes}</Text>
+            {/* VIEW MODE */}
+
+            {/* STATS DISPLAY */}
+            <CatchStatsDisplay
+              length={row.length_cm}
+              weight={row.weight_kg}
+              delay={100}
+            />
+
+            {/* INFO CARD */}
+            <Animated.View entering={FadeInUp.delay(200).duration(400).springify()}>
+              <GlassCard style={styles.infoCard}>
+                <View style={styles.infoHeader}>
+                  <Text style={styles.infoDate}>
+                    {new Date(row.date).toLocaleDateString("da-DK", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </Text>
+                  {row.notes && (
+                    <View style={styles.spotBadge}>
+                      <Ionicons name="location" size={12} color={APPLE.accent} />
+                      <Text style={styles.spotBadgeText}>{row.notes}</Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.detailSection}>
+                  <View style={styles.detailItem}>
+                    <Ionicons name="fish-outline" size={16} color={APPLE.accent} />
+                    <Text style={styles.detailLabel}>{t("baitFly")}</Text>
+                    <Text style={styles.detailValue}>{row.bait || "-"}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Ionicons name="calendar-outline" size={16} color={APPLE.textSecondary} />
+                    <Text style={styles.detailLabel}>{t("registered")}</Text>
+                    <Text style={styles.detailValue}>{fmtDateOnly(row.created_at)}</Text>
+                  </View>
+                </View>
+              </GlassCard>
+            </Animated.View>
+
+            {/* VEJRFORHOLD */}
+            <Animated.View entering={FadeInUp.delay(300).duration(400).springify()}>
+              <GlassCard style={styles.weatherCard}>
+                <Text style={styles.sectionTitle}>{t("weatherDuringFishing")}</Text>
+
+                {!evaluation ? (
+                  <Text style={styles.bodyText}>
+                    {t("noWeatherData")}
+                  </Text>
+                ) : (
+                  <View style={{ gap: 6 }}>
+                    {evaluation.note && (
+                      <Text style={styles.noteText}>
+                        {t("note")}: {evaluation.note}
+                      </Text>
+                    )}
+
+                    {evaluation.airTempC && (
+                      <StatLine
+                        label={t("airTempLabel")}
+                        stat={evaluation.airTempC}
+                        fmt={(v) => `${v.toFixed(1)} C`}
+                      />
+                    )}
+
+                    {evaluation.windMS && (
+                      <StatLine
+                        label={t("windLabel")}
+                        stat={evaluation.windMS}
+                        fmt={(v) => `${v.toFixed(1)} m/s`}
+                        direction={evaluation.windDirDeg?.avg}
+                      />
+                    )}
+
+                    {evaluation.waterTempC && (
+                      <StatLine
+                        label={t("seaTempLabel")}
+                        stat={evaluation.waterTempC}
+                        fmt={(v) => `${v.toFixed(1)} C`}
+                      />
+                    )}
+
+                    {evaluation.waterLevelCM && (
+                      <StatLine
+                        label={t("waterLevelLabel")}
+                        stat={evaluation.waterLevelCM}
+                        fmt={(v) => `${v.toFixed(0)} cm`}
+                      />
+                    )}
+
+                    {evaluation.airTempSeries?.length > 0 && (
+                      <StatGraph
+                        series={evaluation.airTempSeries}
+                        label={t("airTemp")}
+                        unit=" C"
+                      />
+                    )}
+
+                    {evaluation.windSpeedSeries?.length > 0 && (
+                      <StatGraph
+                        series={evaluation.windSpeedSeries}
+                        label={t("windSpeed")}
+                        unit="m/s"
+                      />
+                    )}
+
+                    {evaluation.waterTempSeries?.length > 0 && (
+                      <StatGraph
+                        series={evaluation.waterTempSeries}
+                        label={t("waterTemp")}
+                        unit=" C"
+                      />
+                    )}
+
+                    {evaluation.waterLevelSeries?.length > 0 && (
+                      <StatGraph
+                        series={evaluation.waterLevelSeries}
+                        label={t("waterLevel")}
+                        unit="cm"
+                      />
+                    )}
+
+                    <View style={styles.sourceSection}>
+                      <View style={styles.sourceHeader}>
+                        <Text style={styles.sourceLabel}>{t("sourceDmi")}</Text>
+                        {dataTimeStr && (
+                          <Text style={styles.sourceTime}>{dataTimeStr}</Text>
+                        )}
+                      </View>
+
+                      <View style={styles.sourceStatusRow}>
+                        <View style={styles.sourceStatus}>
+                          <Ionicons
+                            name={hasClimate ? "checkmark-circle" : "close-circle"}
+                            size={16}
+                            color={hasClimate ? APPLE.accent : "#FF3B30"}
+                          />
+                          <Text style={styles.sourceStatusText}>{t("weatherDataLabel")}</Text>
+                        </View>
+
+                        <View style={styles.sourceStatus}>
+                          <Ionicons
+                            name={hasOcean ? "checkmark-circle" : "close-circle"}
+                            size={16}
+                            color={hasOcean ? APPLE.accent : "#FF3B30"}
+                          />
+                          <Text style={styles.sourceStatusText}>{t("oceanDataLabel")}</Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
                 )}
-              </View>
+              </GlassCard>
+            </Animated.View>
 
-              {/* Symmetrisk grid */}
-              <View style={styles.infoGrid}>
-                <Info
-                  label={t("measure")}
-                  value={row.length_cm ? `${row.length_cm} cm` : "—"}
-                  highlight
-                />
-                <Info
-                  label={t("weight")}
-                  value={row.weight_kg ? `${row.weight_kg} kg` : "—"}
-                  highlight
-                />
-              </View>
-
-              {/* Ekstra info */}
-              <View style={styles.detailSection}>
-                <View style={styles.detailItem}>
-                  <Ionicons name="fish-outline" size={16} color={theme.primary} />
-                  <Text style={styles.detailLabel}>{t("baitFly")}</Text>
-                  <Text style={styles.detailValue}>{row.bait || "—"}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <Ionicons name="calendar-outline" size={16} color={THEME.textSec} />
-                  <Text style={styles.detailLabel}>{t("registered")}</Text>
-                  <Text style={styles.detailValue}>{fmtDateOnly(row.created_at)}</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* VEJRFORHOLD (View Mode) */}
-            <View style={styles.card}>
-              <Text style={styles.title}>{t("weatherDuringFishing")}</Text>
-
-              {!evaluation ? (
-                <Text style={styles.body}>
-                  {t("noWeatherData")}
-                </Text>
-              ) : (
-                <View style={{ gap: 6 }}>
-                  {evaluation.note && (
-                    <Text style={styles.noteText}>
-                      {t("note")}: {evaluation.note}
-                    </Text>
-                  )}
-
-                  {evaluation.airTempC && (
-                    <StatLine
-                      label={t("airTempLabel")}
-                      stat={evaluation.airTempC}
-                      fmt={(v) => `${v.toFixed(1)}°C`}
-                    />
-                  )}
-
-                  {evaluation.windMS && (
-                    <StatLine
-                      label={t("windLabel")}
-                      stat={evaluation.windMS}
-                      fmt={(v) => `${v.toFixed(1)} m/s`}
-                      direction={evaluation.windDirDeg?.avg}
-                    />
-                  )}
-
-                  {evaluation.waterTempC && (
-                    <StatLine
-                      label={t("seaTempLabel")}
-                      stat={evaluation.waterTempC}
-                      fmt={(v) => `${v.toFixed(1)}°C`}
-                    />
-                  )}
-
-                  {evaluation.waterLevelCM && (
-                    <StatLine
-                      label={t("waterLevelLabel")}
-                      stat={evaluation.waterLevelCM}
-                      fmt={(v) => `${v.toFixed(0)} cm`}
-                    />
-                  )}
-
-                  {evaluation.airTempSeries?.length > 0 && (
-                    <StatGraph
-                      series={evaluation.airTempSeries}
-                      label={t("airTemp")}
-                      unit="°C"
-                    />
-                  )}
-
-                  {evaluation.windSpeedSeries?.length > 0 && (
-                    <StatGraph
-                      series={evaluation.windSpeedSeries}
-                      label={t("windSpeed")}
-                      unit="m/s"
-                    />
-                  )}
-
-                  {evaluation.waterTempSeries?.length > 0 && (
-                    <StatGraph
-                      series={evaluation.waterTempSeries}
-                      label={t("waterTemp")}
-                      unit="°C"
-                    />
-                  )}
-
-                  {evaluation.waterLevelSeries?.length > 0 && (
-                    <StatGraph
-                      series={evaluation.waterLevelSeries}
-                      label={t("waterLevel")}
-                      unit="cm"
-                    />
-                  )}
-
-                  <View style={styles.sourceSection}>
-                    <View style={styles.sourceHeader}>
-                      <Text style={styles.sourceLabel}>{t("sourceDmi")}</Text>
-                      {dataTimeStr && (
-                        <Text style={styles.sourceTime}>{dataTimeStr}</Text>
-                      )}
-                    </View>
-
-                    <View style={styles.sourceStatusRow}>
-                      <View style={styles.sourceStatus}>
-                        <Ionicons
-                          name={hasClimate ? "checkmark-circle" : "close-circle"}
-                          size={16}
-                          color={hasClimate ? THEME.accent : THEME.danger}
-                        />
-                        <Text style={styles.sourceStatusText}>{t("weatherDataLabel")}</Text>
-                      </View>
-
-                      <View style={styles.sourceStatus}>
-                        <Ionicons
-                          name={hasOcean ? "checkmark-circle" : "close-circle"}
-                          size={16}
-                          color={hasOcean ? THEME.accent : THEME.danger}
-                        />
-                        <Text style={styles.sourceStatusText}>{t("oceanDataLabel")}</Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              )}
-            </View>
-
-            {/* KORT – VISNING */}
+            {/* KORT */}
             {pos && (
-              <View style={styles.card}>
-                <Text style={styles.title}>{t("catchLocation")}</Text>
-                <View style={styles.mapContainer}>
-                  <MapView
-                    style={{ flex: 1 }}
-                    region={{
-                      latitude: pos.latitude,
-                      longitude: pos.longitude,
-                      latitudeDelta: 0.01,
-                      longitudeDelta: 0.01,
-                    }}
-                    pitchEnabled
-                    rotateEnabled
-                    scrollEnabled
-                    zoomEnabled
-                    customMapStyle={MAP_STYLE}
-                    userInterfaceStyle={MAP_UI_STYLE}
-                    provider={MAP_PROVIDER}
-                    mapType={MAP_TYPE}
-                  >
-                    <UrlTile
-                      urlTemplate={ORTO_FORAAR_URL}
-                      maximumZ={21}
-                      tileSize={256}
-                    />
-                    <Marker coordinate={pos} title="Fangststed" />
-                  </MapView>
-                </View>
-              </View>
+              <Animated.View entering={FadeInUp.delay(400).duration(400).springify()}>
+                <GlassCard style={styles.mapCard} noPadding>
+                  <View style={styles.mapHeader}>
+                    <Text style={styles.sectionTitle}>{t("catchLocation")}</Text>
+                  </View>
+                  <View style={styles.mapContainer}>
+                    <MapView
+                      style={{ flex: 1 }}
+                      region={{
+                        latitude: pos.latitude,
+                        longitude: pos.longitude,
+                        latitudeDelta: 0.01,
+                        longitudeDelta: 0.01,
+                      }}
+                      pitchEnabled
+                      rotateEnabled
+                      scrollEnabled
+                      zoomEnabled
+                      customMapStyle={MAP_STYLE}
+                      userInterfaceStyle={MAP_UI_STYLE}
+                      provider={MAP_PROVIDER}
+                      mapType={MAP_TYPE}
+                    >
+                      <UrlTile
+                        urlTemplate={ORTO_FORAAR_URL}
+                        maximumZ={21}
+                        tileSize={256}
+                      />
+                      <Marker coordinate={pos} title="Fangststed" />
+                    </MapView>
+                  </View>
+                </GlassCard>
+              </Animated.View>
             )}
 
             {/* HANDLINGSKNAPPER */}
-            <View style={styles.actionRow}>
+            <Animated.View
+              entering={FadeInDown.delay(500).duration(400).springify()}
+              style={styles.actionRow}
+            >
               <Pressable
                 style={styles.editBtn}
                 onPress={() => setEdit(true)}
               >
-                <Ionicons name="create-outline" size={18} color="#000" />
+                <Ionicons name="create-outline" size={18} color={APPLE.bg} />
                 <Text style={styles.editBtnText}>{t("edit")}</Text>
               </Pressable>
               <Pressable
                 style={styles.deleteBtn}
                 onPress={onDelete}
               >
-                <Ionicons name="trash-outline" size={18} color={THEME.danger} />
+                <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                 <Text style={styles.deleteBtnText}>{t("delete")}</Text>
               </Pressable>
-            </View>
+            </Animated.View>
           </>
         ) : (
           <>
-            {/* REDIGERING */}
-            <View style={styles.card}>
-              <Text style={styles.title}>{t("editCatch")}</Text>
+            {/* EDIT MODE */}
 
-              <Text style={styles.sectionLabel}>{t("date")}</Text>
-              <Pressable
-                style={styles.dateInput}
-                onPress={() => setShowPicker((prev) => !prev)}
-              >
-                <Ionicons name="calendar" size={18} color={THEME.textSec} />
-                <Text style={styles.dateText}>{date || t("selectDate")}</Text>
-              </Pressable>
+            {/* STATS ROW */}
+            <CatchStatsRow
+              length={len}
+              weight={kg}
+              onLengthChange={setLen}
+              onWeightChange={setKg}
+              delay={100}
+            />
 
-              {showPicker && (
-                <DateTimePicker
-                  value={new Date(date)}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "inline" : "default"}
-                  themeVariant="dark"
-                  textColor="#FFF"
-                  accentColor={THEME.accent}
-                  onChange={(e, d) => {
-                    if (Platform.OS !== "ios") setShowPicker(false);
-                    if (d) setDate(isoDay(d));
-                  }}
-                />
-              )}
+            {/* DATO PICKER */}
+            <Animated.View entering={FadeInUp.delay(200).duration(400).springify()}>
+              <GlassCard style={styles.dateCard}>
+                <Text style={styles.sectionLabel}>{t("date")}</Text>
+                <Pressable
+                  style={styles.dateInput}
+                  onPress={() => setShowPicker((prev) => !prev)}
+                >
+                  <View style={styles.dateIconCircle}>
+                    <Ionicons name="calendar" size={18} color={APPLE.accent} />
+                  </View>
+                  <Text style={styles.dateText}>{date || t("selectDate")}</Text>
+                  <Ionicons name="chevron-down" size={18} color={APPLE.textSecondary} />
+                </Pressable>
 
-              {/* VALG AF TRACKED TUR TIL VEJRDATA - Highlighted */}
-              <View style={styles.trackedTripCard}>
-                <View style={styles.trackedTripHeader}>
-                  <Ionicons name="analytics" size={20} color={THEME.accent} />
-                  <Text style={styles.trackedTripTitle}>
+                {showPicker && (
+                  <DateTimePicker
+                    value={new Date(date)}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "inline" : "default"}
+                    themeVariant="dark"
+                    textColor="#FFF"
+                    accentColor={APPLE.accent}
+                    onChange={(e, d) => {
+                      if (Platform.OS !== "ios") setShowPicker(false);
+                      if (d) setDate(isoDay(d));
+                    }}
+                  />
+                )}
+              </GlassCard>
+            </Animated.View>
+
+            {/* AGN/FLUE INPUT */}
+            <CatchInputCard
+              label={t("baitFly")}
+              value={bait}
+              onChangeText={setBait}
+              placeholder="fx Sandeel ..."
+              icon="fish"
+              delay={300}
+            />
+
+            {/* TRIP LINK */}
+            <Animated.View entering={FadeInUp.delay(400).duration(400).springify()}>
+              <GlassCard style={styles.tripCard}>
+                <View style={styles.tripHeader}>
+                  <Ionicons name="analytics" size={20} color={APPLE.accent} />
+                  <Text style={styles.tripTitle}>
                     {t("trackedTripOptional")}
                   </Text>
                 </View>
-                <Text style={styles.trackedTripHint}>
+                <Text style={styles.tripHint}>
                   {t("trackedTripHint")}
                 </Text>
                 <Pressable
-                  style={styles.trackedTripButton}
+                  style={styles.tripButton}
                   onPress={() => setTrackedModalVisible(true)}
                 >
-                  <Ionicons name="navigate-circle" size={20} color={THEME.accent} />
-                  <Text style={styles.trackedTripButtonText}>
+                  <Ionicons name="navigate-circle" size={20} color={APPLE.accent} />
+                  <Text style={styles.tripButtonText}>
                     {selectedTripLabel ?? t("selectTrackedTripOptional")}
                   </Text>
-                  <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
+                  <Ionicons name="chevron-forward" size={18} color={APPLE.textSecondary} />
                 </Pressable>
-              </View>
+              </GlassCard>
+            </Animated.View>
 
-              <View style={styles.row}>
-                <View style={{ flex: 1 }}>
-                  <LabeledInput
-                    label={t("lengthCm")}
-                    value={len}
-                    onChangeText={setLen}
-                    keyboardType="numeric"
-                    placeholder="fx 60"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <LabeledInput
-                    label={t("weightKg")}
-                    value={kg}
-                    onChangeText={setKg}
-                    keyboardType="numeric"
-                    placeholder="fx 2,1"
-                  />
-                </View>
-              </View>
-
-              <LabeledInput
-                label={t("baitFly")}
-                value={bait}
-                onChangeText={setBait}
-                placeholder="fx Sandeel …"
-              />
-
-            </View>
-
-            {/* LOKATION - Enhanced spot selection */}
-            <View style={styles.card}>
-              <View style={styles.locationHeader}>
-                <View style={styles.locationIconCircle}>
-                  <Ionicons name="location" size={22} color={THEME.accent} />
-                </View>
-                <View>
-                  <Text style={styles.locationTitle}>{t("location")}</Text>
-                  <Text style={styles.locationSubtitle}>{t("selectFromYourSpots")}</Text>
-                </View>
-              </View>
-
-              {notes ? (
-                <View style={styles.selectedSpotCard}>
-                  <View style={styles.selectedSpotInfo}>
-                    <Ionicons name="location" size={20} color={THEME.accent} />
-                    <Text style={styles.selectedSpotName}>{notes}</Text>
+            {/* LOKATION */}
+            <Animated.View entering={FadeInUp.delay(500).duration(400).springify()}>
+              <GlassCard style={styles.locationCard}>
+                <View style={styles.locationHeader}>
+                  <View style={styles.locationIconCircle}>
+                    <Ionicons name="location" size={22} color={APPLE.accent} />
                   </View>
+                  <View style={styles.locationTitleContainer}>
+                    <Text style={styles.locationTitle}>{t("location")}</Text>
+                    <Text style={styles.locationSubtitle}>{t("selectFromYourSpots")}</Text>
+                  </View>
+                </View>
+
+                {notes ? (
+                  <View style={styles.selectedSpotCard}>
+                    <View style={styles.selectedSpotInfo}>
+                      <Ionicons name="location" size={20} color={APPLE.accent} />
+                      <Text style={styles.selectedSpotName}>{notes}</Text>
+                    </View>
+                    <Pressable
+                      style={styles.changeSpotBtn}
+                      onPress={() => setSpotModalVisible(true)}
+                    >
+                      <Text style={styles.changeSpotBtnText}>{t("change")}</Text>
+                    </Pressable>
+                  </View>
+                ) : spots.length > 0 ? (
                   <Pressable
-                    style={styles.changeSpotBtn}
+                    style={styles.selectSpotBtn}
                     onPress={() => setSpotModalVisible(true)}
                   >
-                    <Text style={styles.changeSpotBtnText}>{t("change")}</Text>
+                    <Ionicons name="add-circle-outline" size={22} color={APPLE.accent} />
+                    <Text style={styles.selectSpotBtnText}>{t("selectSpot")}</Text>
                   </Pressable>
-                </View>
-              ) : spots.length > 0 ? (
-                <Pressable
-                  style={styles.selectSpotBtn}
-                  onPress={() => setSpotModalVisible(true)}
-                >
-                  <Ionicons name="add-circle-outline" size={22} color={THEME.accent} />
-                  <Text style={styles.selectSpotBtnText}>{t("selectSpot")}</Text>
-                </Pressable>
-              ) : (
-                <View style={styles.noSpotsContainer}>
-                  <Text style={styles.noSpotsText}>{t("noSpotsYet")}</Text>
-                </View>
-              )}
-            </View>
+                ) : (
+                  <View style={styles.noSpotsContainer}>
+                    <Text style={styles.noSpotsText}>{t("noSpotsYet")}</Text>
+                  </View>
+                )}
+              </GlassCard>
+            </Animated.View>
 
-            <View style={styles.editActionRow}>
+            {/* GEM/ANNULLER */}
+            <Animated.View
+              entering={FadeInDown.delay(600).duration(400).springify()}
+              style={styles.editActionRow}
+            >
               <Pressable
                 style={styles.editCancelBtn}
                 onPress={() => setEdit(false)}
@@ -1134,10 +1024,10 @@ export default function CatchDetail() {
                 <Text style={styles.editCancelBtnText}>{t("cancel")}</Text>
               </Pressable>
               <Pressable style={styles.editSaveBtn} onPress={onSave}>
-                <Ionicons name="checkmark" size={20} color="#000" />
+                <Ionicons name="checkmark" size={20} color={APPLE.bg} />
                 <Text style={styles.editSaveBtnText}>{t("saveChanges")}</Text>
               </Pressable>
-            </View>
+            </Animated.View>
           </>
         )}
       </ScrollView>
@@ -1145,37 +1035,13 @@ export default function CatchDetail() {
   );
 }
 
-function Info({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <View style={styles.infoItem}>
-      <Text style={[styles.infoVal, highlight && styles.infoValHighlight]}>{value}</Text>
-      <Text style={styles.infoLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function LabeledInput(props: any) {
-  const { label, style, ...rest } = props;
-  return (
-    <View style={{ marginBottom: 12 }}>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      <TextInput
-        {...rest}
-        placeholderTextColor={THEME.textSec}
-        style={[styles.textInput, style]}
-      />
-    </View>
-  );
-}
-
-// Kompas med pil
+// Wind Compass Component
 function WindCompass({ directionDeg }: { directionDeg?: number }) {
-  const { theme } = useTheme();
   if (directionDeg === undefined || Number.isNaN(directionDeg)) {
     return (
       <View style={styles.compass}>
         <Text style={styles.compassN}>N</Text>
-        <Ionicons name="arrow-up" size={20} color={THEME.textSec} />
+        <Ionicons name="arrow-up" size={20} color={APPLE.textSecondary} />
       </View>
     );
   }
@@ -1188,14 +1054,14 @@ function WindCompass({ directionDeg }: { directionDeg?: number }) {
       <Ionicons
         name="arrow-up"
         size={22}
-        color={theme.primary}
+        color={APPLE.accent}
         style={{ transform: [{ rotate: `${rot}deg` }] }}
       />
     </View>
   );
 }
 
-// StatLinje
+// StatLine Component
 function StatLine({
   label,
   stat,
@@ -1222,14 +1088,14 @@ function StatLine({
     return (
       <View style={styles.statRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.infoLabel}>{label}</Text>
+          <Text style={styles.statLabel}>{label}</Text>
           {minMaxValue && <Text style={styles.minMaxText}>{minMaxValue}</Text>}
         </View>
         <View style={styles.windRight}>
           <View style={{ alignItems: "flex-end", marginRight: 8 }}>
-            <Text style={styles.infoVal}>{avgValue}</Text>
+            <Text style={styles.statValue}>{avgValue}</Text>
             <Text style={styles.windDirText}>
-              {compassTxt} ({Math.round(direction)}°)
+              {compassTxt} ({Math.round(direction)} gr.)
             </Text>
           </View>
           <WindCompass directionDeg={direction} />
@@ -1240,16 +1106,16 @@ function StatLine({
 
   return (
     <View style={styles.statRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
       <View style={{ alignItems: "flex-end" }}>
-        <Text style={styles.infoVal}>{avgValue}</Text>
+        <Text style={styles.statValue}>{avgValue}</Text>
         {minMaxValue && <Text style={styles.minMaxText}>{minMaxValue}</Text>}
       </View>
     </View>
   );
 }
 
-// Graf – Modern Sparkline (matcher trips/[id].tsx)
+// StatGraph Component
 function StatGraph({
   series,
   label,
@@ -1276,9 +1142,7 @@ function StatGraph({
   const step = Math.ceil(series.length / MAX_POINTS);
   const sampled = series.filter((_, idx) => idx % step === 0);
 
-  if (sampled.length < 2) {
-    return null;
-  }
+  if (sampled.length < 2) return null;
 
   const firstTime = new Date(sampled[0].ts).getHours().toString().padStart(2, "0");
   const lastTime = new Date(sampled[sampled.length - 1].ts)
@@ -1293,14 +1157,12 @@ function StatGraph({
 
   const graphWidth = Math.max(layoutWidth - PADDING_X * 2, 0);
 
-  // Beregn punkter
   const points = sampled.map((d, i) => {
     const x = PADDING_X + (i / (sampled.length - 1)) * graphWidth;
     const y = PADDING_Y + GRAPH_H - ((d.v - min) / span) * GRAPH_H;
     return { x, y, data: d };
   });
 
-  // Smooth bezier curve path
   const makeSmoothPath = () => {
     if (points.length < 2) return "";
 
@@ -1312,7 +1174,6 @@ function StatGraph({
       const p2 = points[i + 1];
       const p3 = points[Math.min(points.length - 1, i + 2)];
 
-      // Catmull-Rom to Bezier conversion
       const tension = 0.3;
       const cp1x = p1.x + (p2.x - p0.x) * tension;
       const cp1y = p1.y + (p2.y - p0.y) * tension;
@@ -1336,7 +1197,6 @@ function StatGraph({
   const areaPath = makeAreaPath(linePath);
   const lastPoint = points[points.length - 1];
 
-  // Touch handling
   const handleTouch = (e: any) => {
     const x = e.nativeEvent.locationX;
     let closestIdx = 0;
@@ -1355,7 +1215,6 @@ function StatGraph({
     setTouchIndex(null);
   };
 
-  // Aktiv punkt data
   const activePoint = touchIndex !== null ? points[touchIndex] : null;
   const activeData = activePoint?.data;
   const activeTimeStr = activeData
@@ -1363,7 +1222,6 @@ function StatGraph({
     : null;
   const activeValStr = activeData ? `${activeData.v.toFixed(1)}${unit}` : null;
 
-  // Display value
   const displayValue = activeValStr ?? lastValStr;
   const displayTime = activeTimeStr ?? null;
 
@@ -1377,7 +1235,7 @@ function StatGraph({
             <Text style={styles.sparklineRange}>{displayTime}</Text>
           ) : (
             <Text style={styles.sparklineRange}>
-              {min.toFixed(1)} – {max.toFixed(1)}
+              {min.toFixed(1)} - {max.toFixed(1)}
             </Text>
           )}
         </View>
@@ -1397,8 +1255,8 @@ function StatGraph({
           <Svg width={layoutWidth} height={HEIGHT}>
             <Defs>
               <LinearGradient id={`grad-${label}`} x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={THEME.accent} stopOpacity="0.25" />
-                <Stop offset="1" stopColor={THEME.accent} stopOpacity="0.02" />
+                <Stop offset="0" stopColor={APPLE.accent} stopOpacity="0.25" />
+                <Stop offset="1" stopColor={APPLE.accent} stopOpacity="0.02" />
               </LinearGradient>
             </Defs>
 
@@ -1406,18 +1264,17 @@ function StatGraph({
             <Path
               d={linePath}
               fill="none"
-              stroke={THEME.accent}
+              stroke={APPLE.accent}
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
 
-            {/* Touch cursor line */}
             {activePoint && (
               <>
                 <Path
                   d={`M ${activePoint.x},0 L ${activePoint.x},${HEIGHT}`}
-                  stroke={THEME.accent}
+                  stroke={APPLE.accent}
                   strokeWidth="1.5"
                   opacity={0.8}
                 />
@@ -1425,33 +1282,32 @@ function StatGraph({
                   cx={activePoint.x}
                   cy={activePoint.y}
                   r="8"
-                  fill={THEME.accent}
+                  fill={APPLE.accent}
                   opacity={0.3}
                 />
                 <Circle
                   cx={activePoint.x}
                   cy={activePoint.y}
                   r="5"
-                  fill={THEME.accent}
+                  fill={APPLE.accent}
                 />
               </>
             )}
 
-            {/* Endpoint dot */}
             {!activePoint && (
               <>
                 <Circle
                   cx={lastPoint.x}
                   cy={lastPoint.y}
                   r="6"
-                  fill={THEME.accent}
+                  fill={APPLE.accent}
                   opacity={0.3}
                 />
                 <Circle
                   cx={lastPoint.x}
                   cy={lastPoint.y}
                   r="4"
-                  fill={THEME.accent}
+                  fill={APPLE.accent}
                 />
               </>
             )}
@@ -1470,73 +1326,37 @@ function StatGraph({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.bg,
+    backgroundColor: APPLE.bg,
   },
   content: {
     padding: 16,
-    paddingBottom: 28,
+    paddingBottom: 40,
+  },
+  loadingContainer: {
+    justifyContent: "center",
+    alignItems: "center",
   },
 
-  hero: {
-    borderRadius: 24,
-    overflow: "hidden",
-    backgroundColor: THEME.card,
-    marginBottom: 12,
-    position: "relative",
-  },
-  heroImg: { width: "100%", height: 280 },
-  heroBadge: {
-    position: "absolute",
-    left: 14,
-    bottom: 14,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  heroBadgeText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  changePhotoBtn: {
-    position: "absolute",
-    right: 14,
-    bottom: 14,
-    backgroundColor: THEME.accent,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-
-  card: {
-    backgroundColor: THEME.card,
-    borderRadius: 24,
-    padding: 20,
+  // Info Card (View Mode)
+  infoCard: {
     marginBottom: 12,
   },
-  cardHeader: {
+  infoHeader: {
     marginBottom: 16,
   },
-  cardDate: {
+  infoDate: {
     fontSize: 15,
     fontWeight: "600",
-    color: THEME.text,
+    color: APPLE.text,
     textTransform: "capitalize",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   spotBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     alignSelf: "flex-start",
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    backgroundColor: APPLE.accentMuted,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -1544,52 +1364,10 @@ const styles = StyleSheet.create({
   spotBadgeText: {
     fontSize: 12,
     fontWeight: "600",
-    color: THEME.accent,
+    color: APPLE.accent,
   },
-  title: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: THEME.textSec,
-    marginBottom: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    textShadowColor: "rgba(245, 158, 11, 0.1)",
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 4,
-  },
-
-  infoGrid: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    backgroundColor: THEME.elevated,
-    borderRadius: 16,
-    paddingVertical: 16,
-    marginBottom: 16,
-  },
-  infoItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  infoVal: {
-    color: THEME.text,
-    fontSize: 28,
-    fontWeight: "200",
-    fontVariant: ["tabular-nums"],
-  },
-  infoValHighlight: {
-    color: THEME.accent,
-  },
-  infoLabel: {
-    color: THEME.textSec,
-    fontSize: 11,
-    marginTop: 4,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  },
-
   detailSection: {
-    gap: 8,
+    gap: 12,
   },
   detailItem: {
     flexDirection: "row",
@@ -1597,57 +1375,63 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   detailLabel: {
-    color: THEME.textSec,
+    color: APPLE.textSecondary,
     fontSize: 13,
   },
   detailValue: {
-    color: THEME.text,
+    color: APPLE.text,
     fontSize: 13,
     fontWeight: "600",
     marginLeft: "auto",
   },
 
-  sectionLabel: {
-    fontSize: 12,
-    color: THEME.textSec,
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+  // Weather Card
+  weatherCard: {
+    marginBottom: 12,
   },
-  body: { color: THEME.text },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: APPLE.textSecondary,
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  bodyText: {
+    color: APPLE.text,
+    fontSize: 14,
+  },
+  noteText: {
+    color: "#FF3B30",
+    fontSize: 14,
+    fontWeight: "500",
+    paddingVertical: 4,
+  },
 
-  row: { flexDirection: "row", gap: 10, marginTop: 6 },
+  // Map Card
+  mapCard: {
+    marginBottom: 12,
+  },
+  mapHeader: {
+    padding: 20,
+    paddingBottom: 12,
+  },
+  mapContainer: {
+    height: 220,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: "hidden",
+  },
+
+  // Action Buttons (View Mode)
   actionRow: {
     flexDirection: "row",
     gap: 12,
     marginBottom: 20,
   },
-  btn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-
-  primary: { backgroundColor: THEME.primary },
-  primaryText: { color: THEME.primaryText, fontSize: 16, fontWeight: "700" },
-
-  // gul variant til lokations-UI (tema-gul)
-  primaryYellow: {
-    backgroundColor: THEME.accent,
-  },
-
-  saveBtn: { backgroundColor: THEME.accent },
-
-  danger: { backgroundColor: THEME.danger },
-  dangerText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-
-  ghost: { backgroundColor: THEME.ghost },
-  ghostText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
-
   editBtn: {
     flex: 1,
-    backgroundColor: THEME.accent,
+    backgroundColor: APPLE.accent,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1655,10 +1439,14 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 16,
   },
-  editBtnText: { color: THEME.primaryText, fontSize: 15, fontWeight: "600" },
+  editBtnText: {
+    color: APPLE.bg,
+    fontSize: 15,
+    fontWeight: "600",
+  },
   deleteBtn: {
     flex: 1,
-    backgroundColor: THEME.dangerMuted,
+    backgroundColor: "rgba(255, 59, 48, 0.15)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1666,8 +1454,175 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 16,
   },
-  deleteBtnText: { color: THEME.danger, fontSize: 15, fontWeight: "600" },
+  deleteBtnText: {
+    color: "#FF3B30",
+    fontSize: 15,
+    fontWeight: "600",
+  },
 
+  // Edit Mode Styles
+  dateCard: {
+    marginBottom: 12,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: APPLE.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  dateInput: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  dateIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: APPLE.accentMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dateText: {
+    color: APPLE.text,
+    fontSize: 17,
+    fontWeight: "500",
+    flex: 1,
+  },
+
+  // Trip Card
+  tripCard: {
+    marginBottom: 12,
+  },
+  tripHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  tripTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: APPLE.accent,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  tripHint: {
+    fontSize: 12,
+    color: APPLE.textSecondary,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  tripButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: APPLE.glass,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  tripButtonText: {
+    color: APPLE.text,
+    fontSize: 15,
+    flex: 1,
+  },
+
+  // Location Card
+  locationCard: {
+    marginBottom: 12,
+  },
+  locationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 16,
+  },
+  locationIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: APPLE.accentMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationTitleContainer: {
+    flex: 1,
+  },
+  locationTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: APPLE.text,
+  },
+  locationSubtitle: {
+    color: APPLE.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  selectedSpotCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: APPLE.accentMuted,
+    borderRadius: 16,
+    padding: 16,
+  },
+  selectedSpotInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  selectedSpotName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: APPLE.text,
+    flex: 1,
+  },
+  changeSpotBtn: {
+    backgroundColor: APPLE.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  changeSpotBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: APPLE.bg,
+  },
+  selectSpotBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: APPLE.glass,
+    borderRadius: 16,
+    height: 56,
+    borderWidth: 1,
+    borderColor: APPLE.glassBorder,
+    borderStyle: "dashed",
+  },
+  selectSpotBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: APPLE.accent,
+  },
+  noSpotsContainer: {
+    backgroundColor: APPLE.glass,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+  },
+  noSpotsText: {
+    fontSize: 14,
+    color: APPLE.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+
+  // Edit Action Buttons
   editActionRow: {
     flexDirection: "row",
     gap: 12,
@@ -1680,10 +1635,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     height: 56,
     borderRadius: 16,
-    backgroundColor: THEME.elevated,
+    backgroundColor: APPLE.cardSolid,
+    borderWidth: 1,
+    borderColor: APPLE.glassBorder,
   },
   editCancelBtnText: {
-    color: THEME.textSec,
+    color: APPLE.textSecondary,
     fontSize: 15,
     fontWeight: "600",
   },
@@ -1695,173 +1652,157 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 56,
     borderRadius: 16,
-    backgroundColor: THEME.accent,
+    backgroundColor: APPLE.accent,
   },
   editSaveBtnText: {
-    color: THEME.primaryText,
+    color: APPLE.bg,
     fontSize: 17,
     fontWeight: "600",
   },
 
-  smallBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: THEME.ghost,
-  },
-
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 6 },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: THEME.elevated,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  chipActive: {
-    backgroundColor: THEME.accentMuted,
-    borderColor: THEME.accentBorder,
-  },
-  chipText: { color: THEME.textSec, fontWeight: "600" },
-  chipActiveText: { color: THEME.accent, fontWeight: "600" },
-
-  dateInput: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: THEME.elevated,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  dateText: { color: THEME.text, fontSize: 15 },
-
-  // Tracked trip card - highlighted
-  trackedTripCard: {
-    backgroundColor: THEME.accentMuted,
-    borderWidth: 1,
-    borderColor: THEME.accentBorder,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  trackedTripHeader: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 8,
-    marginBottom: 6,
-  },
-  trackedTripTitle: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: THEME.accent,
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-  },
-  trackedTripHint: {
-    fontSize: 12,
-    color: THEME.textSec,
-    marginBottom: 12,
-    lineHeight: 18,
-  },
-  trackedTripButton: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 10,
-    backgroundColor: THEME.elevated,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-  },
-  trackedTripButtonText: {
-    color: THEME.text,
-    fontSize: 15,
-    flex: 1,
-  },
-
-  textInput: {
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: THEME.text,
-    backgroundColor: THEME.elevated,
-    fontSize: 16,
-  },
-
-  // Kort-container
-  mapContainer: {
-    height: 220,
-    borderRadius: 16,
-    overflow: "hidden",
-    marginTop: 8,
-    backgroundColor: THEME.elevated,
-  },
-
+  // Modals
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.85)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: 20,
   },
   modalBox: {
     width: "100%",
-    backgroundColor: THEME.card,
+    backgroundColor: APPLE.cardSolid,
     borderRadius: 24,
     padding: 20,
+    borderWidth: 1,
+    borderColor: APPLE.glassBorder,
   },
   modalBoxTall: {
     width: "100%",
-    backgroundColor: THEME.card,
+    backgroundColor: APPLE.cardSolid,
     borderRadius: 24,
     padding: 20,
     maxHeight: "80%",
+    borderWidth: 1,
+    borderColor: APPLE.glassBorder,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: "600",
     marginBottom: 8,
-    color: THEME.text,
+    color: APPLE.text,
   },
   modalText: {
     fontSize: 15,
-    color: THEME.textSec,
+    color: APPLE.textSecondary,
     marginBottom: 16,
     lineHeight: 22,
   },
   modalBtnRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
     marginTop: 16,
   },
-
-  noteText: {
-    color: THEME.danger,
-    fontSize: 14,
-    fontWeight: "500",
-    paddingVertical: 4,
+  btn: {
+    flex: 1,
+    height: 56,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryAccent: {
+    backgroundColor: APPLE.accent,
+  },
+  primaryText: {
+    color: APPLE.bg,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  ghost: {
+    backgroundColor: APPLE.cardSolid,
+    borderWidth: 1,
+    borderColor: APPLE.glassBorder,
+  },
+  ghostText: {
+    color: APPLE.text,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  danger: {
+    backgroundColor: "#FF3B30",
+  },
+  dangerText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 
-  // Stat / grafer
+  // Trip/Spot List
+  tripItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginBottom: 8,
+    backgroundColor: APPLE.glass,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  tripItemActive: {
+    backgroundColor: APPLE.accent,
+  },
+  tripItemText: {
+    color: APPLE.text,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  tripItemTextActive: {
+    color: APPLE.bg,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  // Spot Search
+  spotSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    backgroundColor: APPLE.glass,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  spotSearchInput: {
+    flex: 1,
+    color: APPLE.text,
+    fontSize: 15,
+  },
+
+  // Stat Rows
   statRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.border,
+    borderBottomColor: APPLE.glassBorder,
+  },
+  statLabel: {
+    color: APPLE.textSecondary,
+    fontSize: 14,
+  },
+  statValue: {
+    color: APPLE.text,
+    fontSize: 16,
+    fontWeight: "600",
   },
   minMaxText: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: APPLE.textTertiary,
     marginTop: 2,
     fontStyle: "italic",
   },
 
-  // Sparkline grafer (matcher trips)
+  // Sparkline Graph
   sparklineContainer: {
     marginTop: 16,
     marginBottom: 8,
@@ -1875,7 +1816,7 @@ const styles = StyleSheet.create({
   sparklineLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: THEME.text,
+    color: APPLE.text,
   },
   sparklineValueRow: {
     alignItems: "flex-end",
@@ -1883,17 +1824,17 @@ const styles = StyleSheet.create({
   sparklineValue: {
     fontSize: 18,
     fontWeight: "700",
-    color: THEME.accent,
+    color: APPLE.accent,
   },
   sparklineRange: {
     fontSize: 11,
-    color: THEME.textSec,
+    color: APPLE.textSecondary,
     marginTop: 2,
   },
   sparklineGraph: {
     height: 100,
     borderRadius: 16,
-    backgroundColor: THEME.accentMuted,
+    backgroundColor: APPLE.accentMuted,
     overflow: "hidden",
   },
   sparklineTimeRow: {
@@ -1904,18 +1845,15 @@ const styles = StyleSheet.create({
   },
   sparklineTime: {
     fontSize: 11,
-    color: THEME.textSec,
+    color: APPLE.textSecondary,
   },
 
-  // Source section
+  // Source Section
   sourceSection: {
     marginTop: 20,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: THEME.cardBorder,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    borderTopColor: APPLE.glassBorder,
   },
   sourceHeader: {
     flexDirection: "row",
@@ -1925,13 +1863,13 @@ const styles = StyleSheet.create({
   },
   sourceLabel: {
     fontSize: 12,
-    color: THEME.textTertiary,
+    color: APPLE.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   sourceTime: {
     fontSize: 11,
-    color: THEME.textTertiary,
+    color: APPLE.textTertiary,
   },
   sourceStatusRow: {
     flexDirection: "row",
@@ -1945,18 +1883,18 @@ const styles = StyleSheet.create({
   },
   sourceStatusText: {
     fontSize: 12,
-    color: THEME.textTertiary,
+    color: APPLE.textTertiary,
     fontWeight: "500",
   },
 
-  // Vind + kompas
+  // Wind Compass
   windRight: {
     flexDirection: "row",
     alignItems: "center",
   },
   windDirText: {
     fontSize: 12,
-    color: THEME.textSec,
+    color: APPLE.textSecondary,
     marginTop: 2,
   },
   compass: {
@@ -1964,153 +1902,17 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 21,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: APPLE.glassBorder,
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
-    backgroundColor: THEME.inputBg,
+    backgroundColor: APPLE.glass,
   },
   compassN: {
     position: "absolute",
     top: 3,
     fontSize: 9,
     fontWeight: "600",
-    color: THEME.textSec,
-  },
-
-  // tracked tur-liste (genbruges til spots)
-  tripItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    marginBottom: 8,
-    backgroundColor: THEME.elevated,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  tripItemActive: {
-    backgroundColor: THEME.accent,
-  },
-  tripItemText: {
-    color: THEME.text,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  tripItemTextActive: {
-    color: THEME.primaryText,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  searchInput: {
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: THEME.text,
-    backgroundColor: THEME.elevated,
-    fontSize: 15,
-    marginBottom: 10,
-  },
-  spotSearchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    backgroundColor: THEME.elevated,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginTop: 4,
-    marginBottom: 10,
-  },
-  spotSearchInput: {
-    flex: 1,
-    color: THEME.text,
-    fontSize: 15,
-  },
-
-  // Enhanced location section styles
-  locationHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-  },
-  locationIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: THEME.accentMuted,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  locationTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: THEME.text,
-  },
-  locationSubtitle: {
-    fontSize: 12,
-    color: THEME.textSec,
-    marginTop: 2,
-  },
-  selectedSpotCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: THEME.accentMuted,
-    borderRadius: 16,
-    padding: 16,
-  },
-  selectedSpotInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  selectedSpotName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: THEME.text,
-    flex: 1,
-  },
-  changeSpotBtn: {
-    backgroundColor: THEME.accent,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  changeSpotBtnText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: THEME.primaryText,
-  },
-  selectSpotBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    backgroundColor: THEME.elevated,
-    borderRadius: 16,
-    height: 56,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    borderStyle: "dashed",
-  },
-  selectSpotBtnText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: THEME.accent,
-  },
-  noSpotsContainer: {
-    backgroundColor: THEME.elevated,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
-  },
-  noSpotsText: {
-    fontSize: 14,
-    color: THEME.textSec,
-    textAlign: "center",
-    lineHeight: 20,
+    color: APPLE.textSecondary,
   },
 });

@@ -6,6 +6,11 @@ import { Stack } from 'expo-router';
 // er en del af en Stack-navigator uden en header.
 export default function AuthLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false }} />
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animation: "slide_from_right",
+      }}
+    />
   );
 }

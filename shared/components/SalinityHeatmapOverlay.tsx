@@ -125,46 +125,44 @@ export function SalinityHeatmapOverlay({
       const datetime = getForecastValue("hourly", hourIndex) || new Date().toISOString();
       const bbox = "7.5,54.0,16.0,58.5";
 
-      const collections = ["dkss_idw", "dkss_nsbs"];
+      // Use primary collection only (dkss_nsbs has best coverage)
+      const collection = "dkss_nsbs";
       let allPoints: [number, number, number][] = [];
       let globalMin = Infinity;
       let globalMax = -Infinity;
 
       console.log(`Fetching salinity for datetime: ${datetime}`);
+      const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=salinity&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
+      const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
 
-      for (const collection of collections) {
-        const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=salinity&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-        const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
+      console.log(`Salinity query for ${collection}:`, query);
 
-        console.log(`Salinity query for ${collection}:`, query);
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const response = await fetch(proxyUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
 
-          const response = await fetch(proxyUrl, { signal: controller.signal });
-          clearTimeout(timeoutId);
+        console.log(`${collection} response status:`, response.status);
 
-          console.log(`${collection} response status:`, response.status);
-
-          if (response.ok) {
-            const json = await response.json();
-            console.log(`Salinity ${collection} response:`, JSON.stringify(json).substring(0, 500));
-            console.log(`Salinity ${collection} ranges:`, json.ranges ? Object.keys(json.ranges) : 'no ranges');
-            const converted = coverageJsonToHeatmapData(json);
-            console.log(`Salinity ${collection} converted:`, converted ? `${converted.points.length} points` : 'null');
-            if (converted) {
-              allPoints = allPoints.concat(converted.points);
-              globalMin = Math.min(globalMin, converted.min);
-              globalMax = Math.max(globalMax, converted.max);
-            }
-          } else {
-            const text = await response.text();
-            console.warn(`${collection} error response:`, text.substring(0, 300));
+        if (response.ok) {
+          const json = await response.json();
+          console.log(`Salinity ${collection} response:`, JSON.stringify(json).substring(0, 500));
+          console.log(`Salinity ${collection} ranges:`, json.ranges ? Object.keys(json.ranges) : 'no ranges');
+          const converted = coverageJsonToHeatmapData(json);
+          console.log(`Salinity ${collection} converted:`, converted ? `${converted.points.length} points` : 'null');
+          if (converted) {
+            allPoints = allPoints.concat(converted.points);
+            globalMin = Math.min(globalMin, converted.min);
+            globalMax = Math.max(globalMax, converted.max);
           }
-        } catch (e) {
-          console.warn(`Failed to fetch ${collection}:`, e);
+        } else {
+          const text = await response.text();
+          console.warn(`${collection} error response:`, text.substring(0, 300));
         }
+      } catch (e) {
+        console.warn(`Failed to fetch ${collection}:`, e);
       }
 
       if (allPoints.length > 0) {
@@ -198,10 +196,15 @@ export function SalinityHeatmapOverlay({
     setLoading(false);
   };
 
+  // Fetch data when visible or forecast hour changes (with debounce)
   useEffect(() => {
-    if (visible) {
+    if (!visible) return;
+
+    const timeoutId = setTimeout(() => {
       fetchSalinityData(forecastHourIndex);
-    }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
   }, [visible, forecastHourIndex, fetchSalinityData]);
 
   const onWebViewLoad = useCallback(() => {

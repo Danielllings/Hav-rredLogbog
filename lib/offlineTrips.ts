@@ -22,6 +22,7 @@ export type SaveTripPayload = {
   spot_name?: string | null;
   spot_lat?: number | null;
   spot_lng?: number | null;
+  manual_water_temps?: { ts: number; temp: number }[]; // Selvmålte vandtemperaturer med timestamps
 };
 
 type PendingTrip = {
@@ -101,6 +102,21 @@ async function fetchDmiWithRetry(
       });
 
       if (evalRes) {
+        // Anvend selvmålte vandtemperaturer hvis de findes
+        if (payload.manual_water_temps && payload.manual_water_temps.length > 0) {
+          const temps = payload.manual_water_temps.map((m) => m.temp);
+          const avg = temps.reduce((a, b) => a + b, 0) / temps.length;
+          evalRes.waterTempC = {
+            avg,
+            min: Math.min(...temps),
+            max: Math.max(...temps),
+          };
+          evalRes.waterTempSeries = payload.manual_water_temps.map((m) => ({
+            ts: m.ts,
+            v: m.temp,
+          }));
+          (evalRes as any).manualWaterTemp = true;
+        }
         return {
           success: true,
           meta_json: JSON.stringify({ evaluation: evalRes }),

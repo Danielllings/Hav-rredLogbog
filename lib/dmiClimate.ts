@@ -97,6 +97,8 @@ export type ClimatePoint = {
   airTempC?: number;
   windMS?: number;
   windDirDeg?: number;
+  pressureHPa?: number;
+  humidityPct?: number;
 };
 
 export type Stat = {
@@ -109,6 +111,8 @@ export type ClimateStats = {
   airTempC?: Stat;
   windMS?: Stat;
   windDirDeg?: Stat;
+  pressureHPa?: Stat;
+  humidityPct?: Stat;
   series: ClimatePoint[];
   stationName?: string;
   stationId?: string;
@@ -259,14 +263,18 @@ export async function fetchClimateForTrip(
   }
 
   try {
-    // Hent tre parametre fra DMI Climate Data:
+    // Hent fem parametre fra DMI Climate Data:
     // - mean_temp (°C)
     // - mean_wind_speed (m/s)
     // - mean_wind_dir (grader)
-    const [tempVals, windSpeedVals, windDirVals] = await Promise.all([
+    // - mean_pressure (hPa)
+    // - mean_relative_hum (%)
+    const [tempVals, windSpeedVals, windDirVals, pressureVals, humidityVals] = await Promise.all([
       fetchStationValues(station.id, "mean_temp", queryStartIso, queryEndIso),
       fetchStationValues(station.id, "mean_wind_speed", queryStartIso, queryEndIso),
       fetchStationValues(station.id, "mean_wind_dir", queryStartIso, queryEndIso),
+      fetchStationValues(station.id, "mean_pressure", queryStartIso, queryEndIso),
+      fetchStationValues(station.id, "mean_relative_hum", queryStartIso, queryEndIso),
     ]);
 
     const map: { [ts: number]: ClimatePoint } = {};
@@ -283,33 +291,51 @@ export async function fetchClimateForTrip(
       if (!map[p.ts]) map[p.ts] = { ts: p.ts };
       map[p.ts].windDirDeg = p.value;
     }
+    for (const p of pressureVals) {
+      if (!map[p.ts]) map[p.ts] = { ts: p.ts };
+      map[p.ts].pressureHPa = p.value;
+    }
+    for (const p of humidityVals) {
+      if (!map[p.ts]) map[p.ts] = { ts: p.ts };
+      map[p.ts].humidityPct = p.value;
+    }
 
     const series = Object.values(map).sort((a, b) => a.ts - b.ts);
 
     let tempNumbers: number[] = [];
     let windSpeedNumbers: number[] = [];
     let windDirNumbers: number[] = [];
+    let pressureNumbers: number[] = [];
+    let humidityNumbers: number[] = [];
 
     if (durationMs < ONE_HOUR_MS) {
       // Kort tur: brug kun den måling der er tættest på turens midtpunkt
       const nearestTemp = findNearestByTime(tempVals, midMs);
       const nearestWind = findNearestByTime(windSpeedVals, midMs);
       const nearestDir = findNearestByTime(windDirVals, midMs);
+      const nearestPressure = findNearestByTime(pressureVals, midMs);
+      const nearestHumidity = findNearestByTime(humidityVals, midMs);
 
       if (nearestTemp) tempNumbers = [nearestTemp.value];
       if (nearestWind) windSpeedNumbers = [nearestWind.value];
       if (nearestDir) windDirNumbers = [nearestDir.value];
+      if (nearestPressure) pressureNumbers = [nearestPressure.value];
+      if (nearestHumidity) humidityNumbers = [nearestHumidity.value];
     } else {
       // Længere tur: brug alle målinger
       tempNumbers = tempVals.map((p) => p.value);
       windSpeedNumbers = windSpeedVals.map((p) => p.value);
       windDirNumbers = windDirVals.map((p) => p.value);
+      pressureNumbers = pressureVals.map((p) => p.value);
+      humidityNumbers = humidityVals.map((p) => p.value);
     }
 
     const stats: ClimateStats = {
       airTempC: buildStat(tempNumbers),
       windMS: buildStat(windSpeedNumbers),
       windDirDeg: buildStat(windDirNumbers),
+      pressureHPa: buildStat(pressureNumbers),
+      humidityPct: buildStat(humidityNumbers),
       series,
       stationName: station.name,
       stationId: station.id,
@@ -320,6 +346,8 @@ export async function fetchClimateForTrip(
       (stats.airTempC && !Number.isNaN(stats.airTempC.avg)) ||
       (stats.windMS && !Number.isNaN(stats.windMS.avg)) ||
       (stats.windDirDeg && !Number.isNaN(stats.windDirDeg.avg)) ||
+      (stats.pressureHPa && !Number.isNaN(stats.pressureHPa.avg)) ||
+      (stats.humidityPct && !Number.isNaN(stats.humidityPct.avg)) ||
       series.length > 0;
 
     if (!hasAny) {

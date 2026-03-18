@@ -448,6 +448,31 @@ plugins: [
 
 **Fix:** Fjern duplikater, ret indrykning, regenerer lock file.
 
+### 6. Reanimated/Worklets pod install fejl
+**Symptom:**
+```
+[Reanimated] react-native-worklets package isn't installed. Please install a version between 0.4.0 and 0.4 to use Reanimated 4.1.6.
+[Reanimated] Failed to validate worklets version
+[!] Invalid `RNReanimated.podspec` file
+```
+
+**Årsag:** Reanimated 4.x kræver `react-native-worklets` som peer dependency. Fejlmeddelelsen "0.4.0 and 0.4" er **forældet/buggy** - den er fra 4.0.x æraen.
+
+**Faktisk krav for Reanimated 4.1.x:** worklets 0.5.x, 0.6.x eller 0.7.x
+
+**Expo SDK 54 forventer:** `react-native-worklets: 0.5.1` (præcis)
+
+**Fix:**
+```bash
+# Brug ALTID npx expo install for korrekte versioner
+npx expo install react-native-reanimated react-native-worklets
+
+# UNDGÅ legacy-peer-deps - det kan forårsage resolution problemer
+# Fjern .npmrc hvis den indeholder legacy-peer-deps=true
+```
+
+**Vigtig note:** Valideringen sker i `node_modules/react-native-reanimated/scripts/validate-worklets-build.js`. Denne køres under pod install og fejler hvis `require('react-native-worklets/package.json')` ikke kan finde pakken.
+
 ## RevenueCat Setup
 
 **API Key:** `appl_eMkcExAdXMPYVSzjgarDfZdHWNg` (iOS production)

@@ -33,7 +33,9 @@ import {
   QuickStatsGrid,
   TrendChart,
   BarChart,
+  AdvancedBarChart,
 } from "../../components/statistics";
+import { ProFeatureGate } from "../../components/ProFeatureGate";
 
 
 const { width } = Dimensions.get("window");
@@ -79,6 +81,66 @@ function pickBestBucket(
     }
   }
   return best?.key ?? null;
+}
+
+type SpotPerformance = {
+  name: string;
+  trips: number;
+  fish: number;
+  rate: number;
+};
+
+type SpotAnalysis = {
+  bestSpot: SpotPerformance | null;
+  worstSpot: SpotPerformance | null;
+};
+
+function analyzeSpotPerformance(
+  trips: TripRow[],
+  spots: SpotRow[]
+): SpotAnalysis {
+  const spotStats: Record<string, { trips: number; fish: number }> = {};
+  const spotMap = new Map<string, SpotRow>();
+  for (const sp of spots) spotMap.set(sp.id, sp);
+
+  // Kun tæl ture der har et spot tilknyttet
+  for (const trip of trips) {
+    const spotRow = trip.spot_id ? spotMap.get(trip.spot_id) : null;
+    const spotName = spotRow?.name || trip.spot_name || null;
+
+    if (!spotName) continue;
+
+    if (!spotStats[spotName]) {
+      spotStats[spotName] = { trips: 0, fish: 0 };
+    }
+    spotStats[spotName].trips += 1;
+    spotStats[spotName].fish += trip.fish_count || 0;
+  }
+
+  const entries = Object.entries(spotStats);
+
+  // Kræv mindst 1 tur på et spot for at inkludere det
+  const validSpots = entries
+    .filter(([_, { trips }]) => trips >= 1)
+    .map(([name, { trips, fish }]) => ({
+      name,
+      trips,
+      fish,
+      rate: trips > 0 ? fish / trips : 0,
+    }));
+
+  if (validSpots.length === 0) {
+    return { bestSpot: null, worstSpot: null };
+  }
+
+  // Sortér efter rate (fisk per tur)
+  validSpots.sort((a, b) => b.rate - a.rate);
+
+  const bestSpot = validSpots[0];
+  // Worst spot er kun relevant hvis der er mere end ét spot
+  const worstSpot = validSpots.length > 1 ? validSpots[validSpots.length - 1] : null;
+
+  return { bestSpot, worstSpot };
 }
 
 function getTripLocation(trip: TripRow): { lat: number; lng: number } | null {
@@ -456,6 +518,19 @@ export default function StatisticsScreen() {
     [filteredTrips, spots, t]
   );
 
+  const yearSpotAnalysis = useMemo(
+    () => analyzeSpotPerformance(
+      filteredTrips.filter((tr) => new Date(tr.start_ts).getFullYear() === year),
+      spots
+    ),
+    [filteredTrips, spots, year]
+  );
+
+  const allTimeSpotAnalysis = useMemo(
+    () => analyzeSpotPerformance(filteredTrips, spots),
+    [filteredTrips, spots]
+  );
+
   const yearGraphData = useMemo(() => {
     const labels = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
     const arr = labels.map((label) => ({ label, value: 0, secondaryValue: 0 }));
@@ -515,6 +590,7 @@ export default function StatisticsScreen() {
   const currentStats = activeTab === "year" ? yearStats : allStats;
   const currentWeather = activeTab === "year" ? yearWeatherSummary : allTimeWeatherSummary;
   const currentGraphData = activeTab === "year" ? yearGraphData : allTimeGraphData;
+  const currentSpotAnalysis = activeTab === "year" ? yearSpotAnalysis : allTimeSpotAnalysis;
 
   // Quick stats grid data
   const quickStats = useMemo(() => {
@@ -664,37 +740,93 @@ export default function StatisticsScreen() {
             <QuickStatsGrid stats={quickStats} columns={3} />
           </Animated.View>
 
-          {/* Chart Section */}
-          <Animated.View
-            entering={FadeInUp.delay(300).duration(500)}
+          {/* Spot Performance Section - PRO */}
+          {(currentSpotAnalysis.bestSpot || currentSpotAnalysis.worstSpot) && (
+            <ProFeatureGate
+              featureName={language === "da" ? "Spot-analyse" : "Spot Analysis"}
+              style={styles.section}
+            >
+              <Text style={styles.sectionTitle}>{t("spotPerformance")}</Text>
+              <View style={styles.spotPerformanceRow}>
+                {currentSpotAnalysis.bestSpot && (
+                  <View style={styles.spotPerformanceCard}>
+                    <View style={styles.spotPerformanceHeader}>
+                      <View style={[styles.spotIconWrap, styles.spotIconBest]}>
+                        <Ionicons name="trophy" size={16} color="#22C55E" />
+                      </View>
+                      <Text style={styles.spotPerformanceLabel}>{t("bestSpot")}</Text>
+                    </View>
+                    <Text style={styles.spotPerformanceName} numberOfLines={1}>
+                      {currentSpotAnalysis.bestSpot.name}
+                    </Text>
+                    <View style={styles.spotPerformanceStats}>
+                      <Text style={styles.spotPerformanceStat}>
+                        {currentSpotAnalysis.bestSpot.fish} 🐟
+                      </Text>
+                      <Text style={styles.spotPerformanceStatSep}>·</Text>
+                      <Text style={styles.spotPerformanceStat}>
+                        {currentSpotAnalysis.bestSpot.trips} {t("tripsOnSpot")}
+                      </Text>
+                      <Text style={styles.spotPerformanceStatSep}>·</Text>
+                      <Text style={[styles.spotPerformanceStat, styles.spotPerformanceRate]}>
+                        {currentSpotAnalysis.bestSpot.rate.toFixed(1)} {t("fishPerTrip")}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                {currentSpotAnalysis.worstSpot && (
+                  <View style={styles.spotPerformanceCard}>
+                    <View style={styles.spotPerformanceHeader}>
+                      <View style={[styles.spotIconWrap, styles.spotIconWorst]}>
+                        <Ionicons name="trending-down" size={16} color="#EF4444" />
+                      </View>
+                      <Text style={styles.spotPerformanceLabel}>{t("worstSpot")}</Text>
+                    </View>
+                    <Text style={styles.spotPerformanceName} numberOfLines={1}>
+                      {currentSpotAnalysis.worstSpot.name}
+                    </Text>
+                    <View style={styles.spotPerformanceStats}>
+                      <Text style={styles.spotPerformanceStat}>
+                        {currentSpotAnalysis.worstSpot.fish} 🐟
+                      </Text>
+                      <Text style={styles.spotPerformanceStatSep}>·</Text>
+                      <Text style={styles.spotPerformanceStat}>
+                        {currentSpotAnalysis.worstSpot.trips} {t("tripsOnSpot")}
+                      </Text>
+                      <Text style={styles.spotPerformanceStatSep}>·</Text>
+                      <Text style={[styles.spotPerformanceStat, styles.spotPerformanceRateWorst]}>
+                        {currentSpotAnalysis.worstSpot.rate.toFixed(1)} {t("fishPerTrip")}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </ProFeatureGate>
+          )}
+
+          {/* Chart Section - PRO */}
+          <ProFeatureGate
+            featureName={language === "da" ? "Månedsoversigt" : "Monthly Overview"}
             style={styles.section}
           >
             <Text style={styles.sectionTitle}>
               {activeTab === "year" ? t("monthlyOverview") : t("catchesPerYear")}
             </Text>
 
-            <GlassCard>
-              {activeTab === "year" && (
-                <View style={styles.legendRow}>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: APPLE.accent }]} />
-                    <Text style={styles.legendText}>{t("fish")}</Text>
-                  </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: APPLE.ringGreen }]} />
-                    <Text style={styles.legendText}>{t("trips")}</Text>
-                  </View>
-                </View>
-              )}
-
-              {activeTab === "year" ? (
-                <BarChart
+            {activeTab === "year" ? (
+              <GlassCard>
+                <AdvancedBarChart
                   data={yearGraphData}
-                  height={140}
-                  barColor={APPLE.accent}
-                  secondaryBarColor={APPLE.ringGreen}
+                  height={150}
+                  primaryColor={APPLE.accent}
+                  secondaryColor={APPLE.ringGreen}
+                  primaryLabel={t("fish")}
+                  secondaryLabel={t("trips")}
+                  language={language}
                 />
-              ) : (
+              </GlassCard>
+            ) : (
+              <GlassCard>
                 <TrendChart
                   data={allTimeGraphData}
                   height={160}
@@ -703,13 +835,13 @@ export default function StatisticsScreen() {
                   showGrid={true}
                   animated={true}
                 />
-              )}
-            </GlassCard>
-          </Animated.View>
+              </GlassCard>
+            )}
+          </ProFeatureGate>
 
-          {/* Fishing Pattern Section */}
-          <Animated.View
-            entering={FadeInUp.delay(400).duration(500)}
+          {/* Fishing Pattern Section - PRO */}
+          <ProFeatureGate
+            featureName={language === "da" ? "Fiskemønster" : "Fishing Pattern"}
             style={styles.section}
           >
             <View style={styles.sectionHeader}>
@@ -762,7 +894,7 @@ export default function StatisticsScreen() {
                 <Text style={styles.emptyText}>{t("notEnoughData")}</Text>
               </GlassCard>
             )}
-          </Animated.View>
+          </ProFeatureGate>
         </>
       ) : (
         <GlassCard style={styles.emptyState}>
@@ -895,6 +1027,74 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 12,
     color: APPLE.textSecondary,
+  },
+
+  // Spot Performance
+  spotPerformanceRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  spotPerformanceCard: {
+    flex: 1,
+    backgroundColor: APPLE.cardSolid,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: APPLE.glassBorder,
+  },
+  spotPerformanceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  spotIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  spotIconBest: {
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+  },
+  spotIconWorst: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+  },
+  spotPerformanceLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: APPLE.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  spotPerformanceName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: APPLE.text,
+    marginBottom: 6,
+  },
+  spotPerformanceStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  spotPerformanceStat: {
+    fontSize: 12,
+    color: APPLE.textSecondary,
+  },
+  spotPerformanceStatSep: {
+    fontSize: 12,
+    color: APPLE.textTertiary,
+    marginHorizontal: 4,
+  },
+  spotPerformanceRate: {
+    color: "#22C55E",
+    fontWeight: "600",
+  },
+  spotPerformanceRateWorst: {
+    color: "#EF4444",
+    fontWeight: "600",
   },
 
   // Filter chips

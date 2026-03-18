@@ -512,6 +512,10 @@ export const da = {
   // Spot weather - UI
   selectedPoint: "Valgt punkt",
   bestSpot: "Bedste spot",
+  worstSpot: "Værste spot",
+  spotPerformance: "Spot-præstation",
+  tripsOnSpot: "ture",
+  fishPerTrip: "fisk/tur",
   fishOnSpot: "fisk på dette spot",
   noFishOnSpot: "Ingen fisk på dette spot endnu",
   spotName: "Spotnavn",
@@ -1122,6 +1126,10 @@ export const en: typeof da = {
   // Spot weather - UI
   selectedPoint: "Selected point",
   bestSpot: "Best spot",
+  worstSpot: "Worst spot",
+  spotPerformance: "Spot performance",
+  tripsOnSpot: "trips",
+  fishPerTrip: "fish/trip",
   fishOnSpot: "fish on this spot",
   noFishOnSpot: "No fish on this spot yet",
   spotName: "Spot name",

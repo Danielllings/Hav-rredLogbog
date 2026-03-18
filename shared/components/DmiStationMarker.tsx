@@ -1,15 +1,10 @@
-import React from "react";
-import { View, Text, Pressable, Platform } from "react-native";
+import React, { useState, useEffect, memo, useCallback } from "react";
+import { View, Text, Platform, StyleSheet } from "react-native";
 import { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import { type OceanStation } from "../../lib/dmiOcean";
 
-const DMI_BLUE = "#00AAFF";
-const DMI_BLUE_DARK = "#0077CC";
-
-const THEME = {
-  text: "#FFFFFF",
-};
+const isAndroid = Platform.OS === "android";
 
 type TranslateFn = (key: any) => string;
 
@@ -19,101 +14,118 @@ interface DmiStationMarkerProps {
   t?: TranslateFn;
 }
 
-export function DmiStationMarker({ station, onPress, t }: DmiStationMarkerProps) {
-  const isAndroid = Platform.OS === "android";
-  const tempLabel = t ? t("waterTemp") : "Temp";
-  const levelLabel = t ? t("waterLevel") : "Water level";
+export const DmiStationMarker = memo(function DmiStationMarker({
+  station,
+  onPress,
+  t,
+}: DmiStationMarkerProps) {
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
 
-  // Android: Native marker med pinColor
+  useEffect(() => {
+    const delay = isAndroid ? 2000 : 300;
+    const timer = setTimeout(() => {
+      setTracksViewChanges(false);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handlePress = useCallback(() => {
+    onPress?.();
+  }, [onPress]);
+
+  const displayName = station.name;
+
+  // Android: use icon with title callout (View wrappers cause clipping bug)
   if (isAndroid) {
     return (
       <Marker
         coordinate={{ latitude: station.lat, longitude: station.lon }}
-        pinColor={DMI_BLUE}
-        title={station.name}
-        description={`${station.hasTemp ? tempLabel : ""}${station.hasTemp && station.hasLevel ? " + " : ""}${station.hasLevel ? levelLabel : ""}`}
-        onPress={onPress}
-        tracksViewChanges={false}
+        tracksViewChanges={true}
+        onPress={handlePress}
         zIndex={0}
-      />
+        title={displayName}
+      >
+        <Ionicons
+          name="water"
+          size={28}
+          color="#3B82F6"
+        />
+      </Marker>
     );
   }
 
-  // iOS: Custom marker med label + pin (samme stil som SpotMarker)
+  // iOS: full custom marker
   return (
     <Marker
       coordinate={{ latitude: station.lat, longitude: station.lon }}
-      centerOffset={{ x: 0, y: -40 }}
-      tracksViewChanges={false}
-      onPress={onPress}
-      identifier={`dmi-${station.id}`}
+      tracksViewChanges={tracksViewChanges}
+      onPress={handlePress}
       zIndex={0}
     >
-      <Pressable
-        style={({ pressed }) => [
-          {
-            width: 120,
-            height: 80,
-            alignItems: "center",
-            justifyContent: "flex-end",
-            opacity: pressed ? 0.8 : 1,
-          },
-        ]}
-        collapsable={false}
-        onPress={onPress}
-        hitSlop={12}
-      >
-        <View
-          style={{
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 10,
-            backgroundColor: "#111",
-            borderWidth: 1,
-            borderColor: "#222",
-            flexDirection: "row",
-            alignItems: "center",
-            maxWidth: 140,
-            marginBottom: 6,
-          }}
-        >
-          <Ionicons
-            name="water"
-            size={12}
-            color={DMI_BLUE}
-            style={{ marginRight: 4 }}
-          />
-          <Text
-            style={{
-              color: THEME.text,
-              fontSize: 11,
-              fontWeight: "600",
-            }}
-            numberOfLines={1}
-          >
-            {station.name}
-          </Text>
+      <View style={styles.container} collapsable={false}>
+        <View style={styles.bubble} collapsable={false}>
+          <Ionicons name="water" size={12} color="#3B82F6" style={styles.icon} />
+          <Text style={styles.text}>{displayName}</Text>
         </View>
-
-        <View style={{ position: "relative", alignItems: "center" }}>
-          <View
-            style={{
-              position: "absolute",
-              width: 16,
-              height: 16,
-              borderRadius: 8,
-              backgroundColor: DMI_BLUE_DARK,
-              top: 8,
-            }}
-          />
-          <Ionicons
-            name="location-sharp"
-            size={34}
-            color={DMI_BLUE}
-            style={{ textShadowColor: "#000", textShadowRadius: 2 }}
-          />
-        </View>
-      </Pressable>
+        <View style={styles.arrow} collapsable={false} />
+      </View>
     </Marker>
   );
-}
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.station.id === nextProps.station.id &&
+    prevProps.station.name === nextProps.station.name &&
+    prevProps.station.lat === nextProps.station.lat &&
+    prevProps.station.lon === nextProps.station.lon
+  );
+});
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: "center",
+  },
+  bubble: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1C1C1E",
+    borderWidth: 2,
+    borderColor: "#3B82F6",
+  },
+  androidBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: "#1C1C1E",
+    borderWidth: 2,
+    borderColor: "#3B82F6",
+  },
+  androidText: {
+    color: "#FFF",
+    fontSize: 11,
+    fontWeight: "700",
+    marginLeft: 3,
+  },
+  icon: {
+    marginRight: 4,
+  },
+  text: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFF",
+  },
+  arrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 10,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#3B82F6",
+  },
+});

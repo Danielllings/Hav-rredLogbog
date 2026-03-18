@@ -602,3 +602,84 @@ function findNearestCells(
   return withDist.slice(0, n);
 }
 
+// --- Prefetch Functions for Overlays ---
+
+// In-flight prefetch tracking to avoid duplicate fetches
+let prefetchInFlight = false;
+
+/**
+ * Prefetch overlay data for a given map region.
+ * Called when the map opens or region changes significantly.
+ * Fire-and-forget - errors are silently ignored.
+ */
+export async function prefetchOverlayData(
+  bounds: BoundingBox,
+  options?: {
+    includeCurrents?: boolean;
+    includeWaves?: boolean;
+    includeSalinity?: boolean;
+  }
+): Promise<void> {
+  // Prevent multiple concurrent prefetches
+  if (prefetchInFlight) return;
+
+  const {
+    includeCurrents = true,
+    includeWaves = true,
+    includeSalinity = false, // Salinity is less commonly used
+  } = options ?? {};
+
+  // Skip if nothing to prefetch
+  if (!includeCurrents && !includeWaves && !includeSalinity) return;
+
+  // Check if we already have cached data for this region
+  const datetime = getNextHourISO();
+  if (cache && cache.datetime === datetime && Date.now() - cache.ts < CACHE_TTL) {
+    // Check bounds coverage
+    const covered = (
+      bounds.minLat >= cache.fetchedBounds.minLat &&
+      bounds.maxLat <= cache.fetchedBounds.maxLat &&
+      bounds.minLng >= cache.fetchedBounds.minLng &&
+      bounds.maxLng <= cache.fetchedBounds.maxLng
+    );
+    if (covered) {
+      // Already have cached data covering this region
+      return;
+    }
+  }
+
+  prefetchInFlight = true;
+
+  try {
+    // Fetch data in the background (fire-and-forget)
+    await fetchOceanGridData(bounds, {
+      includeCurrents,
+      includeWaves,
+      includeSalinity,
+    });
+  } catch {
+    // Silently ignore prefetch errors
+  } finally {
+    prefetchInFlight = false;
+  }
+}
+
+/**
+ * Check if overlay data is available for immediate display
+ * Returns true if cached data covers the visible region
+ */
+export function isOverlayDataCached(bounds: BoundingBox): boolean {
+  if (!cache) return false;
+
+  const datetime = getNextHourISO();
+  if (cache.datetime !== datetime) return false;
+  if (Date.now() - cache.ts > CACHE_TTL) return false;
+
+  return (
+    bounds.minLat >= cache.fetchedBounds.minLat &&
+    bounds.maxLat <= cache.fetchedBounds.maxLat &&
+    bounds.minLng >= cache.fetchedBounds.minLng &&
+    bounds.maxLng <= cache.fetchedBounds.maxLng
+  );
+}
+

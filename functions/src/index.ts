@@ -16,29 +16,40 @@ const DMI_OCEAN_KEY = defineString("DMI_OCEAN_KEY");
 const DMI_EDR_KEY = defineString("DMI_EDR_KEY");
 const STAC_KEY = defineString("STAC_KEY");
 
-// Simple in-memory cache for EDR data (reduces DMI API calls)
+// Simple in-memory cache for DMI API data (reduces API calls)
 interface CacheEntry {
   body: string;
   contentType: string;
   timestamp: number;
 }
+
+// Cache instances for each endpoint type
 const edrCache = new Map<string, CacheEntry>();
-const EDR_CACHE_TTL = 30 * 60 * 1000; // 30 minutes (DMI updates hourly)
+const climateCache = new Map<string, CacheEntry>();
+const oceanCache = new Map<string, CacheEntry>();
+
+// Cache TTLs (DMI updates hourly)
+const EDR_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const CLIMATE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const OCEAN_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 const MAX_CACHE_SIZE = 100;
 
-function cleanOldCacheEntries() {
+function cleanOldCacheEntries(
+  cache: Map<string, CacheEntry>,
+  ttl: number
+) {
   const now = Date.now();
-  for (const [key, entry] of edrCache.entries()) {
-    if (now - entry.timestamp > EDR_CACHE_TTL) {
-      edrCache.delete(key);
+  for (const [key, entry] of cache.entries()) {
+    if (now - entry.timestamp > ttl) {
+      cache.delete(key);
     }
   }
   // Limit cache size
-  if (edrCache.size > MAX_CACHE_SIZE) {
-    const oldest = [...edrCache.entries()]
+  if (cache.size > MAX_CACHE_SIZE) {
+    const oldest = [...cache.entries()]
       .sort((a, b) => a[1].timestamp - b[1].timestamp)
-      .slice(0, edrCache.size - MAX_CACHE_SIZE);
-    oldest.forEach(([key]) => edrCache.delete(key));
+      .slice(0, cache.size - MAX_CACHE_SIZE);
+    oldest.forEach(([key]) => cache.delete(key));
   }
 }
 
@@ -111,12 +122,41 @@ export const getDmiClimate = onRequest(async (req, res) => {
   const query = { ...req.query };
   appendQueryParams(url, query);
   url.searchParams.set("api-key", apiKey);
+
+  // Check cache first
+  const cacheKey = url.toString();
+  cleanOldCacheEntries(climateCache, CLIMATE_CACHE_TTL);
+
+  const cached = climateCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CLIMATE_CACHE_TTL) {
+    functions.logger.info("getDmiClimate CACHE HIT", cacheKey.substring(0, 100));
+    res.set("X-Cache", "HIT");
+    res.status(200).set("Content-Type", cached.contentType).send(cached.body);
+    return;
+  }
+
   functions.logger.info("getDmiClimate upstream", url.toString());
 
   const { upstreamRes, body } = await forwardJson(url, {
     method: "GET",
     headers: { Accept: "application/json" },
   });
+
+  // Cache successful responses
+  if (upstreamRes.status === 200) {
+    const headers = upstreamRes.headers as any;
+    const contentType =
+      (typeof headers?.get === "function" ? headers.get("content-type") : null) ??
+      "application/json";
+    climateCache.set(cacheKey, {
+      body,
+      contentType,
+      timestamp: Date.now(),
+    });
+    functions.logger.info("getDmiClimate CACHED", cacheKey.substring(0, 100));
+    res.set("X-Cache", "MISS");
+  }
+
   sendPassthrough(res, upstreamRes as unknown as Response, body);
 });
 
@@ -134,12 +174,41 @@ export const getDmiOcean = onRequest(async (req, res) => {
   const query = { ...req.query };
   appendQueryParams(url, query);
   url.searchParams.set("api-key", apiKey);
+
+  // Check cache first
+  const cacheKey = url.toString();
+  cleanOldCacheEntries(oceanCache, OCEAN_CACHE_TTL);
+
+  const cached = oceanCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < OCEAN_CACHE_TTL) {
+    functions.logger.info("getDmiOcean CACHE HIT", cacheKey.substring(0, 100));
+    res.set("X-Cache", "HIT");
+    res.status(200).set("Content-Type", cached.contentType).send(cached.body);
+    return;
+  }
+
   functions.logger.info("getDmiOcean upstream", url.toString());
 
   const { upstreamRes, body } = await forwardJson(url, {
     method: "GET",
     headers: { Accept: "application/json" },
   });
+
+  // Cache successful responses
+  if (upstreamRes.status === 200) {
+    const headers = upstreamRes.headers as any;
+    const contentType =
+      (typeof headers?.get === "function" ? headers.get("content-type") : null) ??
+      "application/json";
+    oceanCache.set(cacheKey, {
+      body,
+      contentType,
+      timestamp: Date.now(),
+    });
+    functions.logger.info("getDmiOcean CACHED", cacheKey.substring(0, 100));
+    res.set("X-Cache", "MISS");
+  }
+
   sendPassthrough(res, upstreamRes as unknown as Response, body);
 });
 
@@ -166,7 +235,7 @@ export const getDmiEdr = onRequest(async (req, res) => {
 
   // Check cache first
   const cacheKey = url.toString();
-  cleanOldCacheEntries();
+  cleanOldCacheEntries(edrCache, EDR_CACHE_TTL);
 
   const cached = edrCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < EDR_CACHE_TTL) {

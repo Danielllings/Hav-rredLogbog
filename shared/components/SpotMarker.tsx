@@ -1,14 +1,10 @@
-import React from "react";
-import { View, Text, Pressable, Platform } from "react-native";
-import { Marker, Callout } from "react-native-maps";
+import React, { useState, useEffect, useCallback, memo } from "react";
+import { View, Text, Platform, StyleSheet } from "react-native";
+import { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import { type SpotRow } from "../../lib/spots";
 
-const BEST_SPOT_COLOR = "#F4D03F";
-
-const THEME = {
-  text: "#FFFFFF",
-};
+const isAndroid = Platform.OS === "android";
 
 type TranslateFn = (key: any) => string;
 
@@ -20,112 +16,142 @@ interface SpotMarkerProps {
   t: TranslateFn;
 }
 
-export function SpotMarker({
+export const SpotMarker = memo(function SpotMarker({
   spot,
   isBestSpot,
   onPress,
   onLongPress,
   t,
 }: SpotMarkerProps) {
-  const isAndroid = Platform.OS === "android";
-  const defaultPin = "#FF3B30";
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
 
-  // Android: Native marker med pinColor
+  useEffect(() => {
+    const delay = isAndroid ? 500 : 300;
+    const timer = setTimeout(() => {
+      setTracksViewChanges(false);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    setTracksViewChanges(true);
+    const timer = setTimeout(() => {
+      setTracksViewChanges(false);
+    }, isAndroid ? 500 : 200);
+    return () => clearTimeout(timer);
+  }, [isBestSpot]);
+
+  const handlePress = useCallback(() => {
+    onPress();
+  }, [onPress]);
+
+  const displayName = spot.name;
+
+  // Android: use icon with title callout (View wrappers cause clipping bug)
   if (isAndroid) {
     return (
       <Marker
         coordinate={{ latitude: spot.lat, longitude: spot.lng }}
-        pinColor={isBestSpot ? BEST_SPOT_COLOR : defaultPin}
-        title={spot.name}
-        description={isBestSpot ? `⭐ ${t("bestSpot")}` : t("spot")}
-        onPress={onPress}
+        tracksViewChanges={true}
+        onPress={handlePress}
         onCalloutPress={onLongPress}
-        tracksViewChanges={false}
         zIndex={isBestSpot ? 2 : 1}
-      />
+        title={displayName}
+      >
+        <Ionicons
+          name={isBestSpot ? "star" : "fish"}
+          size={32}
+          color="#F59E0B"
+        />
+      </Marker>
     );
   }
 
-  // iOS: Custom marker med label + pin
-  // VIGTIGT: Fast højde + centerOffset i stedet for anchor for at undgå offset ved zoom
+  // iOS: full custom marker
   return (
     <Marker
       coordinate={{ latitude: spot.lat, longitude: spot.lng }}
-      centerOffset={{ x: 0, y: -40 }}
-      tracksViewChanges={false}
-      onPress={onPress}
-      identifier={String(spot.id)}
+      tracksViewChanges={tracksViewChanges}
+      onPress={handlePress}
+      onCalloutPress={onLongPress}
       zIndex={isBestSpot ? 2 : 1}
     >
-      <Pressable
-        style={({ pressed }) => [
-          {
-            width: 120,
-            height: 80,
-            alignItems: "center",
-            justifyContent: "flex-end",
-            opacity: pressed ? 0.8 : 1,
-          },
-        ]}
-        collapsable={false}
-        onPress={onPress}
-        onLongPress={onLongPress}
-        delayLongPress={600}
-        hitSlop={12}
-      >
+      <View style={styles.container} collapsable={false}>
         <View
-          style={{
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 10,
-            backgroundColor: "#111",
-            borderWidth: 1,
-            borderColor: "#222",
-            flexDirection: "row",
-            alignItems: "center",
-            maxWidth: 140,
-            marginBottom: 6,
-          }}
+          style={[
+            styles.bubble,
+            { backgroundColor: isBestSpot ? "#F59E0B" : "#1C1C1E" }
+          ]}
+          collapsable={false}
         >
-          {isBestSpot && (
-            <Ionicons
-              name="star"
-              size={12}
-              color={BEST_SPOT_COLOR}
-              style={{ marginRight: 4 }}
-            />
-          )}
+          <Ionicons
+            name={isBestSpot ? "star" : "fish"}
+            size={14}
+            color={isBestSpot ? "#000" : "#F59E0B"}
+            style={styles.icon}
+          />
           <Text
-            style={{
-              color: THEME.text,
-              fontSize: 11,
-              fontWeight: "600",
-            }}
+            style={[
+              styles.text,
+              { color: isBestSpot ? "#000" : "#FFF" }
+            ]}
             numberOfLines={1}
           >
-            {spot.name}
+            {displayName}
           </Text>
         </View>
-
-        <View style={{ position: "relative", alignItems: "center" }}>
-          <View
-            style={{
-              position: "absolute",
-              width: 16,
-              height: 16,
-              borderRadius: 8,
-              backgroundColor: isBestSpot ? "#c29d00" : "#b71c1c",
-              top: 8,
-            }}
-          />
-          <Ionicons
-            name="location-sharp"
-            size={34}
-            color={isBestSpot ? BEST_SPOT_COLOR : "#e53935"}
-            style={{ textShadowColor: "#000", textShadowRadius: 2 }}
-          />
-        </View>
-      </Pressable>
+        <View style={styles.arrow} collapsable={false} />
+      </View>
     </Marker>
   );
-}
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.spot.id === nextProps.spot.id &&
+    prevProps.spot.name === nextProps.spot.name &&
+    prevProps.spot.lat === nextProps.spot.lat &&
+    prevProps.spot.lng === nextProps.spot.lng &&
+    prevProps.isBestSpot === nextProps.isBestSpot
+  );
+});
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: "center",
+  },
+  bubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "#F59E0B",
+  },
+  androidBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#F59E0B",
+  },
+  icon: {
+    marginRight: 4,
+  },
+  text: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  arrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 10,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#F59E0B",
+    marginTop: -2,
+  },
+});

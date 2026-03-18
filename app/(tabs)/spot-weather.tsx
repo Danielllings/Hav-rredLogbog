@@ -68,6 +68,7 @@ import {
   type FredningsbaelteFeature,
 } from "../../lib/fredningsbaelter";
 import { OCEAN_STATIONS_DK } from "../../lib/dmiOcean";
+import { prefetchOverlayData, type BoundingBox } from "../../lib/dmiGridData";
 import { useLanguage } from "../../lib/i18n";
 import { useTheme } from "../../lib/theme";
 import { SpotMarker } from "../../shared/components/SpotMarker";
@@ -79,6 +80,8 @@ import { WaveSwellOverlay } from "../../shared/components/WaveSwellOverlay";
 import { SalinityHeatmapOverlay } from "../../shared/components/SalinityHeatmapOverlay";
 import { WaterLevelOverlay } from "../../shared/components/WaterLevelOverlay";
 import { WindOverlay } from "../../shared/components/WindOverlay";
+import { SpotWeatherPanel } from "../../shared/components/SpotWeatherPanel";
+import { ProFeatureGate, useProFeature } from "../../components/ProFeatureGate";
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -392,6 +395,7 @@ export default function SpotWeatherScreen() {
   const { t, language } = useLanguage();
   const { theme } = useTheme();
   const params = useLocalSearchParams<{ createSpotLat?: string; createSpotLng?: string }>();
+  const { isPro, PaywallModal } = useProFeature();
 
   const [pos, setPos] = useState<LatLng | null>(null);
   const [showForecast, setShowForecast] = useState(false);
@@ -431,6 +435,9 @@ export default function SpotWeatherScreen() {
 
   // tilføj spot-modal
   const [addSpotModalVisible, setAddSpotModalVisible] = useState(false);
+
+  // måne-modal
+  const [showMoonModal, setShowMoonModal] = useState(false);
   const [newSpotName, setNewSpotName] = useState("");
   const [newSpotCoastDir, setNewSpotCoastDir] = useState<CoastDirection | null>(null);
   const [addingSpot, setAddingSpot] = useState(false);
@@ -608,6 +615,34 @@ export default function SpotWeatherScreen() {
     })();
   }, []);
 
+  // OPTIMIZED: Prefetch overlay data when map region changes significantly
+  // This makes overlay opening feel instant after the map has been visible
+  useEffect(() => {
+    // Only prefetch if region is reasonably zoomed in (not zoomed out to all of Denmark)
+    if (mapRegion.latitudeDelta > 2) return;
+
+    // Convert Region to BoundingBox
+    const bounds: BoundingBox = {
+      minLat: mapRegion.latitude - mapRegion.latitudeDelta / 2,
+      maxLat: mapRegion.latitude + mapRegion.latitudeDelta / 2,
+      minLng: mapRegion.longitude - mapRegion.longitudeDelta / 2,
+      maxLng: mapRegion.longitude + mapRegion.longitudeDelta / 2,
+    };
+
+    // Fire-and-forget prefetch (don't await, don't block UI)
+    prefetchOverlayData(bounds, {
+      includeCurrents: true,
+      includeWaves: true,
+      includeSalinity: false, // Less commonly used
+    }).catch(() => {
+      // Silently ignore prefetch errors
+    });
+  }, [
+    // Only re-prefetch when region changes significantly (round to 0.1 degree)
+    Math.round(mapRegion.latitude * 10),
+    Math.round(mapRegion.longitude * 10),
+    Math.round(mapRegion.latitudeDelta * 10),
+  ]);
 
   // find spot med flest fisk -> stjerne på kortet
   useEffect(() => {
@@ -1126,7 +1161,7 @@ export default function SpotWeatherScreen() {
               const isBestSpot = bestSpotId != null && bestSpotId === spot.id;
               return (
             <SpotMarker
-              key={`spot-${spot.id}`}
+              key={`spot-${spot.id}-${isBestSpot ? "best" : "normal"}`}
               spot={spot}
               isBestSpot={isBestSpot}
               t={t}
@@ -1299,7 +1334,10 @@ export default function SpotWeatherScreen() {
             )}
 
             {activeMenuPanel === "weather" && (
-              <View style={styles.menuPanelContent}>
+              <ProFeatureGate
+                featureName={language === "da" ? "Vejrlag" : "Weather Layers"}
+                style={styles.menuPanelContent}
+              >
                 <Pressable
                   style={styles.menuOptionRow}
                   onPress={() => {
@@ -1399,7 +1437,7 @@ export default function SpotWeatherScreen() {
                     </Text>
                   </Pressable>
                 )}
-              </View>
+              </ProFeatureGate>
             )}
           </Animated.View>
 
@@ -1435,6 +1473,13 @@ export default function SpotWeatherScreen() {
                 size={20}
                 color={(activeMenuPanel === "weather" || showWind || showCurrents || showWaves || showSalinity || showWaterLevel) ? "#000" : THEME.graphYellow}
               />
+            </Pressable>
+
+            <Pressable
+              style={styles.menuIconBtn}
+              onPress={() => setShowMoonModal(true)}
+            >
+              <Ionicons name="moon" size={20} color={THEME.graphYellow} />
             </Pressable>
 
             {(pos || selectedSpot) && (
@@ -1907,202 +1952,25 @@ export default function SpotWeatherScreen() {
         </Modal>
       )}
 
-      {/* SPOT-DETAIL UI (spot-navn + Antal fisk + spot-vejr) */}
+      {/* SPOT-DETAIL UI - Floating Weather Panel */}
       {selectedSpot && (
-        <Modal
-          transparent
-          visible={!!selectedSpot}
-          animationType="slide"
-          onRequestClose={() => setSelectedSpot(null)}
-        >
-          <View style={styles.spotSheetBackdrop}>
-            <View style={styles.spotSheet}>
-              {/* Handle */}
-              <View style={styles.spotSheetHandle} />
-
-              {/* Header */}
-              <View style={styles.spotSheetHeader}>
-                <View style={styles.spotSheetTitleArea}>
-                  {bestSpotId != null && selectedSpot.id === bestSpotId && (
-                    <View style={styles.bestSpotBadge}>
-                      <Ionicons name="star" size={12} color="#000" />
-                      <Text style={styles.bestSpotBadgeText}>{t("bestSpot")}</Text>
-                    </View>
-                  )}
-                  <Text style={styles.spotSheetTitle} numberOfLines={2}>
-                    {selectedSpot.name}
-                  </Text>
-                </View>
-                <View style={styles.spotSheetActions}>
-                  <Pressable
-                    style={styles.spotEditBtn}
-                    onPress={() => {
-                      if (renameLoading || spotDeleteLoading) return;
-                      const spotToEdit = selectedSpot;
-                      setSelectedSpot(null);
-                      setTimeout(() => openRenameModal(spotToEdit), 100);
-                    }}
-                  >
-                    <Ionicons name="create-outline" size={18} color="#000" />
-                  </Pressable>
-                  <Pressable
-                    style={styles.spotCloseBtn}
-                    onPress={() => setSelectedSpot(null)}
-                  >
-                    <Ionicons name="close" size={20} color={THEME.textSec} />
-                  </Pressable>
-                </View>
-              </View>
-
-              <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={{ paddingBottom: 24 }}
-                showsVerticalScrollIndicator={false}
-              >
-                {/* Stats */}
-                <View style={styles.spotStatsGrid}>
-                  <View style={styles.spotStatCard}>
-                    <View style={styles.spotStatIconWrap}>
-                      <Ionicons name="fish" size={18} color={THEME.graphYellow} />
-                    </View>
-                    <View>
-                      <Text style={styles.spotStatValue}>{spotFishCount ?? 0}</Text>
-                      <Text style={styles.spotStatLabel}>{t("catches")}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.spotStatCard}>
-                    <View style={[styles.spotStatIconWrap, { backgroundColor: "rgba(94, 158, 255, 0.15)" }]}>
-                      <Ionicons name="navigate" size={18} color={THEME.blue} />
-                    </View>
-                    <View>
-                      <Text style={styles.spotStatValue}>{selectedSpot.lat.toFixed(2)}°</Text>
-                      <Text style={styles.spotStatLabel}>{t("location")}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                {spotLoading && (
-                  <View style={styles.spotLoadingRow}>
-                    <ActivityIndicator color={THEME.graphYellow} />
-                    <Text style={styles.spotLoadingText}>{t("loadingWeather")}</Text>
-                  </View>
-                )}
-
-                {!spotLoading && spotErrorMsg && (
-                  <View style={styles.spotErrorBox}>
-                    <Ionicons name="alert-circle" size={18} color={THEME.danger} />
-                    <Text style={styles.spotErrorText}>{spotErrorMsg}</Text>
-                  </View>
-                )}
-
-                {!spotLoading && spotEdrData && (
-                  <>
-                    {getForecastDays(spotEdrData, t).length > 0 && (
-                      <View style={styles.spotDayForecast}>
-                        {getForecastDays(spotEdrData, t).map((day, index) => (
-                          <View key={index} style={styles.spotDayItem}>
-                            <Text style={styles.spotDayLabel}>{day.label}</Text>
-                            <View style={styles.spotDayIconWrap}>
-                              <Ionicons name={day.icon} size={22} color={THEME.text} />
-                            </View>
-                            <Text style={styles.spotDayTemp}>{day.temp.toFixed(0)}°</Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                    {spotEdrData.airTempSeries.length > 0 && (
-                      <ScrollableGraph
-                        series={spotEdrData.airTempSeries}
-                        label={t("airTemperature")}
-                        unit="°C"
-                        color={THEME.graphYellow}
-                      />
-                    )}
-                    {spotEdrData.windSpeedSeries.length > 0 && (
-                      <ScrollableGraph
-                        series={spotEdrData.windSpeedSeries}
-                        dirSeries={spotEdrData.windDirSeries}
-                        label={`${t("windSpeed")} & ${t("windDir")}`}
-                        unit="m/s"
-                        color={THEME.textSec}
-                      />
-                    )}
-                    {spotEdrData.humiditySeries.length > 0 && (
-                      <ScrollableGraph
-                        series={spotEdrData.humiditySeries}
-                        label={t("humidity")}
-                        unit="%"
-                        color={THEME.cyan}
-                      />
-                    )}
-                    {spotEdrData.pressureSeries.length > 0 && (
-                      <ScrollableGraph
-                        series={spotEdrData.pressureSeries}
-                        label={t("pressure")}
-                        unit="hPa"
-                        color={THEME.purple}
-                      />
-                    )}
-                    {spotEdrData.cloudCoverSeries.length > 0 && (
-                      <ScrollableGraph
-                        series={spotEdrData.cloudCoverSeries}
-                        label={t("cloudCover")}
-                        unit="%"
-                        color={THEME.textSec}
-                        showWeatherIcons={true}
-                        iconType="cloud"
-                      />
-                    )}
-                    {spotEdrData.precipitationSeries && spotEdrData.precipitationSeries.length > 0 && (
-                      <ScrollableGraph
-                        series={spotEdrData.precipitationSeries}
-                        label={t("precipitation")}
-                        unit="mm/h"
-                        color="#60A5FA"
-                        showAsBars={true}
-                        pixelsPerPoint={35}
-                        showWeatherIcons={true}
-                        iconType="rain"
-                      />
-                    )}
-                    {spotEdrData.waveHeightSeries.length > 0 && (
-                      <ScrollableGraph
-                        series={spotEdrData.waveHeightSeries}
-                        label={t("waveHeight")}
-                        unit="m"
-                        color={THEME.blue}
-                        pixelsPerPoint={40}
-                        minWidth={2400}
-                        showTimeRange
-                        dateTickEvery={6}
-                      />
-                    )}
-                    {spotEdrData.waterLevelSeries.length > 0 && (
-                      <ScrollableGraph
-                        series={spotEdrData.waterLevelSeries}
-                        label={t("waterLevel")}
-                        unit="cm"
-                        color={THEME.blue}
-                        zeroLineAt={0}
-                        pixelsPerPoint={40}
-                        minWidth={2400}
-                        showTimeRange
-                        dateTickEvery={6}
-                      />
-                    )}
-                    {spotEdrData.oceanFallbackStation && (
-                      <Text style={styles.oceanFallbackNote}>
-                        {language === "da"
-                          ? `Hav-data fra ${spotEdrData.oceanFallbackStation}`
-                          : `Ocean data from ${spotEdrData.oceanFallbackStation}`}
-                      </Text>
-                    )}
-                  </>
-                )}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+        <SpotWeatherPanel
+          spot={selectedSpot}
+          isBestSpot={bestSpotId != null && selectedSpot.id === bestSpotId}
+          fishCount={spotFishCount}
+          weatherData={spotEdrData}
+          isLoading={spotLoading}
+          errorMsg={spotErrorMsg}
+          onClose={() => setSelectedSpot(null)}
+          onEdit={() => {
+            if (renameLoading || spotDeleteLoading) return;
+            const spotToEdit = selectedSpot;
+            setSelectedSpot(null);
+            setTimeout(() => openRenameModal(spotToEdit), 100);
+          }}
+          t={t}
+          language={language}
+        />
       )}
       {/* Redigér spot-navn */}
       <Modal
@@ -2417,6 +2285,159 @@ export default function SpotWeatherScreen() {
         </Pressable>
       </Modal>
 
+      {/* Moon Phase Modal */}
+      <Modal
+        transparent
+        visible={showMoonModal}
+        animationType="fade"
+        onRequestClose={() => setShowMoonModal(false)}
+      >
+        <Pressable
+          style={styles.popupBackdrop}
+          onPress={() => setShowMoonModal(false)}
+        >
+          <View
+            style={styles.moonModalCard}
+            onStartShouldSetResponder={() => true}
+          >
+            <MoonPhaseContent language={language} onClose={() => setShowMoonModal(false)} />
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Pro Feature Paywall Modal */}
+      <PaywallModal />
+
+    </>
+  );
+}
+
+// Moon Phase Content Component
+function MoonPhaseContent({ language, onClose }: { language: string; onClose: () => void }) {
+  const WEEKDAYS_DA = ["Søn", "Man", "Tir", "Ons", "Tor", "Fre", "Lør"];
+  const WEEKDAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const weekdays = language === "da" ? WEEKDAYS_DA : WEEKDAYS_EN;
+
+  const getMoonPhaseInfo = (date: Date) => {
+    const moon = SunCalc.getMoonIllumination(date);
+    const phase = moon.phase;
+    const illumination = moon.fraction;
+
+    let name: string;
+    let icon: "moon-outline" | "moon" = "moon-outline";
+
+    if (phase < 0.0625 || phase >= 0.9375) {
+      name = language === "da" ? "Nymåne" : "New Moon";
+      icon = "moon-outline";
+    } else if (phase < 0.1875) {
+      name = language === "da" ? "Tiltagende" : "Waxing";
+      icon = "moon-outline";
+    } else if (phase < 0.3125) {
+      name = language === "da" ? "Første kvarter" : "First Quarter";
+      icon = "moon-outline";
+    } else if (phase < 0.4375) {
+      name = language === "da" ? "Tiltagende" : "Waxing";
+      icon = "moon";
+    } else if (phase < 0.5625) {
+      name = language === "da" ? "Fuldmåne" : "Full Moon";
+      icon = "moon";
+    } else if (phase < 0.6875) {
+      name = language === "da" ? "Aftagende" : "Waning";
+      icon = "moon";
+    } else if (phase < 0.8125) {
+      name = language === "da" ? "Sidste kvarter" : "Last Quarter";
+      icon = "moon";
+    } else {
+      name = language === "da" ? "Aftagende" : "Waning";
+      icon = "moon-outline";
+    }
+
+    return { phase, illumination, name, icon };
+  };
+
+  const getForecast = (days: number = 7) => {
+    const forecast: { date: Date; info: ReturnType<typeof getMoonPhaseInfo> }[] = [];
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+
+    for (let i = 0; i < days; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() + i);
+      forecast.push({ date, info: getMoonPhaseInfo(date) });
+    }
+    return forecast;
+  };
+
+  const currentMoon = getMoonPhaseInfo(new Date());
+  const forecast = getForecast(7);
+  const illuminationPct = Math.round(currentMoon.illumination * 100);
+
+  return (
+    <>
+      {/* Header */}
+      <View style={styles.moonHeader}>
+        <View style={styles.moonHeaderLeft}>
+          <View style={styles.moonHeaderIcon}>
+            <Ionicons name={currentMoon.icon} size={24} color={THEME.graphYellow} />
+          </View>
+          <View>
+            <Text style={styles.moonTitle}>{language === "da" ? "Månefase" : "Moon Phase"}</Text>
+            <Text style={styles.moonSubtitle}>{currentMoon.name}</Text>
+          </View>
+        </View>
+        <Pressable style={styles.popupCloseBtn} onPress={onClose}>
+          <Ionicons name="close" size={20} color={THEME.textSec} />
+        </Pressable>
+      </View>
+
+      {/* Pro Feature Gated Content */}
+      <ProFeatureGate
+        featureName={language === "da" ? "Månefase detaljer" : "Moon Phase Details"}
+        style={styles.moonProGateContainer}
+      >
+        {/* Current Phase */}
+        <View style={styles.moonCurrentRow}>
+          <View style={styles.moonBigIcon}>
+            <Ionicons name={currentMoon.icon} size={48} color={THEME.graphYellow} />
+          </View>
+          <View style={styles.moonCurrentInfo}>
+            <Text style={styles.moonPhaseName}>{currentMoon.name}</Text>
+            <Text style={styles.moonIllumination}>
+              {illuminationPct}% {language === "da" ? "belyst" : "illuminated"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Separator */}
+        <View style={styles.moonSeparator} />
+
+        {/* 7-day forecast */}
+        <Text style={styles.moonForecastLabel}>
+          {language === "da" ? "Næste 7 dage" : "Next 7 days"}
+        </Text>
+        <View style={styles.moonForecastRow}>
+          {forecast.map((day, idx) => {
+            const dayName = idx === 0
+              ? (language === "da" ? "I dag" : "Today")
+              : weekdays[day.date.getDay()];
+            const illum = Math.round(day.info.illumination * 100);
+
+            return (
+              <View key={idx} style={styles.moonForecastDay}>
+                <Text style={styles.moonForecastDayLabel}>{dayName}</Text>
+                <View style={[styles.moonForecastIconWrap, idx === 0 && styles.moonForecastIconWrapActive]}>
+                  <Ionicons
+                    name={day.info.icon}
+                    size={18}
+                    color={idx === 0 ? THEME.graphYellow : THEME.textSec}
+                  />
+                </View>
+                <Text style={styles.moonForecastIllum}>{illum}%</Text>
+              </View>
+            );
+          })}
+        </View>
+      </ProFeatureGate>
     </>
   );
 }
@@ -2601,6 +2622,120 @@ const styles = StyleSheet.create({
   mapTypeLabelActive: {
     color: THEME.text,
     fontWeight: "700",
+  },
+
+  // Moon Modal
+  moonModalCard: {
+    backgroundColor: THEME.card,
+    borderRadius: 24,
+    padding: 20,
+    width: "90%",
+    maxWidth: 360,
+    borderWidth: 1,
+    borderColor: THEME.cardBorder,
+    alignSelf: "center",
+  },
+  moonProGateContainer: {
+    borderRadius: 16,
+    minHeight: 200,
+  },
+  moonHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  moonHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  moonHeaderIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  moonTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: THEME.text,
+  },
+  moonSubtitle: {
+    fontSize: 13,
+    color: THEME.textSec,
+  },
+  moonCurrentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+  },
+  moonBigIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  moonCurrentInfo: {
+    marginLeft: 20,
+    flex: 1,
+  },
+  moonPhaseName: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: THEME.text,
+  },
+  moonIllumination: {
+    fontSize: 15,
+    color: THEME.textSec,
+    marginTop: 4,
+  },
+  moonSeparator: {
+    height: 1,
+    backgroundColor: THEME.cardBorder,
+    marginVertical: 16,
+  },
+  moonForecastLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: THEME.textSec,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  moonForecastRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  moonForecastDay: {
+    alignItems: "center",
+    flex: 1,
+  },
+  moonForecastDayLabel: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: THEME.textSec,
+    marginBottom: 6,
+  },
+  moonForecastIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  moonForecastIconWrapActive: {
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+  },
+  moonForecastIllum: {
+    fontSize: 10,
+    color: THEME.textSec,
   },
 
   // Floating Ocean Overlay Card - Premium compact design

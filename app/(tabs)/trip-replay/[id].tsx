@@ -70,7 +70,7 @@ type CatchEvent = {
 
 // Check for Google Maps key
 const HAS_GOOGLE_MAPS_KEY = (() => {
-  const extra = Constants.expoConfig?.extra ?? Constants.manifest?.extra ?? {};
+  const extra = Constants.expoConfig?.extra ?? (Constants.manifest as any)?.extra ?? {};
   const key = extra.googleMapsApiKey ?? "";
   return typeof key === "string" && key.length > 10;
 })();

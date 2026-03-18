@@ -560,13 +560,17 @@ async function fetchAllDataWithNearbySearch(
   const covOpts = "&crs=crs84&f=CoverageJSON";
   const coords = `coords=POINT(${lon.toFixed(4)} ${lat.toFixed(4)})`;
 
-  // 1) Hent alle data fra original koordinat parallelt (4 requests)
-  const [harmonieMain, harmonieExtras, waterLevel, waveHeight] = await Promise.all([
-    fetchEdrData(`/collections/harmonie_dini_sf/position?${coords}&parameter-name=temperature-2m,wind-speed,wind-dir${covOpts}`) as Promise<DmiCoverageJson | null>,
-    fetchEdrData(`/collections/harmonie_dini_sf/position?${coords}&parameter-name=total-precipitation,relative-humidity-2m,total-cloud-cover${covOpts}`) as Promise<DmiCoverageJson | null>,
+  // 1) Hent alle data fra original koordinat parallelt (3 requests - kombineret HARMONIE)
+  const [harmonieAll, waterLevel, waveHeight] = await Promise.all([
+    // KOMBINERET: alle vejrparametre i ÉT kald
+    fetchEdrData(`/collections/harmonie_dini_sf/position?${coords}&parameter-name=temperature-2m,wind-speed,wind-dir,total-precipitation,relative-humidity-2m,total-cloud-cover,mean-sea-level-pressure${covOpts}`) as Promise<DmiCoverageJson | null>,
     fetchEdrData(`/collections/dkss_nsbs/position?${coords}&parameter-name=sea-mean-deviation${geoOpts}`) as Promise<DmiGeoJsonResponse | null>,
     fetchEdrData(`/collections/wam_nsb/position?${coords}&parameter-name=significant-wave-height${geoOpts}`) as Promise<DmiGeoJsonResponse | null>,
   ]);
+
+  // Brug samme data til begge (harmonieMain og harmonieExtras er nu identiske)
+  const harmonieMain = harmonieAll;
+  const harmonieExtras = harmonieAll;
 
   // Tjek hvad vi mangler
   const hasWeather = harmonieHasData(harmonieMain);
@@ -594,8 +598,9 @@ async function fetchAllDataWithNearbySearch(
   const fallbackTypes: string[] = [];
 
   if (!hasWeather) {
+    // KOMBINERET: alle vejrparametre i ÉT kald
     fallbackPromises.push(
-      fetchEdrData(`/collections/harmonie_dini_sf/position?${fallbackCoords}&parameter-name=temperature-2m,wind-speed,wind-dir${covOpts}`)
+      fetchEdrData(`/collections/harmonie_dini_sf/position?${fallbackCoords}&parameter-name=temperature-2m,wind-speed,wind-dir,total-precipitation,relative-humidity-2m,total-cloud-cover,mean-sea-level-pressure${covOpts}`)
     );
     fallbackTypes.push("weather");
   }
@@ -626,6 +631,7 @@ async function fetchAllDataWithNearbySearch(
     const result = fallbackResults[i];
     if (type === "weather" && harmonieHasData(result as DmiCoverageJson)) {
       finalWeather = result as DmiCoverageJson;
+      finalExtras = result as DmiCoverageJson; // Samme data - alle parametre inkluderet
       weatherNearby = true;
     } else if (type === "waterLevel" && oceanGeoJsonHasData(result as DmiGeoJsonResponse, "sea-mean-deviation")) {
       finalWaterLevel = result as DmiGeoJsonResponse;
@@ -635,13 +641,6 @@ async function fetchAllDataWithNearbySearch(
       oceanNearby = true;
     }
   });
-
-  // Hent ekstra vejrparametre fra fallback hvis vejret kom derfra
-  if (weatherNearby && finalWeather) {
-    finalExtras = await fetchEdrData(
-      `/collections/harmonie_dini_sf/position?${fallbackCoords}&parameter-name=total-precipitation,relative-humidity-2m,total-cloud-cover${covOpts}`
-    ) as DmiCoverageJson | null;
-  }
 
   return {
     harmonieMain: finalWeather,

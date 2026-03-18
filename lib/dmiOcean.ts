@@ -3,6 +3,7 @@
 // og logik til "nærmeste time med data" for korte ture.
 
 import { DMI_OCEAN_BASE_URL } from "./dmiConfig";
+import { getOceanCache, setOceanCache } from "./climateOceanCache";
 
 export type OceanStation = {
   id: string;      // DMI stationId, fx "30361"
@@ -326,7 +327,7 @@ async function fetchTwWithFallback(
 
   const results = await Promise.all(
     batch.map(async ({ station, distKm }) => {
-      const vals = await fetchObservationValues(station.id, "tw", startIso, endIso);
+      const vals = await fetchObservationValuesCached(station.id, "tw", startIso, endIso);
       return { station, distKm, vals };
     })
   );
@@ -338,12 +339,22 @@ async function fetchTwWithFallback(
     }
   }
 
-  // Ingen af de første 3 havde data - prøv resten sekventielt (sjældent tilfælde)
-  for (let i = PARALLEL_COUNT; i < validCandidates.length; i++) {
-    const { station } = validCandidates[i];
-    const vals = await fetchObservationValues(station.id, "tw", startIso, endIso);
-    if (vals.length > 0) {
-      return { station, vals };
+  // OPTIMIZED: Hent ALLE resterende stationer parallelt, brug første med data
+  // (sorteret efter afstand - validCandidates er allerede sorteret)
+  if (validCandidates.length > PARALLEL_COUNT) {
+    const remainingBatch = validCandidates.slice(PARALLEL_COUNT);
+    const remainingResults = await Promise.all(
+      remainingBatch.map(async ({ station }) => {
+        const vals = await fetchObservationValuesCached(station.id, "tw", startIso, endIso);
+        return { station, vals };
+      })
+    );
+
+    // Returnér første med data (allerede sorteret efter afstand)
+    for (const result of remainingResults) {
+      if (result.vals.length > 0) {
+        return result;
+      }
     }
   }
 
@@ -457,6 +468,45 @@ async function fetchObservationValues(
   }
 }
 
+/**
+ * OPTIMIZED: Cached wrapper for fetchObservationValues
+ * Checks SQLite cache first, fetches from API if cache miss or stale
+ * Falls back to direct API call if cache fails
+ */
+async function fetchObservationValuesCached(
+  stationId: string,
+  parameterId: string,
+  startIso: string,
+  endIso: string,
+  timeoutMs: number = 6000
+): Promise<{ ts: number; value: number }[]> {
+  // 1. Try cache first (with error handling)
+  let cached: { data: string; isStale: boolean } | null = null;
+  try {
+    cached = await getOceanCache(stationId, parameterId, startIso, endIso);
+    if (cached && !cached.isStale) {
+      const parsed = JSON.parse(cached.data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch {
+    // Cache read failed, continue to fetch from API
+  }
+
+  // 2. Fetch from API
+  const result = await fetchObservationValues(stationId, parameterId, startIso, endIso, timeoutMs);
+
+  // 3. Store in cache (fire-and-forget, don't block on cache write)
+  if (result.length > 0 || !cached) {
+    setOceanCache(stationId, parameterId, startIso, endIso, JSON.stringify(result)).catch(() => {
+      // Ignore cache write errors
+    });
+  }
+
+  return result;
+}
+
 function buildStat(values: number[]): Stat | undefined {
   if (!values.length) return undefined;
   let min = values[0];
@@ -536,11 +586,11 @@ export async function fetchOceanForTrip(
       fetchTwWithFallback(input.lat, input.lon, queryStartIso, queryEndIso),
       // 2) hent vandstand DVR fra nærmeste level-station
       levelStation
-        ? fetchObservationValues(levelStation.id, "sealev_dvr", queryStartIso, queryEndIso)
+        ? fetchObservationValuesCached(levelStation.id, "sealev_dvr", queryStartIso, queryEndIso)
         : Promise.resolve([]),
       // 3) hent vandstand LN fra nærmeste level-station
       levelStation
-        ? fetchObservationValues(levelStation.id, "sealev_ln", queryStartIso, queryEndIso)
+        ? fetchObservationValuesCached(levelStation.id, "sealev_ln", queryStartIso, queryEndIso)
         : Promise.resolve([]),
     ]);
 

@@ -74,6 +74,9 @@ import {
   buildSpotSummary,
   withTimeout,
 } from "../../lib/patternAnalysis";
+import { usePurchases } from "../../hooks/usePurchases";
+import { Paywall, openCustomerCenter } from "../../components/Paywall";
+import { PRO_ENTITLEMENT_ID } from "../../lib/purchases";
 
 // Demo konto email
 const DEMO_EMAIL = "demo@havorredlogbog.dk";
@@ -122,6 +125,44 @@ export default function SettingsScreen() {
   const [deleteAccountConfirmText, setDeleteAccountConfirmText] = useState("");
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [creditsModalVisible, setCreditsModalVisible] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+
+  // Pro status and subscription info
+  const { isPro, isLoading: proLoading, customerInfo } = usePurchases();
+
+  // Get subscription details from customerInfo
+  const getSubscriptionDetails = () => {
+    if (!customerInfo || !isPro) return null;
+
+    const entitlement = customerInfo.entitlements.active[PRO_ENTITLEMENT_ID];
+    if (!entitlement) return null;
+
+    const productId = entitlement.productIdentifier;
+    const expirationDate = entitlement.expirationDate;
+    const willRenew = entitlement.willRenew;
+
+    // Determine subscription type
+    let type: "monthly" | "yearly" | "lifetime" = "monthly";
+    if (productId?.includes("lifetime")) {
+      type = "lifetime";
+    } else if (productId?.includes("yearly") || productId?.includes("annual")) {
+      type = "yearly";
+    }
+
+    // Format expiration date
+    let expirationText = null;
+    if (expirationDate && type !== "lifetime") {
+      const expDate = new Date(expirationDate);
+      expirationText = expDate.toLocaleDateString(
+        language === "da" ? "da-DK" : "en-US",
+        { day: "numeric", month: "long", year: "numeric" }
+      );
+    }
+
+    return { type, expirationDate: expirationText, willRenew };
+  };
+
+  const subscriptionDetails = getSubscriptionDetails();
 
   // Credits - testere og medvirkende
   const TESTERS = [
@@ -1175,6 +1216,126 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Pro Subscription */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            {language === "da" ? "Abonnement" : "Subscription"}
+          </Text>
+          <View style={styles.card}>
+            {proLoading ? (
+              <View style={[styles.row, { justifyContent: "center" }]}>
+                <ActivityIndicator color={THEME.accent} />
+              </View>
+            ) : isPro ? (
+              <>
+                <View style={styles.row}>
+                  <View style={[styles.iconContainer, { backgroundColor: THEME.accentMuted }]}>
+                    <Ionicons name="star" size={18} color={THEME.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>Havørred Logbog Pro</Text>
+                    <Text style={styles.value}>
+                      {subscriptionDetails?.type === "lifetime"
+                        ? (language === "da" ? "Livstidsadgang" : "Lifetime access")
+                        : subscriptionDetails?.type === "yearly"
+                        ? (language === "da" ? "Årligt abonnement" : "Yearly subscription")
+                        : (language === "da" ? "Månedligt abonnement" : "Monthly subscription")}
+                    </Text>
+                  </View>
+                  <View style={[styles.versionBadge, { backgroundColor: THEME.accentMuted }]}>
+                    <Text style={[styles.versionText, { color: THEME.accent }]}>PRO</Text>
+                  </View>
+                </View>
+
+                {/* Subscription details */}
+                {subscriptionDetails && subscriptionDetails.type !== "lifetime" && (
+                  <View style={styles.subscriptionDetails}>
+                    <View style={styles.subscriptionDetailRow}>
+                      <Ionicons
+                        name={subscriptionDetails.willRenew ? "refresh" : "time-outline"}
+                        size={16}
+                        color={THEME.textSec}
+                      />
+                      <Text style={styles.subscriptionDetailText}>
+                        {subscriptionDetails.willRenew
+                          ? (language === "da" ? "Fornyes " : "Renews ")
+                          : (language === "da" ? "Udløber " : "Expires ")}
+                        {subscriptionDetails.expirationDate}
+                      </Text>
+                    </View>
+                    {!subscriptionDetails.willRenew && (
+                      <View style={styles.subscriptionWarning}>
+                        <Ionicons name="warning" size={14} color={THEME.danger} />
+                        <Text style={styles.subscriptionWarningText}>
+                          {language === "da"
+                            ? "Auto-fornyelse er slået fra"
+                            : "Auto-renewal is turned off"}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {subscriptionDetails?.type === "lifetime" && (
+                  <View style={styles.subscriptionDetails}>
+                    <View style={styles.subscriptionDetailRow}>
+                      <Ionicons name="infinite" size={16} color={THEME.success} />
+                      <Text style={[styles.subscriptionDetailText, { color: THEME.success }]}>
+                        {language === "da" ? "Ingen udløbsdato" : "No expiration date"}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                <View style={styles.cardFooter}>
+                  <Pressable
+                    onPress={() => openCustomerCenter()}
+                    style={({ pressed }) => [
+                      styles.secondaryBtn,
+                      pressed ? { opacity: 0.9 } : null,
+                    ]}
+                  >
+                    <Ionicons name="settings-outline" size={18} color={THEME.text} />
+                    <Text style={styles.secondaryBtnText}>
+                      {language === "da" ? "Administrer abonnement" : "Manage subscription"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.row}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="star-outline" size={18} color={THEME.textSec} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>Havørred Logbog Pro</Text>
+                    <Text style={styles.value}>
+                      {language === "da"
+                        ? "Lås op for avancerede funktioner"
+                        : "Unlock advanced features"}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.cardFooter}>
+                  <Pressable
+                    onPress={() => setPaywallVisible(true)}
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      pressed ? { opacity: 0.9 } : null,
+                    ]}
+                  >
+                    <Ionicons name="arrow-up-circle" size={18} color="#000" />
+                    <Text style={styles.actionBtnText}>
+                      {language === "da" ? "Opgrader til Pro" : "Upgrade to Pro"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+
         {/* Smart Vejr-Alerts */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
@@ -1201,6 +1362,12 @@ export default function SettingsScreen() {
                     : "Get notified when weather matches your pattern"}
                 </Text>
               </View>
+              {!isPro && !proLoading && (
+                <View style={styles.proBadge}>
+                  <Ionicons name="lock-closed" size={12} color={THEME.accent} />
+                  <Text style={styles.proBadgeText}>PRO</Text>
+                </View>
+              )}
               <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
             </Pressable>
           </View>
@@ -1297,26 +1464,47 @@ export default function SettingsScreen() {
                   {t("pdfDesc")}
                 </Text>
               </View>
+              {!isPro && !proLoading && (
+                <View style={styles.proBadge}>
+                  <Ionicons name="lock-closed" size={12} color={THEME.accent} />
+                  <Text style={styles.proBadgeText}>PRO</Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.cardFooter}>
-              <Pressable
-                onPress={handleDownloadReport}
-                disabled={reportLoading}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  pressed || reportLoading ? { opacity: 0.85 } : null,
-                ]}
-              >
-                {reportLoading ? (
-                  <ActivityIndicator color="#000" />
-                ) : (
-                  <>
-                    <Ionicons name="download" size={18} color="#000" />
-                    <Text style={styles.actionBtnText}>{t("downloadReport")}</Text>
-                  </>
-                )}
-              </Pressable>
+              {isPro ? (
+                <Pressable
+                  onPress={handleDownloadReport}
+                  disabled={reportLoading}
+                  style={({ pressed }) => [
+                    styles.actionBtn,
+                    pressed || reportLoading ? { opacity: 0.85 } : null,
+                  ]}
+                >
+                  {reportLoading ? (
+                    <ActivityIndicator color="#000" />
+                  ) : (
+                    <>
+                      <Ionicons name="download" size={18} color="#000" />
+                      <Text style={styles.actionBtnText}>{t("downloadReport")}</Text>
+                    </>
+                  )}
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => setPaywallVisible(true)}
+                  style={({ pressed }) => [
+                    styles.secondaryBtn,
+                    pressed ? { opacity: 0.85 } : null,
+                  ]}
+                >
+                  <Ionicons name="star" size={18} color={THEME.accent} />
+                  <Text style={[styles.secondaryBtnText, { color: THEME.accent }]}>
+                    {language === "da" ? "Abonner for at eksportere" : "Subscribe to export"}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           </View>
         </View>
@@ -1956,6 +2144,19 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Paywall Modal */}
+      <Modal
+        visible={paywallVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setPaywallVisible(false)}
+      >
+        <Paywall
+          onClose={() => setPaywallVisible(false)}
+          onPurchaseComplete={() => setPaywallVisible(false)}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -2059,6 +2260,52 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: THEME.textSec,
+  },
+  proBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: THEME.accentMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginRight: 4,
+  },
+  proBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: THEME.accent,
+  },
+  subscriptionDetails: {
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  subscriptionDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: THEME.elevated,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  subscriptionDetailText: {
+    fontSize: 13,
+    color: THEME.textSec,
+  },
+  subscriptionWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: THEME.dangerMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  subscriptionWarningText: {
+    fontSize: 12,
+    color: THEME.danger,
   },
   actionBtn: {
     flexDirection: "row",

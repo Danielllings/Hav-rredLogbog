@@ -3,6 +3,7 @@
 // og logik til "nærmeste time med data" for korte ture.
 
 import { DMI_CLIMATE_BASE_URL } from "./dmiConfig";
+import { getClimateCache, setClimateCache } from "./climateOceanCache";
 
 export type ClimateStation = {
   id: string;
@@ -184,6 +185,44 @@ async function fetchStationValues(
   return out;
 }
 
+/**
+ * OPTIMIZED: Cached wrapper for fetchStationValues
+ * Checks SQLite cache first, fetches from API if cache miss or stale
+ * Falls back to direct API call if cache fails
+ */
+async function fetchStationValuesCached(
+  stationId: string,
+  parameterId: string,
+  startIso: string,
+  endIso: string
+): Promise<{ ts: number; value: number }[]> {
+  // 1. Try cache first (with error handling)
+  let cached: { data: string; isStale: boolean } | null = null;
+  try {
+    cached = await getClimateCache(stationId, parameterId, startIso, endIso);
+    if (cached && !cached.isStale) {
+      const parsed = JSON.parse(cached.data);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch {
+    // Cache read failed, continue to fetch from API
+  }
+
+  // 2. Fetch from API
+  const result = await fetchStationValues(stationId, parameterId, startIso, endIso);
+
+  // 3. Store in cache (fire-and-forget, don't block on cache write)
+  if (result.length > 0 || !cached) {
+    setClimateCache(stationId, parameterId, startIso, endIso, JSON.stringify(result)).catch(() => {
+      // Ignore cache write errors
+    });
+  }
+
+  return result;
+}
+
 function buildStat(values: number[]): Stat | undefined {
   if (!values.length) return undefined;
   let min = values[0];
@@ -269,12 +308,13 @@ export async function fetchClimateForTrip(
     // - mean_wind_dir (grader)
     // - mean_pressure (hPa)
     // - mean_relative_hum (%)
+    // OPTIMIZED: Uses cached fetch for faster repeated lookups
     const [tempVals, windSpeedVals, windDirVals, pressureVals, humidityVals] = await Promise.all([
-      fetchStationValues(station.id, "mean_temp", queryStartIso, queryEndIso),
-      fetchStationValues(station.id, "mean_wind_speed", queryStartIso, queryEndIso),
-      fetchStationValues(station.id, "mean_wind_dir", queryStartIso, queryEndIso),
-      fetchStationValues(station.id, "mean_pressure", queryStartIso, queryEndIso),
-      fetchStationValues(station.id, "mean_relative_hum", queryStartIso, queryEndIso),
+      fetchStationValuesCached(station.id, "mean_temp", queryStartIso, queryEndIso),
+      fetchStationValuesCached(station.id, "mean_wind_speed", queryStartIso, queryEndIso),
+      fetchStationValuesCached(station.id, "mean_wind_dir", queryStartIso, queryEndIso),
+      fetchStationValuesCached(station.id, "mean_pressure", queryStartIso, queryEndIso),
+      fetchStationValuesCached(station.id, "mean_relative_hum", queryStartIso, queryEndIso),
     ]);
 
     const map: { [ts: number]: ClimatePoint } = {};

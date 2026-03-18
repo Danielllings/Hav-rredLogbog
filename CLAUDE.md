@@ -13,11 +13,11 @@ React Native / Expo fiskeri-app til havørredfiskere. Tracker ture med GPS, logg
 | Database | Firebase Firestore |
 | Storage | Firebase Storage (billeder) |
 | Kort | react-native-maps |
-| Animation | react-native-reanimated ~4.1.1 (worklets built-in) |
+| Animation | react-native-reanimated ~4.1.1 + react-native-worklets 0.5.1 |
 | Vejr | DMI API via Cloud Functions |
 | Sprog | TypeScript |
 
-> **Note:** `react-native-worklets` er fjernet - Reanimated 4.x har worklets built-in og standalone pakken skaber konflikter med semver resolution.
+> **Note:** Reanimated 4.x KRÆVER `react-native-worklets` som peer dependency. Expo SDK 54 forventer version 0.5.1. Se overrides i package.json for semver fix.
 
 ## Projektstruktur
 

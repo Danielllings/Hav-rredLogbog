@@ -56,7 +56,6 @@
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
-    "semver": "^7.6.0",
     "react-native-maps": "^1.20.1",
     "react-native-purchases": "^9.14.0",
     "react-native-purchases-ui": "^9.14.0",
@@ -67,7 +66,7 @@
     "react-native-view-shot": "4.0.3",
     "react-native-web": "~0.21.0",
     "react-native-webview": "^13.16.0",
-    "semver": "^7.7.4",
+    "semver": "^7.6.0",
     "suncalc": "^1.9.0"
   },
   "devDependencies": {
@@ -80,7 +79,7 @@
     "typescript": "~5.9.2"
   },
   "overrides": {
-    "react-native-reanimated": {
+    "react-native-worklets": {
       "semver": "^7.6.0"
     }
   },

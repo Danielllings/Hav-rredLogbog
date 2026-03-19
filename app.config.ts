@@ -161,21 +161,7 @@ const config: ExpoConfig = {
     favicon: "./assets/favicon.png",
   },
 
-  plugins: [
-    "expo-router",
-    "expo-notifications",
-    [
-      "expo-build-properties",
-      {
-        ios: {
-          newArchEnabled: false,
-        },
-        android: {
-          newArchEnabled: false,
-        },
-      },
-    ],
-  ],
+  plugins: ["expo-router", "expo-notifications"],
 };
 
 export default config;

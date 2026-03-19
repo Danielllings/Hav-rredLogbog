@@ -84,5 +84,9 @@
       "semver": "^7.6.0"
     }
   },
+  "resolutions": {
+    "semver": "^7.6.0",
+    "react-native-reanimated/semver": "^7.6.0"
+  },
   "private": true
 }

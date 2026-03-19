@@ -8,10 +8,13 @@ config.resolver.blockList = [
   /functions\/.*/,
 ];
 
-// Ensure semver is resolved from root node_modules for react-native-reanimated
+// Resolve semver and its subpaths for react-native-reanimated
+const semverPath = path.resolve(__dirname, "node_modules/semver");
 config.resolver.extraNodeModules = {
   ...config.resolver.extraNodeModules,
-  semver: path.resolve(__dirname, "node_modules/semver"),
+  semver: semverPath,
+  "semver/functions/satisfies": path.resolve(semverPath, "functions/satisfies"),
+  "semver/functions/prerelease": path.resolve(semverPath, "functions/prerelease"),
 };
 
 module.exports = config;

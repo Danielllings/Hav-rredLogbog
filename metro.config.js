@@ -8,16 +8,14 @@ config.resolver.blockList = [
   /functions\/.*/,
 ];
 
-// Get the actual semver package path using require.resolve
-const semverMainPath = require.resolve("semver");
-const semverDir = path.dirname(semverMainPath);
+// Shims directory for semver subpath imports
+const shimsDir = path.resolve(__dirname, "shims");
 
-// Add semver and its subpaths to extra node modules
+// Add semver shims to extra node modules for react-native-reanimated
 config.resolver.extraNodeModules = {
   ...config.resolver.extraNodeModules,
-  semver: semverDir,
-  "semver/functions/satisfies": path.join(semverDir, "functions", "satisfies.js"),
-  "semver/functions/prerelease": path.join(semverDir, "functions", "prerelease.js"),
+  "semver/functions/satisfies": path.join(shimsDir, "semver/functions/satisfies.js"),
+  "semver/functions/prerelease": path.join(shimsDir, "semver/functions/prerelease.js"),
 };
 
 module.exports = config;

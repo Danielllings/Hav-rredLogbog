@@ -161,24 +161,7 @@ const config: ExpoConfig = {
     favicon: "./assets/favicon.png",
   },
 
-  plugins: [
-    "expo-router",
-    "expo-notifications",
-    [
-      "expo-build-properties",
-      {
-        ios: {
-          useFrameworks: "static",
-        },
-      },
-    ],
-    [
-      "react-native-maps",
-      {
-        iosGoogleMapsApiKey: mapsApiKey,
-      },
-    ],
-  ],
+  plugins: ["expo-router", "expo-notifications"],
 };
 
 export default config;

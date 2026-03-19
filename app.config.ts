@@ -172,6 +172,12 @@ const config: ExpoConfig = {
         },
       },
     ],
+    [
+      "react-native-maps",
+      {
+        iosGoogleMapsApiKey: mapsApiKey,
+      },
+    ],
   ],
 };
 

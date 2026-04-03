@@ -80,16 +80,10 @@ export const SpotMarker = memo(function SpotMarker({
         <View
           style={[
             styles.bubble,
-            { backgroundColor: isBestSpot ? "#F59E0B" : "#1C1C1E" }
+            { backgroundColor: isBestSpot ? "rgba(245, 158, 11, 0.85)" : "rgba(28, 28, 30, 0.85)" }
           ]}
           collapsable={false}
         >
-          <Ionicons
-            name={isBestSpot ? "star" : "fish"}
-            size={14}
-            color={isBestSpot ? "#000" : "#F59E0B"}
-            style={styles.icon}
-          />
           <Text
             style={[
               styles.text,
@@ -124,7 +118,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 16,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: "#F59E0B",
   },
   androidBubble: {

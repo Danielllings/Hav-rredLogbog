@@ -36,11 +36,7 @@ app/                    # Expo Router screens
 │   └── settings.tsx    # Indstillinger
 └── _layout.tsx         # Root layout
 
-hooks/                  # React hooks
-└── usePurchases.ts     # RevenueCat subscription hooks
-
 lib/                    # Forretningslogik
-├── purchases.ts        # RevenueCat integration
 ├── catches.ts          # Fangst CRUD
 ├── trips.ts            # Tur CRUD + statistik
 ├── spots.ts            # Spots CRUD
@@ -64,8 +60,6 @@ types/                  # TypeScript types
 └── records.ts          # Personlige rekorder types
 
 components/             # Genanvendelige komponenter
-├── Paywall.tsx               # RevenueCat subscription paywall
-├── ProFeatureGate.tsx        # Pro-feature wrapper med blur/lås
 ├── PersonalRecordsSection.tsx  # Rekorder i Galleri
 ├── catch/              # Fangst-skærme komponenter
 │   ├── CatchHeroPhoto.tsx  # Hero foto med date badge
@@ -171,78 +165,6 @@ const effectiveStartMs = Math.min(startMs, nowMs - 2 * 60 * 60 * 1000);
 /catches/{userId}/{catchId}.jpg  # Billeder i Storage
 ```
 
-## RevenueCat Subscriptions (Havørred Logbog Pro)
-
-**Filer:**
-- `lib/purchases.ts` - Core RevenueCat logic (init, purchase, restore)
-- `hooks/usePurchases.ts` - React hooks (`usePurchases`, `useIsPro`)
-- `components/Paywall.tsx` - Custom paywall + native paywall wrapper
-
-**Entitlement:** `HavørredLogbog Pro`
-
-**Produkter:**
-- `havoerred_pro_monthly` - Månedligt abonnement
-- `havoerred_pro_yearly` - Årligt abonnement
-- `havoerred_pro_lifetime` - Livstidskøb
-
-**Brug:**
-```typescript
-// Tjek Pro status (simpel)
-import { useIsPro } from "../hooks/usePurchases";
-const { isPro, isLoading } = useIsPro();
-
-// Fuld subscription info
-import { usePurchases } from "../hooks/usePurchases";
-const { isPro, customerInfo } = usePurchases();
-// customerInfo.entitlements.active["HavørredLogbog Pro"]
-//   .productIdentifier - "havoerred_pro_monthly" etc.
-//   .expirationDate - ISO date string (null for lifetime)
-//   .willRenew - boolean
-
-// Vis paywall
-import { presentPaywall } from "../components/Paywall";
-await presentPaywall();
-
-// Eller brug custom paywall component
-<Paywall onClose={() => setVisible(false)} />
-```
-
-**Subscription status visning i Settings:**
-- Viser abonnementstype (Månedligt/Årligt/Livstid)
-- Viser udløbs-/fornyelses-dato
-- Advarsel hvis auto-fornyelse er slået fra
-- Livstid viser "Ingen udløbsdato" med grønt uendeligt-ikon
-
-**Init:** Konfigureres i `app/_layout.tsx` ved app-start, linker til Firebase user.
-
-## Pro Feature Gating
-
-Pro-funktioner vises med blur/lås overlay for gratis brugere:
-
-**Låste funktioner:**
-- Statistik: Spot-analyse, månedsoversigt-graf, fiskemønster
-- Smart Vejr-Alerts: Hele funktionaliteten
-- PDF-eksport: Statistik rapport
-
-**Komponenter:**
-```typescript
-// Wrapper komponent - slører indhold og viser lås
-import { ProFeatureGate } from "../components/ProFeatureGate";
-<ProFeatureGate featureName="Avanceret statistik">
-  <MyProContent />
-</ProFeatureGate>
-
-// Hook version - til mere kontrol
-import { useProFeature } from "../components/ProFeatureGate";
-const { isPro, showPaywall, PaywallModal } = useProFeature();
-```
-
-**UI:**
-- Blur overlay (iOS) / semi-transparent overlay (Android)
-- Lås-ikon med "Pro-funktion" tekst
-- "Abonner" knap der åbner paywall
-- PRO badge på låste rækker i settings
-
 ## Push Notifikationer (Smart Vejr-Alerts)
 
 **Arkitektur:**
@@ -347,15 +269,6 @@ useEffect(() => {
 - Offline ture synkroniseres automatisk ved netværk
 - GlassCard: BlurView på iOS, solid farve på Android
 
-## Dev Mode (Test Pro uden køb)
-
-I `hooks/usePurchases.ts`:
-```typescript
-// Skift false til true for at teste som Pro i Expo Go
-const DEV_MODE_PRO = __DEV__ && false;
-```
-`__DEV__` er automatisk false i production builds.
-
 ## EAS Build & Submit
 
 **Kommandoer:**
@@ -376,24 +289,73 @@ eas submit --platform ios --latest
 
 ## Kendte Build-Problemer & Fixes
 
-### 1. semver/functions/satisfies fejl
-**Symptom:** `Unable to resolve module semver/functions/satisfies`
+### 1. semver/functions/satisfies fejl (Metro bundler)
+**Symptom:** `Unable to resolve module semver/functions/satisfies` eller `Unable to resolve module ./functions/parse from semver/index.js` under EAS Build Metro bundling.
 
-**Årsag:** `react-native-worklets` (peer dep af reanimated) mangler semver.
+**Årsag:** Metro bundler kan ikke resolve semver's subpath imports (`require('semver/functions/satisfies')`). At tilføje semver til dependencies virker IKKE fordi semver's egen index.js også bruger subpath imports internt.
 
-**Fix:** Tilføj til `package.json`:
+**Fix (patch-package):** Skip version validation scripts helt:
+
+1. Installer patch-package:
+```bash
+npm install --save-dev patch-package
+```
+
+2. Opret `patches/react-native-reanimated+4.1.6.patch`:
+```patch
+diff --git a/node_modules/react-native-reanimated/scripts/validate-react-native-version.js b/node_modules/react-native-reanimated/scripts/validate-react-native-version.js
+--- a/node_modules/react-native-reanimated/scripts/validate-react-native-version.js
++++ b/node_modules/react-native-reanimated/scripts/validate-react-native-version.js
+@@ -1,43 +1,4 @@
+ 'use strict';
+
+-const semverSatisfies = require('semver/functions/satisfies');
+-// ... al validation kode ...
+-process.exit(1);
++// Skip version validation - semver doesn't work with Metro bundler
++process.exit(0);
+diff --git a/node_modules/react-native-reanimated/scripts/validate-worklets-version.js b/node_modules/react-native-reanimated/scripts/validate-worklets-version.js
+--- a/node_modules/react-native-reanimated/scripts/validate-worklets-version.js
++++ b/node_modules/react-native-reanimated/scripts/validate-worklets-version.js
+@@ -1,63 +1,8 @@
+ 'use strict';
+
+-const semverSatisfies = require('semver/functions/satisfies');
+-// ... al validation kode ...
++// Skip version validation at runtime - semver doesn't work with Metro bundler
+ function validateVersion(reanimatedVersion) {
+-  // ... validation logic ...
++  return { ok: true };
+ }
+
+ module.exports = validateVersion;
+```
+
+3. Opret `patches/react-native-worklets+0.5.1.patch`:
+```patch
+diff --git a/node_modules/react-native-worklets/scripts/validate-react-native-version.js b/node_modules/react-native-worklets/scripts/validate-react-native-version.js
+--- a/node_modules/react-native-worklets/scripts/validate-react-native-version.js
++++ b/node_modules/react-native-worklets/scripts/validate-react-native-version.js
+@@ -1,43 +1,4 @@
+ 'use strict';
+
+-const semverSatisfies = require('semver/functions/satisfies');
+-// ... al validation kode ...
++// Skip version validation - semver doesn't work with Metro bundler
++process.exit(0);
+```
+
+4. Tilføj scripts til `package.json`:
 ```json
 {
-  "dependencies": {
-    "semver": "^7.6.0"
-  },
-  "overrides": {
-    "react-native-worklets": {
-      "semver": "^7.6.0"
-    }
+  "scripts": {
+    "postinstall": "patch-package",
+    "eas-build-post-install": "npx patch-package"
   }
 }
 ```
+
+**VIGTIGT:** `eas-build-post-install` scriptet køres automatisk af EAS Build efter npm install. Brug IKKE `postInstall` i eas.json - det er ikke længere supported.
 
 ### 2. package-lock.json out of sync
 **Symptom:** `npm ci` fejler med "Missing: semver@X.X.X from lock file"
@@ -473,26 +435,12 @@ npx expo install react-native-reanimated react-native-worklets
 
 **Vigtig note:** Valideringen sker i `node_modules/react-native-reanimated/scripts/validate-worklets-build.js`. Denne køres under pod install og fejler hvis `require('react-native-worklets/package.json')` ikke kan finde pakken.
 
-## RevenueCat Setup
-
-**API Key:** `appl_eMkcExAdXMPYVSzjgarDfZdHWNg` (iOS production)
-
-**Dashboard setup kræver:**
-1. In-App Purchase Key (P8 fil fra App Store Connect)
-2. App med bundle ID `dk.havoerred.logbog`
-3. Products, Entitlement, Offering konfigureret
-
-**App Store Connect:**
-- In-App Purchases skal oprettes
-- Sandbox tester konto til test
-
 ## Sikkerhed
 
 | Secret | Håndtering |
 |--------|------------|
 | Firebase keys | EAS Secrets / env vars |
 | Maps API key | EAS Secrets |
-| RevenueCat key | Hardcoded (public key, designet til client) |
 
 **Ingen secrets må committes til git.**
 

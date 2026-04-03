@@ -56,7 +56,6 @@ import {
   SEASON_LABELS,
 } from "../../types/catchProfile";
 import { useTheme } from "../../lib/theme";
-import { useProFeature } from "../../components/ProFeatureGate";
 
 // --- BASE TEMA (statiske farver) ---
 const BASE = {
@@ -82,7 +81,6 @@ export default function WeatherAlertsScreen() {
   const router = useRouter();
   const { t, language } = useLanguage();
   const { theme } = useTheme();
-  const { isPro, isLoading: proLoading, showPaywall, PaywallModal } = useProFeature();
 
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<WeatherAlertSettings | null>(null);
@@ -329,44 +327,15 @@ export default function WeatherAlertsScreen() {
           <View style={{ width: 44 }} />
         </View>
 
-        {/* Pro Feature Gate */}
-        {!isPro && !proLoading && (
-          <View style={styles.proGateCard}>
-            <View style={styles.proGateIconWrap}>
-              <Ionicons name="lock-closed" size={28} color="#F59E0B" />
-            </View>
-            <Text style={styles.proGateTitle}>
-              {language === "da" ? "Pro-funktion" : "Pro Feature"}
-            </Text>
-            <Text style={styles.proGateDesc}>
-              {language === "da"
-                ? "Smart Vejr-Alerts kræver et Pro-abonnement for at sende personlige notifikationer."
-                : "Smart Weather Alerts requires a Pro subscription to send personalized notifications."}
-            </Text>
-            <Pressable
-              onPress={showPaywall}
-              style={({ pressed }) => [
-                styles.proGateBtn,
-                { opacity: pressed ? 0.9 : 1 },
-              ]}
-            >
-              <Ionicons name="star" size={16} color="#000" />
-              <Text style={styles.proGateBtnText}>
-                {language === "da" ? "Abonner" : "Subscribe"}
-              </Text>
-            </Pressable>
-          </View>
-        )}
-
         {/* Description */}
-        <Text style={[styles.description, !isPro && styles.disabledContent]}>
+        <Text style={styles.description}>
           {language === "da"
             ? "Få besked når vejret matcher dine bedste fangstforhold. Baseret på din personlige fiskemønster-analyse."
             : "Get notified when weather matches your best catch conditions. Based on your personal fishing pattern analysis."}
         </Text>
 
         {/* Enable/Disable Toggle */}
-        <View style={[styles.section, !isPro && styles.disabledContent]}>
+        <View style={styles.section}>
           <View style={styles.card}>
             <View style={styles.toggleRow}>
               <View style={styles.toggleInfo}>
@@ -390,7 +359,7 @@ export default function WeatherAlertsScreen() {
         </View>
 
         {/* Data Status */}
-        <View style={[styles.section, !isPro && styles.disabledContent]}>
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>
             {language === "da" ? "Din sæson-data" : "Your season data"}
           </Text>
@@ -437,7 +406,7 @@ export default function WeatherAlertsScreen() {
 
         {/* Monitored Spots */}
         {spots.length > 0 && (
-          <View style={[styles.section, !isPro && styles.disabledContent]}>
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               {language === "da" ? "Overvåg spots" : "Monitor spots"}
             </Text>
@@ -473,7 +442,7 @@ export default function WeatherAlertsScreen() {
 
         {/* Test Alert */}
         {hasEnoughData && spots.length > 0 && (
-          <View style={[styles.section, !isPro && styles.disabledContent]}>
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               {language === "da" ? "Test din profil" : "Test your profile"}
             </Text>
@@ -567,7 +536,7 @@ export default function WeatherAlertsScreen() {
         )}
 
         {/* Info */}
-        <View style={[styles.infoBox, !isPro && styles.disabledContent]}>
+        <View style={styles.infoBox}>
           <Ionicons name="information-circle-outline" size={18} color={BASE.textSec} />
           <Text style={styles.infoText}>
             {language === "da"
@@ -576,9 +545,6 @@ export default function WeatherAlertsScreen() {
           </Text>
         </View>
       </ScrollView>
-
-      {/* Paywall Modal */}
-      <PaywallModal />
     </SafeAreaView>
   );
 }
@@ -917,55 +883,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: BASE.bg,
-  },
-  // Pro gate styles
-  disabledContent: {
-    opacity: 0.3,
-    pointerEvents: "none" as const,
-  },
-  proGateCard: {
-    backgroundColor: BASE.card,
-    borderRadius: 20,
-    padding: 24,
-    alignItems: "center" as const,
-    borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.3)",
-    marginBottom: 24,
-  },
-  proGateIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    marginBottom: 16,
-  },
-  proGateTitle: {
-    fontSize: 20,
-    fontWeight: "700" as const,
-    color: BASE.text,
-    marginBottom: 8,
-  },
-  proGateDesc: {
-    fontSize: 14,
-    color: BASE.textSec,
-    textAlign: "center" as const,
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  proGateBtn: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 8,
-    backgroundColor: "#F59E0B",
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  proGateBtnText: {
-    fontSize: 16,
-    fontWeight: "700" as const,
-    color: "#000",
   },
 });

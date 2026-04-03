@@ -17,7 +17,6 @@ import Onboarding, { ONBOARDING_COMPLETE_KEY } from "../components/Onboarding";
 import { LanguageProvider } from "../lib/i18n";
 import { ThemeProvider } from "../lib/theme";
 import { syncOfflineTrips } from "../lib/offlineTrips";
-import { configurePurchases, loginUser } from "../lib/purchases";
 
 /**
  * Auth-beskyttet routing
@@ -85,9 +84,6 @@ export default function RootLayout() {
       try {
         await initDB();
 
-        // Initialize RevenueCat
-        await configurePurchases();
-
         // Check if onboarding has been completed
         const onboardingDone = await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY);
         setOnboardingComplete(onboardingDone === "true");
@@ -97,13 +93,7 @@ export default function RootLayout() {
           setUser(u ?? null);
           setAuthReady(true);
 
-          // Link RevenueCat til Firebase bruger
           if (u) {
-            try {
-              await loginUser(u.uid);
-            } catch (e) {
-              console.warn("[RevenueCat] Failed to login user:", e);
-            }
             trySyncOfflineTrips();
           }
         });

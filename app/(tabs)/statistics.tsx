@@ -35,7 +35,6 @@ import {
   BarChart,
   AdvancedBarChart,
 } from "../../components/statistics";
-import { ProFeatureGate } from "../../components/ProFeatureGate";
 
 
 const { width } = Dimensions.get("window");
@@ -740,12 +739,9 @@ export default function StatisticsScreen() {
             <QuickStatsGrid stats={quickStats} columns={3} />
           </Animated.View>
 
-          {/* Spot Performance Section - PRO */}
+          {/* Spot Performance Section */}
           {(currentSpotAnalysis.bestSpot || currentSpotAnalysis.worstSpot) && (
-            <ProFeatureGate
-              featureName={language === "da" ? "Spot-analyse" : "Spot Analysis"}
-              style={styles.section}
-            >
+            <View style={styles.section}>
               <Text style={styles.sectionTitle}>{t("spotPerformance")}</Text>
               <View style={styles.spotPerformanceRow}>
                 {currentSpotAnalysis.bestSpot && (
@@ -801,14 +797,11 @@ export default function StatisticsScreen() {
                   </View>
                 )}
               </View>
-            </ProFeatureGate>
+            </View>
           )}
 
-          {/* Chart Section - PRO */}
-          <ProFeatureGate
-            featureName={language === "da" ? "Månedsoversigt" : "Monthly Overview"}
-            style={styles.section}
-          >
+          {/* Chart Section */}
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               {activeTab === "year" ? t("monthlyOverview") : t("catchesPerYear")}
             </Text>
@@ -837,13 +830,10 @@ export default function StatisticsScreen() {
                 />
               </GlassCard>
             )}
-          </ProFeatureGate>
+          </View>
 
-          {/* Fishing Pattern Section - PRO */}
-          <ProFeatureGate
-            featureName={language === "da" ? "Fiskemønster" : "Fishing Pattern"}
-            style={styles.section}
-          >
+          {/* Fishing Pattern Section */}
+          <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t("fishingPattern")}</Text>
             </View>
@@ -894,7 +884,7 @@ export default function StatisticsScreen() {
                 <Text style={styles.emptyText}>{t("notEnoughData")}</Text>
               </GlassCard>
             )}
-          </ProFeatureGate>
+          </View>
         </>
       ) : (
         <GlassCard style={styles.emptyState}>

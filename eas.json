@@ -4,21 +4,15 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "base": {
-      "postInstall": "bash eas-build-post-install.sh"
-    },
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "extends": "base"
+      "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal",
-      "extends": "base"
+      "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true,
-      "extends": "base"
+      "autoIncrement": true
     }
   },
   "submit": {

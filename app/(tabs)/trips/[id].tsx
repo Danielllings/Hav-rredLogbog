@@ -836,65 +836,67 @@ export default function TripDetailScreen() {
               </View>
 
               {/* Grafer */}
-              {evaluation.airTempSeries?.length > 0 && (
-                <StatGraph
-                  series={evaluation.airTempSeries}
-                  label={t("airTemp")}
-                  unit="°C"
-                  tripStartMs={tripStartMs}
-                  tripEndMs={tripEndMs}
-                />
-              )}
+              <>
+                {evaluation.airTempSeries?.length > 0 && (
+                  <StatGraph
+                    series={evaluation.airTempSeries}
+                    label={t("airTemp")}
+                    unit="°C"
+                    tripStartMs={tripStartMs}
+                    tripEndMs={tripEndMs}
+                  />
+                )}
 
-              {evaluation.windSpeedSeries?.length > 0 && (
-                <StatGraph
-                  series={evaluation.windSpeedSeries}
-                  label={t("windSpeed")}
-                  unit="m/s"
-                  tripStartMs={tripStartMs}
-                  tripEndMs={tripEndMs}
-                />
-              )}
+                {evaluation.windSpeedSeries?.length > 0 && (
+                  <StatGraph
+                    series={evaluation.windSpeedSeries}
+                    label={t("windSpeed")}
+                    unit="m/s"
+                    tripStartMs={tripStartMs}
+                    tripEndMs={tripEndMs}
+                  />
+                )}
 
-              {evaluation.waterTempSeries?.length > 0 && (
-                <StatGraph
-                  series={evaluation.waterTempSeries}
-                  label={t("waterTemp")}
-                  unit="°C"
-                  tripStartMs={tripStartMs}
-                  tripEndMs={tripEndMs}
-                />
-              )}
+                {evaluation.waterTempSeries?.length > 0 && (
+                  <StatGraph
+                    series={evaluation.waterTempSeries}
+                    label={t("waterTemp")}
+                    unit="°C"
+                    tripStartMs={tripStartMs}
+                    tripEndMs={tripEndMs}
+                  />
+                )}
 
-              {evaluation.waterLevelSeries?.length > 0 && (
-                <StatGraph
-                  series={evaluation.waterLevelSeries}
-                  label={t("waterLevel")}
-                  unit="cm"
-                  tripStartMs={tripStartMs}
-                  tripEndMs={tripEndMs}
-                />
-              )}
+                {evaluation.waterLevelSeries?.length > 0 && (
+                  <StatGraph
+                    series={evaluation.waterLevelSeries}
+                    label={t("waterLevel")}
+                    unit="cm"
+                    tripStartMs={tripStartMs}
+                    tripEndMs={tripEndMs}
+                  />
+                )}
 
-              {evaluation.pressureSeries?.length > 0 && (
-                <StatGraph
-                  series={evaluation.pressureSeries}
-                  label={t("pressure")}
-                  unit="hPa"
-                  tripStartMs={tripStartMs}
-                  tripEndMs={tripEndMs}
-                />
-              )}
+                {evaluation.pressureSeries?.length > 0 && (
+                  <StatGraph
+                    series={evaluation.pressureSeries}
+                    label={t("pressure")}
+                    unit="hPa"
+                    tripStartMs={tripStartMs}
+                    tripEndMs={tripEndMs}
+                  />
+                )}
 
-              {evaluation.humiditySeries?.length > 0 && (
-                <StatGraph
-                  series={evaluation.humiditySeries}
-                  label={t("humidity")}
-                  unit="%"
-                  tripStartMs={tripStartMs}
-                  tripEndMs={tripEndMs}
-                />
-              )}
+                {evaluation.humiditySeries?.length > 0 && (
+                  <StatGraph
+                    series={evaluation.humiditySeries}
+                    label={t("humidity")}
+                    unit="%"
+                    tripStartMs={tripStartMs}
+                    tripEndMs={tripEndMs}
+                  />
+                )}
+              </>
 
               {/* Data source */}
               <View style={styles.sourceSection}>

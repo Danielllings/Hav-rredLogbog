@@ -81,7 +81,10 @@ import { SalinityHeatmapOverlay } from "../../shared/components/SalinityHeatmapO
 import { WaterLevelOverlay } from "../../shared/components/WaterLevelOverlay";
 import { WindOverlay } from "../../shared/components/WindOverlay";
 import { SpotWeatherPanel } from "../../shared/components/SpotWeatherPanel";
-import { ProFeatureGate, useProFeature } from "../../components/ProFeatureGate";
+import { GlassCard } from "../../components/statistics/GlassCard";
+import { WeatherQuickPreview } from "../../components/WeatherQuickPreview";
+import { SkeletonLoader, SkeletonForecastDays, SkeletonGraph } from "../../components/SkeletonLoader";
+import { APPLE } from "../../constants/appleTheme";
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -395,7 +398,6 @@ export default function SpotWeatherScreen() {
   const { t, language } = useLanguage();
   const { theme } = useTheme();
   const params = useLocalSearchParams<{ createSpotLat?: string; createSpotLng?: string }>();
-  const { isPro, PaywallModal } = useProFeature();
 
   const [pos, setPos] = useState<LatLng | null>(null);
   const [showForecast, setShowForecast] = useState(false);
@@ -432,6 +434,15 @@ export default function SpotWeatherScreen() {
 
   // lille action-UI ved valgt lokation (klik på kort / søg / current location)
   const [showLocationActions, setShowLocationActions] = useState(false);
+
+  // Quick weather preview state
+  const [quickWeather, setQuickWeather] = useState<{
+    temp: number | null;
+    wind: number | null;
+    windDir: number | null;
+  } | null>(null);
+  const [quickWeatherLoading, setQuickWeatherLoading] = useState(false);
+  const quickWeatherTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // tilføj spot-modal
   const [addSpotModalVisible, setAddSpotModalVisible] = useState(false);
@@ -724,6 +735,72 @@ export default function SpotWeatherScreen() {
     const { sunrise, sunset } = getSunTimes(pos.latitude, pos.longitude);
     setSunTimes({ sunrise, sunset });
   }, [pos]);
+
+  // Quick weather fetch når pos ændres
+  const lastQuickWeatherPosRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Nulstil kun når location card lukkes
+    if (!showLocationActions) {
+      setQuickWeather(null);
+      setQuickWeatherLoading(false);
+      lastQuickWeatherPosRef.current = null;
+      return;
+    }
+
+    if (!pos) {
+      return;
+    }
+
+    // Check om vi allerede har hentet for denne position
+    const posKey = `${pos.latitude.toFixed(4)},${pos.longitude.toFixed(4)}`;
+    if (lastQuickWeatherPosRef.current === posKey) {
+      return; // Allerede hentet for denne position
+    }
+
+    // Clear previous timeout
+    if (quickWeatherTimeoutRef.current) {
+      clearTimeout(quickWeatherTimeoutRef.current);
+    }
+
+    setQuickWeatherLoading(true);
+    let cancelled = false;
+
+    // Debounce: vent 300ms før fetch
+    quickWeatherTimeoutRef.current = setTimeout(async () => {
+      try {
+        const edr = await getSpotForecastEdr(pos.latitude, pos.longitude);
+        if (cancelled) return;
+
+        lastQuickWeatherPosRef.current = posKey;
+
+        if (edr) {
+          setQuickWeather({
+            temp: edr.airTempSeries[0]?.v ?? null,
+            wind: edr.windSpeedSeries[0]?.v ?? null,
+            windDir: edr.windDirSeries[0]?.v ?? null,
+          });
+        } else {
+          setQuickWeather(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.log("Quick weather fetch error:", err);
+        setQuickWeather(null);
+      } finally {
+        if (!cancelled) {
+          setQuickWeatherLoading(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      if (quickWeatherTimeoutRef.current) {
+        clearTimeout(quickWeatherTimeoutRef.current);
+      }
+    };
+  }, [pos?.latitude, pos?.longitude, showLocationActions]);
 
   // styr animation på Vejr & Hav-bottomsheet
   useEffect(() => {
@@ -1334,10 +1411,7 @@ export default function SpotWeatherScreen() {
             )}
 
             {activeMenuPanel === "weather" && (
-              <ProFeatureGate
-                featureName={language === "da" ? "Vejrlag" : "Weather Layers"}
-                style={styles.menuPanelContent}
-              >
+              <View style={styles.menuPanelContent}>
                 <Pressable
                   style={styles.menuOptionRow}
                   onPress={() => {
@@ -1437,7 +1511,7 @@ export default function SpotWeatherScreen() {
                     </Text>
                   </Pressable>
                 )}
-              </ProFeatureGate>
+              </View>
             )}
           </Animated.View>
 
@@ -1520,44 +1594,54 @@ export default function SpotWeatherScreen() {
 
         {/* Lille UI når en lokation er valgt på kortet (ikke spot) */}
         {pos && showLocationActions && !selectedSpot && (
-          <View style={styles.locationCard}>
-            <View style={styles.locationCardHeader}>
-              <View style={styles.locationCardIcon}>
-                <Ionicons name="location" size={18} color={THEME.graphYellow} />
+          <GlassCard style={styles.locationCard} intensity="medium" noPadding>
+            <View style={styles.locationCardContent}>
+              <View style={styles.locationCardHeader}>
+                <View style={styles.locationCardIcon}>
+                  <Ionicons name="location" size={18} color={THEME.graphYellow} />
+                </View>
+                <View style={styles.locationCardInfo}>
+                  <Text style={styles.locationCardTitle}>{t("selectedLocation")}</Text>
+                  <Text style={styles.locationCardCoords}>
+                    {pos.latitude.toFixed(5)}, {pos.longitude.toFixed(5)}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.locationCardInfo}>
-                <Text style={styles.locationCardTitle}>{t("selectedLocation")}</Text>
-                <Text style={styles.locationCardCoords}>
-                  {pos.latitude.toFixed(5)}, {pos.longitude.toFixed(5)}
-                </Text>
+
+              {/* Quick weather preview */}
+              <WeatherQuickPreview
+                temp={quickWeather?.temp ?? null}
+                wind={quickWeather?.wind ?? null}
+                windDir={quickWeather?.windDir ?? null}
+                loading={quickWeatherLoading}
+              />
+
+              <View style={styles.locationCardBtns}>
+                <Pressable
+                  style={styles.locationPrimaryBtn}
+                  onPress={() => {
+                    setShowLocationActions(false);
+                    setShowForecast(true);
+                  }}
+                >
+                  <Ionicons name="cloud" size={16} color={THEME.graphYellow} />
+                  <Text style={styles.locationPrimaryBtnText}>{t("getWeather")}</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.locationSecondaryBtn}
+                  onPress={() => {
+                    if (!pos) return;
+                    setNewSpotName("");
+                    setAddSpotModalVisible(true);
+                  }}
+                >
+                  <Ionicons name="bookmark-outline" size={16} color={THEME.graphYellow} />
+                  <Text style={styles.locationSecondaryBtnText}>{t("saveSpot")}</Text>
+                </Pressable>
               </View>
             </View>
-
-            <View style={styles.locationCardBtns}>
-              <Pressable
-                style={styles.locationPrimaryBtn}
-                onPress={() => {
-                  setShowLocationActions(false);
-                  setShowForecast(true);
-                }}
-              >
-                <Ionicons name="cloud" size={16} color={THEME.graphYellow} />
-                <Text style={styles.locationPrimaryBtnText}>{t("getWeather")}</Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.locationSecondaryBtn}
-                onPress={() => {
-                  if (!pos) return;
-                  setNewSpotName("");
-                  setAddSpotModalVisible(true);
-                }}
-              >
-                <Ionicons name="bookmark-outline" size={16} color={THEME.graphYellow} />
-                <Text style={styles.locationSecondaryBtnText}>{t("saveSpot")}</Text>
-              </Pressable>
-            </View>
-          </View>
+          </GlassCard>
         )}
 
         {/* Vejr & Hav-bottomsheet (til fri lokation) */}
@@ -1629,11 +1713,18 @@ export default function SpotWeatherScreen() {
                 </View>
               )}
 
-              {/* Loading state */}
+              {/* Loading state med skeleton placeholders */}
               {loading && (
-                <View style={styles.weatherLoadingRow}>
-                  <ActivityIndicator color={THEME.graphYellow} />
-                  <Text style={styles.weatherLoadingText}>{t("loadingForecasts")}</Text>
+                <View style={styles.weatherLoadingContainer}>
+                  <View style={styles.weatherLoadingRow}>
+                    <SkeletonLoader width={20} height={20} borderRadius={10} />
+                    <Text style={styles.weatherLoadingText}>{t("loadingForecasts")}</Text>
+                  </View>
+                  {/* Skeleton for forecast days */}
+                  <SkeletonForecastDays days={5} style={{ marginTop: 16 }} />
+                  {/* Skeleton for graphs */}
+                  <SkeletonGraph style={{ marginTop: 20 }} />
+                  <SkeletonGraph />
                 </View>
               )}
 
@@ -2304,10 +2395,6 @@ export default function SpotWeatherScreen() {
           </View>
         </Pressable>
       </Modal>
-
-      {/* Pro Feature Paywall Modal */}
-      <PaywallModal />
-
     </>
   );
 }
@@ -2390,11 +2477,8 @@ function MoonPhaseContent({ language, onClose }: { language: string; onClose: ()
         </Pressable>
       </View>
 
-      {/* Pro Feature Gated Content */}
-      <ProFeatureGate
-        featureName={language === "da" ? "Månefase detaljer" : "Moon Phase Details"}
-        style={styles.moonProGateContainer}
-      >
+      {/* Moon Phase Details */}
+      <View style={styles.moonProGateContainer}>
         {/* Current Phase */}
         <View style={styles.moonCurrentRow}>
           <View style={styles.moonBigIcon}>
@@ -2437,7 +2521,7 @@ function MoonPhaseContent({ language, onClose }: { language: string; onClose: ()
             );
           })}
         </View>
-      </ProFeatureGate>
+      </View>
     </>
   );
 }
@@ -2900,28 +2984,26 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Location action card - Modern glassmorphism
+  // Location action card - Uses GlassCard
   locationCard: {
     position: "absolute",
     left: 20,
     right: 20,
     bottom: "5%",
-    backgroundColor: "rgba(15, 15, 20, 0.92)",
-    borderRadius: 24,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.12)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 8,
   },
+  locationCardContent: {
+    padding: 18,
+  },
   locationCardHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   locationCardIcon: {
     width: 44,
@@ -2949,6 +3031,7 @@ const styles = StyleSheet.create({
   locationCardBtns: {
     flexDirection: "row",
     gap: 10,
+    marginTop: 12,
   },
   locationPrimaryBtn: {
     flex: 1,
@@ -3141,17 +3224,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
+  weatherLoadingContainer: {
+    marginTop: 8,
+  },
   weatherLoadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    padding: 20,
-    backgroundColor: THEME.card,
-    borderRadius: 16,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
+    gap: 10,
+    marginBottom: 8,
   },
   weatherLoadingText: {
     color: THEME.textSec,

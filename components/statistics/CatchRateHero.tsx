@@ -1,10 +1,9 @@
 /**
- * CatchRateHero - Stor animeret fangstrate display
- * Enkelt ring med gradient
+ * CatchRateHero - Glassy animated catch rate ring
  */
 
 import React, { useEffect } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Platform } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import Animated, {
   useSharedValue,
@@ -33,7 +32,7 @@ export function CatchRateHero({
   size = 200,
 }: CatchRateHeroProps) {
   const { t } = useLanguage();
-  const strokeWidth = 12;
+  const strokeWidth = 10;
   const radius = (size - strokeWidth * 2) / 2;
   const circumference = 2 * Math.PI * radius;
 
@@ -59,9 +58,6 @@ export function CatchRateHero({
 
   return (
     <View style={styles.container}>
-      {/* Glow bag ringen */}
-      <View style={[styles.glow, { width: size - 20, height: size - 20 }]} />
-
       <Svg width={size} height={size}>
         <Defs>
           <LinearGradient id="rateGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -71,12 +67,12 @@ export function CatchRateHero({
           </LinearGradient>
         </Defs>
 
-        {/* Baggrunds-ring */}
+        {/* Track ring — glass-like subtle */}
         <Circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={APPLE.gray2}
+          stroke="rgba(255,255,255,0.08)"
           strokeWidth={strokeWidth}
           fill="none"
         />
@@ -126,13 +122,6 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     paddingVertical: 8,
-  },
-  glow: {
-    position: "absolute",
-    top: 18,
-    borderRadius: 999,
-    backgroundColor: APPLE.accent,
-    opacity: 0.08,
   },
   centerContent: {
     position: "absolute",

@@ -426,11 +426,13 @@ function analyzeTripsWeather(
       pressureTrendStats[trendKey].fish += fishCount;
     }
 
-    // Pressure (hPa) - præcis værdi
+    // Pressure (hPa) - range buckets
     const pressure = statAvg(evaluation?.pressureHPa) ?? statAvg(evaluation?.pressure) ?? statAvg(meta?.pressure);
     if (pressure != null && Number.isFinite(pressure)) {
-      const roundedPressure = Math.round(pressure);
-      const pressureKey = `${roundedPressure} hPa`;
+      const pressureKey = pressure < 1000 ? t("pressureVeryLow")
+        : pressure < 1010 ? t("pressureLow")
+        : pressure < 1020 ? t("pressureNormal")
+        : t("pressureHigh");
       if (!pressureStats[pressureKey]) pressureStats[pressureKey] = { trips: 0, fish: 0 };
       pressureStats[pressureKey].trips += 1;
       pressureStats[pressureKey].fish += fishCount;

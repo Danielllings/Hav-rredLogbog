@@ -356,6 +356,12 @@ export const da = {
   mostlyCloudy: "Overvejende skyet",
   overcast: "Overskyet",
 
+  // Pressure ranges
+  pressureVeryLow: "Lavtryk (<1000)",
+  pressureLow: "Lavt (1000-1010)",
+  pressureNormal: "Normalt (1010-1020)",
+  pressureHigh: "Højtryk (>1020)",
+
   // Pressure trend
   rising: "Stigende",
   falling: "Faldende",
@@ -688,6 +694,19 @@ export const da = {
   goalSave: "Gem mål",
   goalCancel: "Annuller",
   goalLongPressHint: "Hold nede for at slette mål",
+
+  // Fisketegn
+  fishingLicense: "Fisketegn",
+  buyFishingLicense: "Køb fisketegn",
+  fishingLicenseDesc: "Fisketegn er lovpligtigt for alle mellem 18-65 år",
+  licenseExpiry: "Udløbsdato",
+  licenseExpirySet: "Sæt udløbsdato",
+  licenseExpiryNone: "Ingen dato sat",
+  licenseExpired: "Udløbet",
+  licenseDaysLeft: "dage tilbage",
+  licenseValid: "Gyldigt",
+  licenseRemove: "Fjern dato",
+  licenseExpiredReminder: "Dit fisketegn er udløbet. Forny det inden du fisker.",
 
 };
 
@@ -1045,6 +1064,12 @@ export const en: typeof da = {
   mostlyCloudy: "Mostly cloudy",
   overcast: "Overcast",
 
+  // Pressure ranges
+  pressureVeryLow: "Low (<1000)",
+  pressureLow: "Low (1000-1010)",
+  pressureNormal: "Normal (1010-1020)",
+  pressureHigh: "High (>1020)",
+
   // Pressure trend
   rising: "Rising",
   falling: "Falling",
@@ -1377,6 +1402,19 @@ export const en: typeof da = {
   goalSave: "Save Goal",
   goalCancel: "Cancel",
   goalLongPressHint: "Long press to delete a goal",
+
+  // Fishing License
+  fishingLicense: "Fishing License",
+  buyFishingLicense: "Buy fishing license",
+  fishingLicenseDesc: "A fishing license is required by law for ages 18-65",
+  licenseExpiry: "Expiry date",
+  licenseExpirySet: "Set expiry date",
+  licenseExpiryNone: "No date set",
+  licenseExpired: "Expired",
+  licenseDaysLeft: "days left",
+  licenseValid: "Valid",
+  licenseRemove: "Remove date",
+  licenseExpiredReminder: "Your fishing license has expired. Renew before fishing.",
 
 };
 

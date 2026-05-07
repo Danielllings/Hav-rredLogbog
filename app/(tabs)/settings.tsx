@@ -10,6 +10,8 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  Linking,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -62,8 +64,9 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { statsTrips, listTrips } from "../../lib/trips";
 import { listSpots } from "../../lib/spots";
-import { getUserCollectionRef } from "../../lib/firestore";
-import { getDocs, deleteDoc } from "firebase/firestore";
+import { getUserCollectionRef, getUserId } from "../../lib/firestore";
+import { getDocs, deleteDoc, doc, setDoc, getDoc } from "firebase/firestore";
+import { db } from "../../lib/firebase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLanguage, Language } from "../../lib/i18n";
 import { useTheme } from "../../lib/theme";
@@ -123,6 +126,13 @@ export default function SettingsScreen() {
   const [deleteAccountConfirmText, setDeleteAccountConfirmText] = useState("");
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [creditsModalVisible, setCreditsModalVisible] = useState(false);
+
+  // Fisketegn
+  const [licenseExpiry, setLicenseExpiry] = useState<string | null>(null);
+  const [licenseModalVisible, setLicenseModalVisible] = useState(false);
+  const [licenseDay, setLicenseDay] = useState(1);
+  const [licenseMonth, setLicenseMonth] = useState(1);
+  const [licenseYear, setLicenseYear] = useState(new Date().getFullYear() + 1);
 
   // Support
   const [supportModalVisible, setSupportModalVisible] = useState(false);
@@ -206,6 +216,19 @@ export default function SettingsScreen() {
       setUserEmail(user?.email);
     });
     return unsubscribe;
+  }, []);
+
+  // Load fishing license expiry from Firestore
+  useEffect(() => {
+    (async () => {
+      try {
+        const userId = getUserId();
+        const snap = await getDoc(doc(db, "users", userId, "settings", "fishingLicense"));
+        if (snap.exists()) {
+          setLicenseExpiry(snap.data().expiry ?? null);
+        }
+      } catch {}
+    })();
   }, []);
 
   const handleSignOut = async () => {
@@ -561,6 +584,181 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
         </View>
+
+        {/* Fisketegn */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t("fishingLicense")}</Text>
+          <View style={styles.card}>
+            {/* Køb fisketegn */}
+            <Pressable
+              onPress={() => Linking.openURL("https://fisketegn.dk")}
+              style={({ pressed }) => [
+                styles.row,
+                { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
+              ]}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="card-outline" size={18} color={THEME.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>{t("buyFishingLicense")}</Text>
+                <Text style={styles.value}>{t("fishingLicenseDesc")}</Text>
+              </View>
+              <Ionicons name="open-outline" size={16} color={THEME.textSec} />
+            </Pressable>
+
+            <View style={{ height: 1, backgroundColor: THEME.border, marginHorizontal: 12 }} />
+
+            {/* Udløbsdato */}
+            <Pressable
+              onPress={() => {
+                if (licenseExpiry) {
+                  const parts = licenseExpiry.split("-");
+                  setLicenseYear(parseInt(parts[0]) || new Date().getFullYear() + 1);
+                  setLicenseMonth(parseInt(parts[1]) || 1);
+                  setLicenseDay(parseInt(parts[2]) || 1);
+                }
+                setLicenseModalVisible(true);
+              }}
+              style={({ pressed }) => [
+                styles.row,
+                { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
+              ]}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="calendar-outline" size={18} color={THEME.textSec} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>{t("licenseExpiry")}</Text>
+                {licenseExpiry ? (() => {
+                  const expDate = new Date(licenseExpiry + "T00:00:00");
+                  const now = new Date();
+                  const daysLeft = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  const isExpired = daysLeft < 0;
+                  const formatted = expDate.toLocaleDateString(language === "da" ? "da-DK" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+                  return (
+                    <Text style={[styles.value, { color: isExpired ? "#EF4444" : daysLeft <= 30 ? THEME.accent : "#22C55E" }]}>
+                      {formatted} — {isExpired
+                        ? t("licenseExpired")
+                        : `${daysLeft} ${t("licenseDaysLeft")}`}
+                    </Text>
+                  );
+                })() : (
+                  <Text style={styles.value}>{t("licenseExpiryNone")}</Text>
+                )}
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Fisketegn dato modal */}
+        <Modal visible={licenseModalVisible} transparent animationType="fade" onRequestClose={() => setLicenseModalVisible(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalBox}>
+              <Text style={styles.modalTitle}>{t("licenseExpirySet")}</Text>
+
+              {/* Dag / Måned / År vælgere */}
+              <View style={{ flexDirection: "row", gap: 10, marginVertical: 20 }}>
+                {/* Dag */}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: THEME.textSec, fontSize: 10, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, textAlign: "center" }}>
+                    {language === "da" ? "Dag" : "Day"}
+                  </Text>
+                  <ScrollView style={{ height: 120, backgroundColor: THEME.elevated, borderRadius: 12, borderWidth: 1, borderColor: THEME.border }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 44 }}>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                      <Pressable key={d} onPress={() => setLicenseDay(d)} style={{ paddingVertical: 8, alignItems: "center", backgroundColor: licenseDay === d ? THEME.accentMuted : "transparent", borderRadius: 8, marginHorizontal: 4 }}>
+                        <Text style={{ fontSize: 18, fontWeight: licenseDay === d ? "700" : "400", color: licenseDay === d ? THEME.accent : THEME.text }}>{d}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                {/* Måned */}
+                <View style={{ flex: 1.3 }}>
+                  <Text style={{ color: THEME.textSec, fontSize: 10, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, textAlign: "center" }}>
+                    {language === "da" ? "Måned" : "Month"}
+                  </Text>
+                  <ScrollView style={{ height: 120, backgroundColor: THEME.elevated, borderRadius: 12, borderWidth: 1, borderColor: THEME.border }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 44 }}>
+                    {(language === "da"
+                      ? ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"]
+                      : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                    ).map((name, i) => (
+                      <Pressable key={i} onPress={() => setLicenseMonth(i + 1)} style={{ paddingVertical: 8, alignItems: "center", backgroundColor: licenseMonth === i + 1 ? THEME.accentMuted : "transparent", borderRadius: 8, marginHorizontal: 4 }}>
+                        <Text style={{ fontSize: 16, fontWeight: licenseMonth === i + 1 ? "700" : "400", color: licenseMonth === i + 1 ? THEME.accent : THEME.text }}>{name}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                {/* År */}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: THEME.textSec, fontSize: 10, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, textAlign: "center" }}>
+                    {language === "da" ? "År" : "Year"}
+                  </Text>
+                  <ScrollView style={{ height: 120, backgroundColor: THEME.elevated, borderRadius: 12, borderWidth: 1, borderColor: THEME.border }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 44 }}>
+                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + i).map((y) => (
+                      <Pressable key={y} onPress={() => setLicenseYear(y)} style={{ paddingVertical: 8, alignItems: "center", backgroundColor: licenseYear === y ? THEME.accentMuted : "transparent", borderRadius: 8, marginHorizontal: 4 }}>
+                        <Text style={{ fontSize: 18, fontWeight: licenseYear === y ? "700" : "400", color: licenseYear === y ? THEME.accent : THEME.text }}>{y}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
+
+              {/* Preview */}
+              <Text style={{ color: THEME.text, fontSize: 16, fontWeight: "700", textAlign: "center", marginBottom: 16 }}>
+                {licenseDay}. {(language === "da"
+                  ? ["januar", "februar", "marts", "april", "maj", "juni", "juli", "august", "september", "oktober", "november", "december"]
+                  : ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+                )[licenseMonth - 1]} {licenseYear}
+              </Text>
+
+              {/* Knapper */}
+              <View style={{ gap: 8 }}>
+                <Pressable
+                  style={[styles.actionBtn]}
+                  onPress={async () => {
+                    const dateStr = `${licenseYear}-${String(licenseMonth).padStart(2, "0")}-${String(licenseDay).padStart(2, "0")}`;
+                    try {
+                      const userId = getUserId();
+                      await setDoc(doc(db, "users", userId, "settings", "fishingLicense"), { expiry: dateStr, updatedAt: new Date().toISOString() });
+                    } catch {}
+                    setLicenseExpiry(dateStr);
+                    setLicenseModalVisible(false);
+                  }}
+                >
+                  <Ionicons name="checkmark" size={20} color={THEME.primaryText} />
+                  <Text style={styles.actionBtnText}>{t("save")}</Text>
+                </Pressable>
+
+                {licenseExpiry && (
+                  <Pressable
+                    style={[styles.secondaryBtn]}
+                    onPress={async () => {
+                      try {
+                        const userId = getUserId();
+                        await setDoc(doc(db, "users", userId, "settings", "fishingLicense"), { expiry: null });
+                      } catch {}
+                      setLicenseExpiry(null);
+                      setLicenseModalVisible(false);
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                    <Text style={[styles.secondaryBtnText, { color: "#EF4444" }]}>{t("licenseRemove")}</Text>
+                  </Pressable>
+                )}
+
+                <Pressable
+                  style={styles.secondaryBtn}
+                  onPress={() => setLicenseModalVisible(false)}
+                >
+                  <Text style={styles.secondaryBtnText}>{t("close")}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Support */}
         <View style={styles.section}>

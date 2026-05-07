@@ -42,6 +42,9 @@ import { Link, useRouter } from "expo-router";
 import { saveTrip, listTrips } from "../../lib/trips";
 import { listSpots, type SpotRow } from "../../lib/spots";
 import { evaluateTripWithDmi, getSpotForecastEdr } from "../../lib/dmi";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../lib/firebase";
+import { getUserId } from "../../lib/firestore";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -476,6 +479,7 @@ export default function Track() {
   const { theme } = useTheme();
   const router = useRouter();
   const [running, setRunning] = useState(false);
+  const [licenseExpired, setLicenseExpired] = useState(false);
   const [points, setPoints] = useState<Pt[]>([]);
   const [distanceM, setDistanceM] = useState(0);
   const [sec, setSec] = useState(0);
@@ -487,6 +491,8 @@ export default function Track() {
     waterLevelCM: number | null;
     waveHeightM: number | null;
     trend: "up" | "down" | "flat" | null;
+    pressureHPa?: number;
+    pressureTrend?: "rising" | "falling" | "stable";
   } | null>(null);
   const [liveFetching, setLiveFetching] = useState(false);
   const [liveFetchedAt, setLiveFetchedAt] = useState<number | null>(null);
@@ -598,6 +604,7 @@ export default function Track() {
         const temp = pickNearest(edr.airTempSeries, now);
         const wlPoint = pickNearest(edr.waterLevelSeries, now);
         const wavePoint = pickNearest(edr.waveHeightSeries, now);
+        const pressure = pickNearest(edr.pressureSeries, now);
 
         let trend: "up" | "down" | "flat" | null = null;
         if (edr.waterLevelSeries && edr.waterLevelSeries.length >= 2) {
@@ -609,6 +616,19 @@ export default function Track() {
           else trend = "flat";
         }
 
+        // Pressure trend: compare current pressure to ~1 hour ago
+        let pressureTrend: "rising" | "falling" | "stable" | undefined;
+        if (pressure && edr.pressureSeries && edr.pressureSeries.length >= 2) {
+          const oneHourAgo = now - 60 * 60 * 1000;
+          const prev = pickNearest(edr.pressureSeries, oneHourAgo);
+          if (prev && prev.ts !== pressure.ts) {
+            const pDiff = pressure.v - prev.v;
+            if (pDiff > 0.5) pressureTrend = "rising";
+            else if (pDiff < -0.5) pressureTrend = "falling";
+            else pressureTrend = "stable";
+          }
+        }
+
         setLiveWeather({
           tempC: temp?.v ?? null,
           windMS: wind?.v ?? null,
@@ -616,6 +636,8 @@ export default function Track() {
           waterLevelCM: wlPoint?.v ?? null,
           waveHeightM: wavePoint?.v ?? null,
           trend,
+          pressureHPa: pressure?.v ?? undefined,
+          pressureTrend,
         });
         setLiveFetchedAt(now);
       } catch (e) {
@@ -926,11 +948,23 @@ export default function Track() {
       (async () => {
         try {
           await syncOfflineTrips();
-        } catch (e) {
-          // console.log("Fejl ved sync af offline ture:", e);
-        }
+        } catch (e) {}
         await hydrateTrackFromStorage();
         await refreshLists();
+
+        // Check fishing license expiry
+        try {
+          const userId = getUserId();
+          const snap = await getDoc(doc(db, "users", userId, "settings", "fishingLicense"));
+          if (snap.exists() && snap.data().expiry) {
+            const expDate = new Date(snap.data().expiry + "T00:00:00");
+            setLicenseExpired(expDate.getTime() < Date.now());
+          } else {
+            setLicenseExpired(false);
+          }
+        } catch {
+          setLicenseExpired(false);
+        }
       })();
       return () => {};
     }, [refreshLists, hydrateTrackFromStorage])
@@ -1650,7 +1684,13 @@ export default function Track() {
             onRegionChange={setRegion}
             mapProvider={trackingMapProvider}
             spotName={undefined}
-            weather={undefined}
+            weather={liveWeather ? {
+              waterTemp: undefined,
+              windSpeed: liveWeather.windMS ?? undefined,
+              windDir: liveWeather.windDirDeg != null ? `${Math.round(liveWeather.windDirDeg)}°` : undefined,
+              pressureHPa: liveWeather.pressureHPa,
+              pressureTrend: liveWeather.pressureTrend,
+            } : undefined}
             onMarkCatch={markCatchNow}
             onMeasureTemp={openWaterTempModal}
             onStopTrip={() => setStopConfirmVisible(true)}
@@ -1733,6 +1773,15 @@ export default function Track() {
               </View>
               <Ionicons name="chevron-forward" size={20} color="rgba(13, 13, 15, 0.4)" />
             </Pressable>
+
+            {/* License expired reminder — only for users who previously set a date */}
+            {licenseExpired && (
+              <Text style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, textAlign: "center", marginTop: 12 }}>
+                {language === "da"
+                  ? "Dit fisketegn er udløbet — Indtast ny udløbsdato i indstillinger"
+                  : "Your fishing license has expired — Set a new expiry date in settings"}
+              </Text>
+            )}
 
           </>
         )}
@@ -2772,6 +2821,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     marginTop: 1,
+  },
+  licenseWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginTop: 10,
+  },
+  licenseWarningText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "500",
+    flex: 1,
+    lineHeight: 17,
   },
 
   runningActions: {

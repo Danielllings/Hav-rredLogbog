@@ -53,27 +53,16 @@ export type PeriodeType = "helaarlig" | "halvaarlig" | "anden";
  * Bestem periodetypen baseret på fredningsperiode-tekst
  */
 export function getPeriodeType(feature: FredningsbaelteFeature): PeriodeType {
+  // API giver clean numerisk kode: "1" = helårlig, "2" = halvårlig, "0" = særfredning
+  const typeCode = feature.properties.PeriodeTyp?.trim() ?? "";
+  if (typeCode === "1") return "helaarlig";
+  if (typeCode === "2") return "halvaarlig";
+  if (typeCode === "0") return "anden";
+
+  // Fallback: parse tekst
   const periode = feature.properties.FREDNINGSP?.toLowerCase() ?? "";
-  const periodeTyp = feature.properties.PeriodeTyp?.toLowerCase() ?? "";
-
-  // Helårlig fredning
-  if (
-    periode.includes("helår") ||
-    periodeTyp.includes("helår") ||
-    periode.includes("hele året")
-  ) {
-    return "helaarlig";
-  }
-
-  // Standard halvårlig: 16. september - 15. marts
-  if (
-    periode.includes("16. september") ||
-    periode.includes("september") && periode.includes("marts")
-  ) {
-    return "halvaarlig";
-  }
-
-  // Andre perioder
+  if (periode.includes("helår") || periode.includes("hele året")) return "helaarlig";
+  if (periode.includes("september") && periode.includes("marts")) return "halvaarlig";
   return "anden";
 }
 

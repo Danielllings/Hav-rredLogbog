@@ -46,7 +46,7 @@ interface Props {
   onRegionChange: (r: Region) => void;
   mapProvider: any;
   spotName?: string;
-  weather?: { waterTemp?: number; windSpeed?: number; windDir?: string };
+  weather?: { waterTemp?: number; windSpeed?: number; windDir?: string; pressureHPa?: number; pressureTrend?: "rising" | "falling" | "stable" };
   onMarkCatch: () => void;
   onMeasureTemp: () => void;
   onStopTrip: () => void;

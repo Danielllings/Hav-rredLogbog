@@ -1,17 +1,7 @@
-import React, { useState, useEffect, useCallback, memo } from "react";
+import React, { useCallback, memo } from "react";
 import { View, Text, Platform, StyleSheet } from "react-native";
 import { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withSequence,
-  withSpring,
-  withDelay,
-  Easing,
-} from "react-native-reanimated";
 import { type SpotRow } from "../../lib/spots";
 
 const isAndroid = Platform.OS === "android";
@@ -25,48 +15,6 @@ interface SpotMarkerProps {
   onLongPress?: () => void;
   t: TranslateFn;
 }
-
-// Animeret glow effekt komponent for iOS
-const AnimatedGlow = memo(function AnimatedGlow({ active }: { active: boolean }) {
-  const glowOpacity = useSharedValue(0);
-  const glowScale = useSharedValue(1);
-
-  useEffect(() => {
-    if (active) {
-      // Pulserende glow animation
-      glowOpacity.value = withRepeat(
-        withSequence(
-          withTiming(0.6, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0.2, { duration: 1000, easing: Easing.inOut(Easing.ease) })
-        ),
-        -1, // Infinite
-        true // Reverse
-      );
-      glowScale.value = withRepeat(
-        withSequence(
-          withTiming(1.3, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1.1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
-        ),
-        -1,
-        true
-      );
-    } else {
-      glowOpacity.value = withTiming(0, { duration: 200 });
-      glowScale.value = withTiming(1, { duration: 200 });
-    }
-  }, [active]);
-
-  const animatedGlowStyle = useAnimatedStyle(() => ({
-    opacity: glowOpacity.value,
-    transform: [{ scale: glowScale.value }],
-  }));
-
-  if (!active) return null;
-
-  return (
-    <Animated.View style={[styles.glowEffect, animatedGlowStyle]} pointerEvents="none" />
-  );
-});
 
 // Star badge komponent
 const StarBadge = memo(function StarBadge() {
@@ -84,56 +32,14 @@ export const SpotMarker = memo(function SpotMarker({
   onLongPress,
   t,
 }: SpotMarkerProps) {
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
-
-  // Mount animation for best spot
-  const mountScale = useSharedValue(0.5);
-  const mountOpacity = useSharedValue(0);
-
-  useEffect(() => {
-    const delay = isAndroid ? 500 : 300;
-    const timer = setTimeout(() => {
-      setTracksViewChanges(false);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    setTracksViewChanges(true);
-    const timer = setTimeout(() => {
-      setTracksViewChanges(false);
-    }, isAndroid ? 500 : 200);
-    return () => clearTimeout(timer);
-  }, [isBestSpot]);
-
-  // Mount animation for best spot
-  useEffect(() => {
-    if (isBestSpot) {
-      mountOpacity.value = withTiming(1, { duration: 300 });
-      mountScale.value = withDelay(
-        100,
-        withSpring(1, {
-          damping: 12,
-          stiffness: 180,
-          mass: 0.8,
-        })
-      );
-    } else {
-      mountScale.value = 1;
-      mountOpacity.value = 1;
-    }
-  }, [isBestSpot]);
+  // No tracksViewChanges toggling — causes clipping glitch on zoom
+  const tracksViewChanges = false;
 
   const handlePress = useCallback(() => {
     onPress();
   }, [onPress]);
 
   const displayName = spot.name;
-
-  const animatedContainerStyle = useAnimatedStyle(() => ({
-    opacity: mountOpacity.value,
-    transform: [{ scale: mountScale.value }],
-  }));
 
   // Android: use icon with title callout (View wrappers cause clipping bug)
   if (isAndroid) {
@@ -167,13 +73,7 @@ export const SpotMarker = memo(function SpotMarker({
       onCalloutPress={onLongPress}
       zIndex={isBestSpot ? 2 : 1}
     >
-      <Animated.View
-        style={[styles.container, animatedContainerStyle]}
-        collapsable={false}
-      >
-        {/* Glow effekt bag bubble */}
-        <AnimatedGlow active={isBestSpot} />
-
+      <View style={styles.container} collapsable={false}>
         <View
           style={[
             styles.bubble,
@@ -202,7 +102,7 @@ export const SpotMarker = memo(function SpotMarker({
           ]}
           collapsable={false}
         />
-      </Animated.View>
+      </View>
     </Marker>
   );
 }, (prevProps, nextProps) => {
@@ -273,15 +173,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 12,
     borderLeftWidth: 10,
     borderRightWidth: 10,
-  },
-  // Glow effekt
-  glowEffect: {
-    position: "absolute",
-    width: 60,
-    height: 40,
-    borderRadius: 30,
-    backgroundColor: "#F59E0B",
-    top: -5,
   },
   // Star badge
   starBadge: {

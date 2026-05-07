@@ -2240,125 +2240,163 @@ export default function SpotWeatherScreen() {
             style={[styles.popupCard, { maxHeight: "85%" }]}
             onStartShouldSetResponder={() => true}
           >
-            {selectedZone && (
-              <>
-                {/* Header med status */}
-                <View style={styles.zoneHeader}>
-                  <View style={styles.zoneHeaderLeft}>
-                    <View style={[styles.zoneHeaderIcon, { backgroundColor: getPeriodeColor(getPeriodeType(selectedZone)) }]}>
-                      <Ionicons name="shield" size={18} color="#FFF" />
-                    </View>
-                    <View style={styles.zoneHeaderText}>
-                      <Text style={styles.zoneHeaderTitle} numberOfLines={1}>
-                        {selectedZone.properties.NAVN || "Fredningsbælte"}
-                      </Text>
-                      <View style={styles.zoneHeaderStatus}>
-                        <View style={[
-                          styles.zoneStatusDot,
-                          { backgroundColor: isFredningActive(selectedZone) ? "#EF4444" : "#22C55E" }
-                        ]} />
-                        <Text style={[
-                          styles.zoneHeaderStatusText,
-                          { color: isFredningActive(selectedZone) ? "#EF4444" : "#22C55E" }
-                        ]}>
-                          {isFredningActive(selectedZone)
-                            ? (language === "da" ? "Aktiv" : "Active")
-                            : (language === "da" ? "Inaktiv" : "Inactive")}
+            {selectedZone && (() => {
+              const periodeType = getPeriodeType(selectedZone);
+              const periodeColor = getPeriodeColor(periodeType);
+              const isActive = isFredningActive(selectedZone);
+              const bemærkning = selectedZone.properties.BEMARKNING && selectedZone.properties.BEMARKNING !== "0"
+                ? selectedZone.properties.BEMARKNING.trim()
+                : null;
+              const beskrivelse = selectedZone.properties.Beskrivels?.trim() || null;
+              const redskab = selectedZone.properties.Redskab?.trim() || null;
+              const baglimit = selectedZone.properties.Baglimit;
+              const hasExtraInfo = bemærkning || beskrivelse || redskab || (baglimit != null && baglimit > 0);
+
+              return (
+                <>
+                  {/* Status banner */}
+                  <View style={[styles.zoneStatusBanner, { backgroundColor: isActive ? "rgba(239, 68, 68, 0.12)" : "rgba(34, 197, 94, 0.12)" }]}>
+                    <View style={[styles.zoneStatusDot, { backgroundColor: isActive ? "#EF4444" : "#22C55E" }]} />
+                    <Text style={[styles.zoneStatusBannerText, { color: isActive ? "#EF4444" : "#22C55E" }]}>
+                      {isActive
+                        ? (language === "da" ? "Fiskeri forbudt" : "Fishing prohibited")
+                        : (language === "da" ? "Fiskeri tilladt" : "Fishing permitted")}
+                    </Text>
+                  </View>
+
+                  {/* Header */}
+                  <View style={styles.zoneHeader}>
+                    <View style={styles.zoneHeaderLeft}>
+                      <View style={[styles.zoneHeaderIcon, { backgroundColor: periodeColor }]}>
+                        <Ionicons name="shield" size={18} color="#FFF" />
+                      </View>
+                      <View style={styles.zoneHeaderText}>
+                        <Text style={styles.zoneHeaderTitle} numberOfLines={2}>
+                          {selectedZone.properties.NAVN || "Fredningsbælte"}
+                        </Text>
+                        <Text style={styles.zoneHeaderSubtitle}>
+                          {getPeriodeLabel(periodeType, language)}
                         </Text>
                       </View>
                     </View>
-                  </View>
-                  <Pressable style={styles.popupCloseBtn} onPress={() => setSelectedZone(null)}>
-                    <Ionicons name="close" size={20} color={THEME.textSec} />
-                  </Pressable>
-                </View>
-
-                <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 12 }}>
-                  {/* Kompakt info-grid */}
-                  <View style={styles.zoneInfoGrid}>
-                    {/* Periode */}
-                    <View style={styles.zoneInfoItem}>
-                      <Ionicons name="calendar-outline" size={16} color={THEME.textSec} />
-                      <Text style={styles.zoneInfoLabel}>{language === "da" ? "Periode" : "Period"}</Text>
-                      <Text style={styles.zoneInfoValue}>
-                        {selectedZone.properties.FREDNINGSP || getPeriodeLabel(getPeriodeType(selectedZone), language)}
-                      </Text>
-                    </View>
-
-                    {/* Lovgrundlag */}
-                    {selectedZone.properties.LOVGRUNDLA && (
-                      <View style={styles.zoneInfoItem}>
-                        <Ionicons name="document-text-outline" size={16} color={THEME.textSec} />
-                        <Text style={styles.zoneInfoLabel}>{language === "da" ? "Lovgrundlag" : "Legal basis"}</Text>
-                        <Text style={styles.zoneInfoValue} numberOfLines={2}>{selectedZone.properties.LOVGRUNDLA}</Text>
-                      </View>
-                    )}
-
-                    {/* Baglimit */}
-                    {selectedZone.properties.Baglimit !== null && selectedZone.properties.Baglimit !== undefined && (
-                      <View style={styles.zoneInfoItem}>
-                        <Ionicons name="fish-outline" size={16} color={THEME.textSec} />
-                        <Text style={styles.zoneInfoLabel}>{language === "da" ? "Dagskvoter" : "Daily limit"}</Text>
-                        <Text style={styles.zoneInfoValue}>{selectedZone.properties.Baglimit} stk.</Text>
-                      </View>
-                    )}
-
-                    {/* Redskab */}
-                    {selectedZone.properties.Redskab && (
-                      <View style={styles.zoneInfoItem}>
-                        <Ionicons name="construct-outline" size={16} color={THEME.textSec} />
-                        <Text style={styles.zoneInfoLabel}>{language === "da" ? "Redskaber" : "Gear"}</Text>
-                        <Text style={styles.zoneInfoValue} numberOfLines={2}>{selectedZone.properties.Redskab}</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Beskrivelse/Bemærkninger */}
-                  {(selectedZone.properties.Beskrivels || selectedZone.properties.BEMARKNING) && (
-                    <View style={styles.zoneDescBox}>
-                      <Text style={styles.zoneDescText}>
-                        {selectedZone.properties.Beskrivels || selectedZone.properties.BEMARKNING}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Links sektion */}
-                  <View style={styles.zoneLinkSection}>
-                    {/* Specifik bekendtgørelse hvis tilgængelig */}
-                    {selectedZone.properties.WWW && (
-                      <Pressable
-                        style={styles.zonePrimaryLink}
-                        onPress={() => ExpoLinking.openURL(selectedZone.properties.WWW!)}
-                      >
-                        <Ionicons name="document-text" size={18} color="#FFF" />
-                        <Text style={styles.zonePrimaryLinkText}>
-                          {language === "da" ? "Se bekendtgørelse" : "View regulation"}
-                        </Text>
-                        <Ionicons name="open-outline" size={16} color="#FFF" />
-                      </Pressable>
-                    )}
-
-                    {/* Generelt link til Fiskeristyrelsen */}
-                    <Pressable
-                      style={styles.zoneSecondaryLink}
-                      onPress={() => ExpoLinking.openURL("https://fiskeristyrelsen.dk/lyst-og-fritidsfiskeri/fredningsbaelter")}
-                    >
-                      <Ionicons name="globe-outline" size={16} color="#3B82F6" />
-                      <Text style={styles.zoneSecondaryLinkText}>
-                        {language === "da" ? "Fiskeristyrelsen.dk" : "Danish Fisheries Agency"}
-                      </Text>
+                    <Pressable style={styles.popupCloseBtn} onPress={() => setSelectedZone(null)}>
+                      <Ionicons name="close" size={20} color={THEME.textSec} />
                     </Pressable>
                   </View>
 
-                  {/* Vandløbsnummer (lille tekst i bunden) */}
-                  {selectedZone.properties.VANDLOBSNR && (
-                    <Text style={styles.zoneFooterText}>
-                      {language === "da" ? "Vandløbsnr." : "Watercourse no."}: {selectedZone.properties.VANDLOBSNR}
-                    </Text>
-                  )}
-                </ScrollView>
-              </>
-            )}
+                  <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 16 }}>
+                    {/* Periode og type kort */}
+                    <View style={styles.zoneCardRow}>
+                      <View style={[styles.zoneCard, { flex: 1 }]}>
+                        <Ionicons name="calendar-outline" size={16} color={periodeColor} />
+                        <Text style={styles.zoneCardLabel}>{language === "da" ? "Periode" : "Period"}</Text>
+                        <Text style={styles.zoneCardValue}>
+                          {selectedZone.properties.FREDNINGSP || getPeriodeLabel(periodeType, language)}
+                        </Text>
+                      </View>
+                      <View style={[styles.zoneCard, { flex: 1 }]}>
+                        <Ionicons name="ban-outline" size={16} color={periodeColor} />
+                        <Text style={styles.zoneCardLabel}>{language === "da" ? "Bøde" : "Fine"}</Text>
+                        <Text style={styles.zoneCardValue}>2.500 kr.</Text>
+                      </View>
+                    </View>
+
+                    {/* Redskaber tilladt */}
+                    {redskab && (
+                      <View style={styles.zoneInfoRow}>
+                        <Ionicons name="construct-outline" size={15} color={THEME.accent} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.zoneInfoRowLabel}>{language === "da" ? "Tilladte redskaber" : "Permitted gear"}</Text>
+                          <Text style={styles.zoneInfoRowValue}>{redskab}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Dagskvoter */}
+                    {baglimit != null && baglimit > 0 && (
+                      <View style={styles.zoneInfoRow}>
+                        <Ionicons name="fish-outline" size={15} color={THEME.accent} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.zoneInfoRowLabel}>{language === "da" ? "Daglig kvote" : "Daily limit"}</Text>
+                          <Text style={styles.zoneInfoRowValue}>{baglimit} {language === "da" ? "stk. per dag" : "per day"}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Bemærkninger */}
+                    {bemærkning && (
+                      <View style={styles.zoneRemarkBox}>
+                        <Ionicons name="information-circle-outline" size={16} color={THEME.accent} style={{ marginTop: 1 }} />
+                        <Text style={styles.zoneRemarkText}>{bemærkning}</Text>
+                      </View>
+                    )}
+
+                    {/* Beskrivelse */}
+                    {beskrivelse && (
+                      <View style={styles.zoneRemarkBox}>
+                        <Ionicons name="reader-outline" size={16} color={THEME.textSec} style={{ marginTop: 1 }} />
+                        <Text style={styles.zoneRemarkText}>{beskrivelse}</Text>
+                      </View>
+                    )}
+
+                    {/* Lovgrundlag */}
+                    {selectedZone.properties.LOVGRUNDLA && (
+                      <View style={styles.zoneInfoRow}>
+                        <Ionicons name="document-text-outline" size={15} color={THEME.textTertiary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.zoneInfoRowLabel}>{language === "da" ? "Lovgrundlag" : "Legal basis"}</Text>
+                          <Text style={[styles.zoneInfoRowValue, { color: THEME.textSec }]}>{selectedZone.properties.LOVGRUNDLA}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Kontakt */}
+                    {selectedZone.properties.Kontaktste && selectedZone.properties.Kontaktste !== "0" && (
+                      <View style={styles.zoneInfoRow}>
+                        <Ionicons name="call-outline" size={15} color={THEME.textTertiary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.zoneInfoRowLabel}>{language === "da" ? "Kontakt" : "Contact"}</Text>
+                          <Text style={[styles.zoneInfoRowValue, { color: THEME.textSec }]}>{selectedZone.properties.Kontaktste}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Links */}
+                    <View style={styles.zoneLinkSection}>
+                      {selectedZone.properties.WWW && (
+                        <Pressable
+                          style={styles.zonePrimaryLink}
+                          onPress={() => ExpoLinking.openURL(selectedZone.properties.WWW!)}
+                        >
+                          <Ionicons name="document-text" size={18} color="#FFF" />
+                          <Text style={styles.zonePrimaryLinkText}>
+                            {language === "da" ? "Se bekendtgørelse" : "View regulation"}
+                          </Text>
+                          <Ionicons name="open-outline" size={16} color="rgba(255,255,255,0.6)" />
+                        </Pressable>
+                      )}
+
+                      <Pressable
+                        style={styles.zoneSecondaryLink}
+                        onPress={() => ExpoLinking.openURL("https://lfst.dk/lyst-og-fritidsfiskeri/hvor-maa-man-ikke-fiske/fredningsbaelter")}
+                      >
+                        <Ionicons name="globe-outline" size={16} color="#3B82F6" />
+                        <Text style={styles.zoneSecondaryLinkText}>
+                          {language === "da" ? "Fiskeristyrelsen.dk" : "Danish Fisheries Agency"}
+                        </Text>
+                      </Pressable>
+                    </View>
+
+                    {/* Footer */}
+                    {selectedZone.properties.VANDLOBSNR && (
+                      <Text style={styles.zoneFooterText}>
+                        {language === "da" ? "Vandløbsnr." : "Watercourse no."} {selectedZone.properties.VANDLOBSNR}
+                      </Text>
+                    )}
+                  </ScrollView>
+                </>
+              );
+            })()}
           </View>
         </Pressable>
       </Modal>
@@ -4012,7 +4050,26 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Fredningsbælte zone detail styles - kompakt design
+  // Fredningsbælte zone detail styles
+  zoneStatusBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  zoneStatusBannerText: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  zoneStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   zoneHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -4025,9 +4082,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   zoneHeaderIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4036,61 +4093,76 @@ const styles = StyleSheet.create({
   },
   zoneHeaderTitle: {
     color: THEME.text,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
   },
-  zoneHeaderStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 2,
-  },
-  zoneHeaderStatusText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  zoneStatusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  zoneInfoGrid: {
-    backgroundColor: THEME.inputBg,
-    borderRadius: 12,
-    padding: 12,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: THEME.border,
-  },
-  zoneInfoItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  zoneInfoLabel: {
+  zoneHeaderSubtitle: {
     color: THEME.textSec,
     fontSize: 12,
     fontWeight: "500",
-    width: 70,
+    marginTop: 2,
   },
-  zoneInfoValue: {
+  zoneCardRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+  zoneCard: {
+    backgroundColor: THEME.inputBg,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    gap: 4,
+  },
+  zoneCardLabel: {
+    color: THEME.textTertiary,
+    fontSize: 10,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  zoneCardValue: {
     color: THEME.text,
     fontSize: 13,
     fontWeight: "600",
-    flex: 1,
   },
-  zoneDescBox: {
-    backgroundColor: "rgba(245, 158, 11, 0.08)",
+  zoneInfoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.04)",
+  },
+  zoneInfoRowLabel: {
+    color: THEME.textTertiary,
+    fontSize: 10,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  zoneInfoRowValue: {
+    color: THEME.text,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
+    marginTop: 1,
+  },
+  zoneRemarkBox: {
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: "rgba(245, 158, 11, 0.06)",
     borderRadius: 10,
     padding: 12,
-    marginTop: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: THEME.graphYellow,
+    marginTop: 10,
   },
-  zoneDescText: {
+  zoneRemarkText: {
     color: THEME.text,
     fontSize: 13,
     lineHeight: 19,
+    flex: 1,
   },
   zoneLinkSection: {
     marginTop: 16,
@@ -4123,7 +4195,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   zoneFooterText: {
-    color: THEME.textSec,
+    color: THEME.textTertiary,
     fontSize: 11,
     textAlign: "center",
     marginTop: 16,

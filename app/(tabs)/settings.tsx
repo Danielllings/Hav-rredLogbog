@@ -77,13 +77,6 @@ import {
 import { generateReportHtml, type ReportChoice } from "../../lib/pdfReport";
 import { listGoals, computeGoalProgress, isGoalCompleted, updateGoalDoc } from "../../lib/goals";
 import { listCatches } from "../../lib/catches";
-import {
-  getWidgetConfig,
-  saveWidgetConfig,
-  clearWidgetConfig,
-  updateWidgetWeatherData,
-} from "../../lib/widgetData";
-import type { WidgetConfig } from "../../types/widget";
 
 // Demo konto email
 const DEMO_EMAIL = "demo@havorredlogbog.dk";
@@ -130,11 +123,6 @@ export default function SettingsScreen() {
   const [deleteAccountConfirmText, setDeleteAccountConfirmText] = useState("");
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [creditsModalVisible, setCreditsModalVisible] = useState(false);
-
-  // Widget
-  const [widgetConfig, setWidgetConfig] = useState<WidgetConfig | null>(null);
-  const [widgetSpotPickerVisible, setWidgetSpotPickerVisible] = useState(false);
-  const [widgetSpots, setWidgetSpots] = useState<any[]>([]);
 
   // Support
   const [supportModalVisible, setSupportModalVisible] = useState(false);
@@ -218,11 +206,6 @@ export default function SettingsScreen() {
       setUserEmail(user?.email);
     });
     return unsubscribe;
-  }, []);
-
-  // Load widget config on mount
-  useEffect(() => {
-    getWidgetConfig().then(setWidgetConfig).catch(() => {});
   }, []);
 
   const handleSignOut = async () => {
@@ -578,110 +561,6 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
         </View>
-
-        {/* Widget */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("widgetSettings")}</Text>
-          <View style={styles.card}>
-            <Pressable
-              onPress={async () => {
-                const spots = await listSpots();
-                setWidgetSpots(spots);
-                setWidgetSpotPickerVisible(true);
-              }}
-              style={({ pressed }) => [
-                styles.row,
-                { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
-              ]}
-            >
-              <View style={styles.iconContainer}>
-                <Ionicons name="apps" size={18} color={THEME.textSec} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.label}>{t("chooseFavoriteSpot")}</Text>
-                <Text style={styles.value}>
-                  {widgetConfig ? widgetConfig.favoriteSpotName : t("noFavoriteSpot")}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
-            </Pressable>
-            {widgetConfig && (
-              <Pressable
-                onPress={async () => {
-                  await clearWidgetConfig();
-                  setWidgetConfig(null);
-                }}
-                style={({ pressed }) => [
-                  styles.row,
-                  { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
-                ]}
-              >
-                <View style={styles.iconContainer}>
-                  <Ionicons name="close-circle-outline" size={18} color={THEME.textSec} />
-                </View>
-                <Text style={[styles.label, { color: THEME.textSec }]}>{t("widgetRemove")}</Text>
-              </Pressable>
-            )}
-          </View>
-          <Text style={{ fontSize: 12, color: THEME.textTertiary, marginTop: 6, marginLeft: 4 }}>
-            {t("widgetDescription")}
-          </Text>
-        </View>
-
-        {/* Widget spot picker modal */}
-        <Modal visible={widgetSpotPickerVisible} transparent animationType="slide" onRequestClose={() => setWidgetSpotPickerVisible(false)}>
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>{t("chooseFavoriteSpot")}</Text>
-              <ScrollView style={{ maxHeight: 400, marginBottom: 12 }}>
-                {widgetSpots.map((spot: any) => (
-                  <Pressable
-                    key={spot.id}
-                    style={({ pressed }) => [
-                      styles.row,
-                      {
-                        backgroundColor: pressed ? "rgba(255,255,255,0.05)" : "transparent",
-                        borderRadius: 12,
-                      },
-                    ]}
-                    onPress={async () => {
-                      const config: WidgetConfig = {
-                        favoriteSpotId: spot.id,
-                        favoriteSpotName: spot.name,
-                        favoriteSpotLat: spot.lat,
-                        favoriteSpotLng: spot.lng,
-                        updatedAt: new Date().toISOString(),
-                      };
-                      await saveWidgetConfig(config);
-                      setWidgetConfig(config);
-                      setWidgetSpotPickerVisible(false);
-                      updateWidgetWeatherData().catch(() => {});
-                    }}
-                  >
-                    <View style={styles.iconContainer}>
-                      <Ionicons name="location" size={18} color={THEME.accent} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>{spot.name}</Text>
-                    </View>
-                    {widgetConfig?.favoriteSpotId === spot.id && (
-                      <Ionicons name="checkmark-circle" size={20} color={THEME.accent} />
-                    )}
-                  </Pressable>
-                ))}
-                {widgetSpots.length === 0 && (
-                  <Text style={styles.modalText}>{t("noSpots")}</Text>
-                )}
-              </ScrollView>
-              <Pressable
-                style={[styles.actionBtn, { marginTop: 4 }]}
-                onPress={() => setWidgetSpotPickerVisible(false)}
-              >
-                <Text style={styles.actionBtnText}>{t("close")}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
 
         {/* Support */}
         <View style={styles.section}>

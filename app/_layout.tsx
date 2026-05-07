@@ -113,10 +113,6 @@ export default function RootLayout() {
 
           if (u) {
             trySyncOfflineTrips();
-            // Refresh widget data on app launch
-            import("../lib/widgetData").then(({ updateWidgetWeatherData }) => {
-              updateWidgetWeatherData().catch(() => {});
-            }).catch(() => {});
           }
         });
 

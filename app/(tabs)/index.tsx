@@ -73,8 +73,6 @@ import {
 import { StatBox } from "../../shared/components/StatBox";
 import { TripCard } from "../../shared/components/TripCard";
 import { BentoTrackingDashboard } from "../../shared/components/BentoTrackingDashboard";
-import { ConditionPickerModal } from "../../components/ConditionPickerModal";
-import { sendTripStatusToWatch, onWatchCatchEvent } from "../../lib/watchBridge";
 import type { FishEventCondition } from "../../lib/tripUtils";
 
 const { width } = Dimensions.get("window");
@@ -511,10 +509,6 @@ export default function Track() {
 
   // Fangst-tidsstempler med valgfri længde og condition
   const [catchMarks, setCatchMarks] = useState<{ ts: number; length_cm?: number; condition?: FishEventCondition }[]>([]);
-  // Condition picker state
-  const [conditionModalVisible, setConditionModalVisible] = useState(false);
-  const [pendingConditionTs, setPendingConditionTs] = useState<number | null>(null);
-  const [pendingConditionLength, setPendingConditionLength] = useState<number | undefined>(undefined);
   // Cursor til realtime visning
   const [cursorMs, setCursorMs] = useState<number | null>(null);
   // Hvilken markør er valgt til slet
@@ -985,7 +979,6 @@ export default function Track() {
       return;
     }
 
-    let watchUpdateCounter = 0;
     const update = () => {
       if (!startIsoRef.current) return;
       const startMs = new Date(startIsoRef.current).getTime();
@@ -994,17 +987,6 @@ export default function Track() {
         Math.floor((Date.now() - startMs) / 1000)
       );
       setSec(diffSec);
-
-      // Send status to Apple Watch every 5 seconds
-      watchUpdateCounter++;
-      if (watchUpdateCounter % 5 === 0) {
-        sendTripStatusToWatch({
-          running: true,
-          elapsedSec: diffSec,
-          distanceM,
-          catchCount: catchMarks.length,
-        }).catch(() => {});
-      }
     };
 
     update();
@@ -1017,32 +999,6 @@ export default function Track() {
         timerRef.current = null;
       }
     };
-  }, [running]);
-
-  // Listen for catch events from Apple Watch
-  useEffect(() => {
-    if (!running) return;
-    const unsub = onWatchCatchEvent((event) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setCatchMarks((prev) => [...prev, {
-        ts: event.ts,
-        condition: event.condition as FishEventCondition | undefined,
-      }]);
-      setCatchToastVisible(true);
-      if (catchToastTimerRef.current) clearTimeout(catchToastTimerRef.current);
-      catchToastTimerRef.current = setTimeout(() => {
-        setCatchToastVisible(false);
-        catchToastTimerRef.current = null;
-      }, 1200);
-    });
-    return unsub;
-  }, [running]);
-
-  // Send trip stopped to watch
-  useEffect(() => {
-    if (!running) {
-      sendTripStatusToWatch({ running: false, elapsedSec: 0, distanceM: 0, catchCount: 0 }).catch(() => {});
-    }
   }, [running]);
 
   async function scheduleReminder(hours: number) {
@@ -1350,12 +1306,16 @@ export default function Track() {
     const parsed = parseFloat(catchLengthInput.replace(",", "."));
     const hasLength = !isNaN(parsed) && parsed >= 10 && parsed <= 150;
 
-    // Open condition picker instead of saving directly
-    setPendingConditionTs(ts);
-    setPendingConditionLength(hasLength ? parsed : undefined);
+    setCatchMarks((prev) => [...prev, { ts, length_cm: hasLength ? parsed : undefined }]);
     setCatchLengthModalVisible(false);
     pendingCatchTsRef.current = null;
-    setConditionModalVisible(true);
+
+    setCatchToastVisible(true);
+    if (catchToastTimerRef.current) clearTimeout(catchToastTimerRef.current);
+    catchToastTimerRef.current = setTimeout(() => {
+      setCatchToastVisible(false);
+      catchToastTimerRef.current = null;
+    }, 1200);
   }
 
   function skipCatchLength() {
@@ -1363,22 +1323,9 @@ export default function Track() {
     const ts = pendingCatchTsRef.current;
     if (!ts) return;
 
-    // Open condition picker instead of saving directly
-    setPendingConditionTs(ts);
-    setPendingConditionLength(undefined);
+    setCatchMarks((prev) => [...prev, { ts }]);
     setCatchLengthModalVisible(false);
     pendingCatchTsRef.current = null;
-    setConditionModalVisible(true);
-  }
-
-  function finalizeCatch(condition?: FishEventCondition) {
-    const ts = pendingConditionTs;
-    if (!ts) return;
-
-    setCatchMarks((prev) => [...prev, { ts, length_cm: pendingConditionLength, condition }]);
-    setConditionModalVisible(false);
-    setPendingConditionTs(null);
-    setPendingConditionLength(undefined);
 
     setCatchToastVisible(true);
     if (catchToastTimerRef.current) clearTimeout(catchToastTimerRef.current);
@@ -2661,13 +2608,6 @@ export default function Track() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* Condition picker modal (after length input) */}
-        <ConditionPickerModal
-          visible={conditionModalVisible}
-          onSave={(condition) => finalizeCatch(condition as FishEventCondition)}
-          onSkip={() => finalizeCatch(undefined)}
-          t={t}
-        />
       </ScrollView>
 
       {/* Loading overlay - udenfor ScrollView så den dækker hele skærmen */}

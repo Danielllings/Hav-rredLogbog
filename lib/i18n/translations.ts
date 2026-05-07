@@ -689,29 +689,6 @@ export const da = {
   goalCancel: "Annuller",
   goalLongPressHint: "Hold nede for at slette mål",
 
-  // Widget
-  widgetSettings: "Widget",
-  widgetDescription: "Vis vejrforhold på din startskærm",
-  chooseFavoriteSpot: "Vælg favoritspot",
-  noFavoriteSpot: "Intet spot valgt",
-  widgetSpotSelected: "Widget opdateret",
-  widgetRemove: "Fjern favoritspot",
-
-  // Fish Condition
-  fishCondition: "Tilstand",
-  conditionBlank: "Blank",
-  conditionFarvet: "Farvet",
-  seaLice: "Havlus",
-  seaLiceNone: "Ingen",
-  seaLiceFew: "Få",
-  seaLiceMany: "Mange",
-  released: "Genudsætning",
-  releasedYes: "Ja",
-  releasedNo: "Nej",
-  conditionSkip: "Spring over",
-  conditionSave: "Gem",
-  watchConnected: "Ur tilsluttet",
-  watchNotConnected: "Ur ikke tilsluttet",
 };
 
 export const en: typeof da = {
@@ -1401,29 +1378,6 @@ export const en: typeof da = {
   goalCancel: "Cancel",
   goalLongPressHint: "Long press to delete a goal",
 
-  // Widget
-  widgetSettings: "Widget",
-  widgetDescription: "Show weather conditions on your home screen",
-  chooseFavoriteSpot: "Choose favorite spot",
-  noFavoriteSpot: "No spot selected",
-  widgetSpotSelected: "Widget updated",
-  widgetRemove: "Remove favorite spot",
-
-  // Fish Condition
-  fishCondition: "Condition",
-  conditionBlank: "Silver",
-  conditionFarvet: "Colored",
-  seaLice: "Sea Lice",
-  seaLiceNone: "None",
-  seaLiceFew: "Few",
-  seaLiceMany: "Many",
-  released: "Released",
-  releasedYes: "Yes",
-  releasedNo: "No",
-  conditionSkip: "Skip",
-  conditionSave: "Save",
-  watchConnected: "Watch connected",
-  watchNotConnected: "Watch not connected",
 };
 
 export const translations = {

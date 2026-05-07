@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="da" data-lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Havørred Logbog — Gratis Fiskelog App med GPS & Vejrdata</title>
+  <meta name="description" content="Log dine havørredture med GPS-tracking, automatisk vejrdata fra DMI og smart mønsteranalyse. 100% gratis, ingen reklamer, ingen dataudnyttelse. Danmarks #1 havørred-app.">
+  <meta name="theme-color" content="#0D0D0F">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <meta property="og:title" content="Havørred Logbog — Gratis Fiskelog App med GPS & Vejrdata">
+  <meta property="og:description" content="Log dine havørredture med GPS-tracking, automatisk vejrdata fra DMI og smart mønsteranalyse. 100% gratis.">
+  <meta property="og:image" content="assets/icon.png">
+  <meta property="og:type" content="website">
+  <meta name="keywords" content="havørred, fiskelog, fiskeri app, GPS tracking, DMI vejrdata, sea trout, fishing log, Danmark, gratis">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=20260501">
+</head>
+<body>
+  <canvas id="particles"></canvas>
+
+  <!-- Nav -->
+  <nav class="nav" id="nav">
+    <div class="container nav-inner">
+      <a href="#" class="nav-brand">
+        <img src="assets/icon.png" alt="Havørred Logbog" class="nav-icon">
+        <span>Havørred Logbog</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features" data-da="Features" data-en="Features">Features</a>
+        <a href="#how" data-da="Sådan virker det" data-en="How it works">Sådan virker det</a>
+        <a href="#faq" data-da="FAQ" data-en="FAQ">FAQ</a>
+        <button class="lang-toggle" id="langToggle" aria-label="Skift sprog">
+          <span class="lang-flag" id="langFlag">🇩🇰</span>
+          <span class="lang-label" id="langLabel">DA</span>
+        </button>
+        <a href="#download" class="nav-cta" data-da="Download" data-en="Download">Download</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container hero-grid">
+      <div class="hero-content">
+        <h1 class="animate-in">
+          <span data-da="Log dine havørred&shy;ture" data-en="Log your sea trout trips">Log dine havørred&shy;ture</span><br>
+          <span class="gradient-text" data-da="smartere." data-en="smarter.">smartere.</span>
+        </h1>
+        <p class="hero-desc animate-in delay-1" data-da="Ingen AI-gætteri — kun statistik! GPS-tracking, automatisk vejrdata fra DMI og smart mønsteranalyse — find ud af præcis hvornår og hvor du fanger fisk. Ingen reklamer. Ingen dataudnyttelse. 100% gratis." data-en="No AI guesswork — just statistics! GPS tracking, automatic weather data from DMI and smart pattern analysis — find out exactly when and where you catch fish. No ads. No data exploitation. 100% free.">Ingen AI-gætteri — kun statistik! GPS-tracking, automatisk vejrdata fra DMI og smart mønsteranalyse — find ud af præcis hvornår og hvor du fanger fisk. Ingen reklamer. Ingen dataudnyttelse. 100% gratis.</p>
+        <div class="store-buttons animate-in delay-2">
+          <a href="https://apps.apple.com/app/id6755617648" class="store-btn" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+            <span><small>Download på</small>App Store</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Phone mockup with real screenshot -->
+      <div class="hero-visual animate-in delay-3">
+        <div class="phone-frame">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <img src="assets/Tracking.png" alt="Havørred Logbog — GPS Tracking" class="phone-screenshot">
+          </div>
+        </div>
+        <div class="phone-glow"></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-header reveal">
+        <span class="section-tag" data-da="FEATURES" data-en="FEATURES">FEATURES</span>
+        <h2 data-da="Alt hvad en kystfisker har brug for" data-en="Everything a coastal angler needs">Alt hvad en kystfisker har brug for</h2>
+        <p data-da="Bygget af fiskere, til fiskere. Hvert feature er designet til at gøre dig klogere på dit fiskeri." data-en="Built by anglers, for anglers. Every feature is designed to make you smarter about your fishing.">Bygget af fiskere, til fiskere. Hvert feature er designet til at gøre dig klogere på dit fiskeri.</p>
+      </div>
+
+      <div class="checklist reveal">
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="GPS-tracking" data-en="GPS tracking">GPS-tracking</strong><span data-da="Tryk start, fisk, tryk stop. Ruten gemmes automatisk." data-en="Tap start, fish, tap stop. Your route is saved automatically.">Tryk start, fisk, tryk stop. Ruten gemmes automatisk.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Automatisk vejrdata" data-en="Automatic weather data">Automatisk vejrdata</strong><span data-da="Luft, vand, vind, vandstand, salinitet og tryk hentes fra DMI for hver tur." data-en="Air, water, wind, tide, salinity and pressure fetched from DMI for every trip.">Luft, vand, vind, vandstand, salinitet og tryk hentes fra DMI for hver tur.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Fangstlog" data-en="Catch log">Fangstlog</strong><span data-da="Tag et billede, vælg længde/vægt, tilknyt en tracked tur og færdig. Position, tid og vejrdata gemmes automatisk." data-en="Take a photo, select length/weight, link a tracked trip and done. Position, time and weather data are saved automatically.">Tag et billede, vælg længde/vægt, tilknyt en tracked tur og færdig. Position, tid og vejrdata gemmes automatisk.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Vejrkort med live data" data-en="Weather map with live data">Vejrkort med live data</strong><span data-da="Se vindretning, havstrøm, vandtemperatur og vandstand på kortet inden du kører." data-en="See wind direction, ocean current, water temperature and tide on the map before you drive.">Se vindretning, havstrøm, vandtemperatur og vandstand på kortet inden du kører.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Kystretning" data-en="Coast direction">Kystretning</strong><span data-da="Gem dine pladser og se om vinden er på- eller fralands lige nu." data-en="Save your spots and see if the wind is on- or offshore right now.">Gem dine pladser og se om vinden er på- eller fralands lige nu.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Fiskemønster" data-en="Fish patterns">Fiskemønster</strong><span data-da="Appen finder ud af hvornår du fanger fisk. Vindstyrke, vandtemperatur, vandstand, tidspunkt, månefase — baseret på dine egne data." data-en="The app figures out when you catch fish. Wind, water temp, tide, time of day, moon phase — based on your own data.">Appen finder ud af hvornår du fanger fisk. Vindstyrke, vandtemperatur, vandstand, tidspunkt, månefase — baseret på dine egne data.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Smart Weather Alerts" data-en="Smart Weather Alerts">Smart Weather Alerts</strong><span data-da="Få en notifikation når vejret matcher dit personlige fiskemønster." data-en="Get a notification when the weather matches your personal fishing pattern.">Få en notifikation når vejret matcher dit personlige fiskemønster.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Statistik" data-en="Statistics">Statistik</strong><span data-da="Fangstrate, bedste spot, månedsoversigt, personlige rekorder." data-en="Catch rate, best spot, monthly overview, personal records.">Fangstrate, bedste spot, månedsoversigt, personlige rekorder.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Fredningsbælter" data-en="Protection zones">Fredningsbælter</strong><span data-da="Se fredningszoner direkte på kortet." data-en="See protection zones directly on the map.">Se fredningszoner direkte på kortet.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Trip Replay" data-en="Trip Replay">Trip Replay</strong><span data-da="Genafspil din tur som animation på kortet." data-en="Replay your trip as an animation on the map.">Genafspil din tur som animation på kortet.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="PDF-rapporter" data-en="PDF reports">PDF-rapporter</strong><span data-da="Eksporter din sæson som PDF." data-en="Export your season as PDF.">Eksporter din sæson som PDF.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Sol, måne og månefase" data-en="Sun, moon and moon phase">Sol, måne og månefase</strong><span data-da="Solopgang, solnedgang og månefase direkte i appen." data-en="Sunrise, sunset and moon phase directly in the app.">Solopgang, solnedgang og månefase direkte i appen.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="80+ DMI havstationer" data-en="80+ DMI ocean stations">80+ DMI havstationer</strong><span data-da="Live vandtemperatur og vandstand fra kysten." data-en="Live water temperature and tide from the coast.">Live vandtemperatur og vandstand fra kysten.</span></div>
+        </div>
+        <div class="checklist-item">
+          <span class="checklist-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Offline" data-en="Offline">Offline</strong><span data-da="Virker uden signal, synkroniserer når du kommer hjem." data-en="Works without signal, syncs when you get home.">Virker uden signal, synkroniserer når du kommer hjem.</span></div>
+        </div>
+        <div class="checklist-item checklist-item-accent">
+          <span class="checklist-icon checklist-icon-accent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div><strong data-da="Ingen reklamer, ingen dataudnyttelse, 100% gratis" data-en="No ads, no data exploitation, 100% free">Ingen reklamer, ingen dataudnyttelse, 100% gratis</strong></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="how" id="how">
+    <div class="container">
+      <div class="section-header reveal">
+        <span class="section-tag">WORKFLOW</span>
+        <h2 data-da="Tre trin til bedre fiskeri" data-en="Three steps to better fishing">Tre trin til bedre fiskeri</h2>
+      </div>
+
+      <div class="steps-container">
+        <div class="step-card reveal">
+          <div class="step-number">1</div>
+          <div class="step-icon-wrap">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+          </div>
+          <h3 data-da="Start din tur" data-en="Start your trip">Start din tur</h3>
+          <p data-da="Ét tryk starter GPS-tracking. Appen optager i baggrunden — du fokuserer på fiskeriet." data-en="One tap starts GPS tracking. The app records in the background — you focus on fishing.">Ét tryk starter GPS-tracking. Appen optager i baggrunden — du fokuserer på fiskeriet.</p>
+        </div>
+
+        <div class="step-connector">
+          <div class="connector-line"></div>
+          <div class="connector-dot"></div>
+        </div>
+
+        <div class="step-card reveal">
+          <div class="step-number">2</div>
+          <div class="step-icon-wrap">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+          <h3 data-da="Log fangster" data-en="Log catches">Log fangster</h3>
+          <p data-da="Fanger du noget? Tag et billede og log detaljerne. Position og tid gemmes automatisk." data-en="Caught something? Take a photo and log the details. Position and time are saved automatically.">Fanger du noget? Tag et billede og log detaljerne. Position og tid gemmes automatisk.</p>
+        </div>
+
+        <div class="step-connector">
+          <div class="connector-line"></div>
+          <div class="connector-dot"></div>
+        </div>
+
+        <div class="step-card reveal">
+          <div class="step-number">3</div>
+          <div class="step-icon-wrap">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          </div>
+          <h3 data-da="Bliv klogere" data-en="Get smarter">Bliv klogere</h3>
+          <p data-da="Over tid analyserer appen dine data og viser dig præcis hvilke betingelser der giver fisk." data-en="Over time, the app analyzes your data and shows you exactly which conditions produce fish.">Over tid analyserer appen dine data og viser dig præcis hvilke betingelser der giver fisk.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- App Screenshots -->
+  <section class="screenshots" id="screenshots">
+    <div class="container">
+      <div class="section-header reveal">
+        <span class="section-tag" data-da="SE APPEN" data-en="SEE THE APP">SE APPEN</span>
+        <h2 data-da="Se hvad du får" data-en="See what you get">Se hvad du får</h2>
+        <p data-da="Rigtige screenshots fra appen — ingen mockups, ingen redigering." data-en="Real screenshots from the app — no mockups, no editing.">Rigtige screenshots fra appen — ingen mockups, ingen redigering.</p>
+      </div>
+
+      <div class="slider-wrapper reveal">
+        <button class="slider-arrow slider-arrow-left" aria-label="Forrige">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+
+        <div class="slider-viewport">
+          <div class="slider-track">
+            <div class="slider-slide">
+              <div class="screenshot-phone">
+                <img src="assets/Tracking.png" alt="GPS Tracking" loading="lazy">
+              </div>
+              <span class="screenshot-label" data-da="GPS Tracking" data-en="GPS Tracking">GPS Tracking</span>
+            </div>
+            <div class="slider-slide">
+              <div class="screenshot-phone">
+                <img src="assets/Galleri.png" alt="Galleri" loading="lazy">
+              </div>
+              <span class="screenshot-label" data-da="Fangstgalleri" data-en="Catch Gallery">Fangstgalleri</span>
+            </div>
+            <div class="slider-slide">
+              <div class="screenshot-phone">
+                <img src="assets/Tracking%20Log.png" alt="Vejrforhold" loading="lazy">
+              </div>
+              <span class="screenshot-label" data-da="Vejrforhold" data-en="Weather Conditions">Vejrforhold</span>
+            </div>
+            <div class="slider-slide">
+              <div class="screenshot-phone">
+                <img src="assets/Tracking%20Log%202.png" alt="Vejrgrafer" loading="lazy">
+              </div>
+              <span class="screenshot-label" data-da="Vejrgrafer" data-en="Weather Graphs">Vejrgrafer</span>
+            </div>
+            <div class="slider-slide">
+              <div class="screenshot-phone">
+                <img src="assets/Vejrradar.png" alt="Vejrradar" loading="lazy">
+              </div>
+              <span class="screenshot-label" data-da="Vejrkort" data-en="Weather Map">Vejrkort</span>
+            </div>
+            <div class="slider-slide">
+              <div class="screenshot-phone">
+                <img src="assets/Statistik%201.png" alt="Statistik" loading="lazy">
+              </div>
+              <span class="screenshot-label" data-da="Fangstrate" data-en="Catch Rate">Fangstrate</span>
+            </div>
+            <div class="slider-slide">
+              <div class="screenshot-phone">
+                <img src="assets/Statistik%202.png" alt="Spot-præstation" loading="lazy">
+              </div>
+              <span class="screenshot-label" data-da="Spot-analyse" data-en="Spot Analysis">Spot-analyse</span>
+            </div>
+            <div class="slider-slide">
+              <div class="screenshot-phone">
+                <img src="assets/Statistik%203.png" alt="Fiskemønster" loading="lazy">
+              </div>
+              <span class="screenshot-label" data-da="Fiskemønster" data-en="Fish Patterns">Fiskemønster</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="slider-arrow slider-arrow-right" aria-label="Næste">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
+      <div class="slider-dots"></div>
+    </div>
+  </section>
+
+
+  <!-- Social Proof / Trust -->
+  <section class="trust" id="trust">
+    <div class="container">
+
+      <!-- Section Header -->
+      <div class="section-header reveal">
+        <span class="section-tag" data-da="VORES L&#216;FTE" data-en="OUR PROMISE">VORES L&#216;FTE</span>
+        <h2 data-da="Bygget p&#229; &#230;rlighed, ikke reklamer" data-en="Built on honesty, not ads">Bygget p&#229; &#230;rlighed, ikke reklamer</h2>
+        <p data-da="De fleste fiske-apps tjener penge p&#229; dine data. Vi g&#248;r ikke." data-en="Most fishing apps make money from your data. We don't.">De fleste fiske-apps tjener penge p&#229; dine data. Vi g&#248;r ikke.</p>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="trust-stats-grid reveal">
+        <div class="trust-stat-card">
+          <div class="trust-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <span class="trust-stat-value">0</span>
+          <span class="trust-stat-label" data-da="Reklamer" data-en="Ads">Reklamer</span>
+          <span class="trust-stat-detail" data-da="Aldrig. Punkt." data-en="Never. Period.">Aldrig. Punkt.</span>
+        </div>
+        <div class="trust-stat-card">
+          <div class="trust-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <span class="trust-stat-value">0</span>
+          <span class="trust-stat-label" data-da="Data solgt" data-en="Data sold">Data solgt</span>
+          <span class="trust-stat-detail" data-da="Dine data er dine" data-en="Your data is yours">Dine data er dine</span>
+        </div>
+        <div class="trust-stat-card">
+          <div class="trust-stat-icon trust-stat-icon-accent">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          </div>
+          <span class="trust-stat-value">100%</span>
+          <span class="trust-stat-label" data-da="Gratis" data-en="Free">Gratis</span>
+          <span class="trust-stat-detail" data-da="Alle features inkluderet" data-en="All features included">Alle features inkluderet</span>
+        </div>
+        <div class="trust-stat-card">
+          <div class="trust-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <span class="trust-stat-value">10+</span>
+          <span class="trust-stat-label" data-da="Features" data-en="Features">Features</span>
+          <span class="trust-stat-detail" data-da="GPS, vejr, analyse m.m." data-en="GPS, weather, analysis &amp; more">GPS, vejr, analyse m.m.</span>
+        </div>
+        <div class="trust-stat-card">
+          <div class="trust-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><circle cx="12" cy="12" r="10"/></svg>
+          </div>
+          <span class="trust-stat-value">80+</span>
+          <span class="trust-stat-label" data-da="DMI Stationer" data-en="DMI Stations">DMI Stationer</span>
+          <span class="trust-stat-detail" data-da="Live vejrdata fra kysten" data-en="Live weather data from the coast">Live vejrdata fra kysten</span>
+        </div>
+        <div class="trust-stat-card">
+          <div class="trust-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+          </div>
+          <span class="trust-stat-value" data-da="Offline" data-en="Offline">Offline</span>
+          <span class="trust-stat-label" data-da="Fungerer altid" data-en="Always works">Fungerer altid</span>
+          <span class="trust-stat-detail" data-da="Ingen forbindelse kr&#230;vet" data-en="No connection required">Ingen forbindelse kr&#230;vet</span>
+        </div>
+      </div>
+
+      <!-- Trust Badges Row -->
+      <div class="trust-badges-row reveal">
+        <div class="badge-card badge-card-rating">
+          <div class="badge-stars">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#F59E0B"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#F59E0B"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#F59E0B"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#F59E0B"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#F59E0B"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+          </div>
+          <span class="badge-rating-text" data-da="Bed&#248;m os i App Store" data-en="Rate us on the App Store">Bed&#248;m os i App Store</span>
+          <span class="badge-sub" data-da="Ny app &#8212; din anmeldelse betyder alt" data-en="New app &#8212; your review means everything">Ny app &#8212; din anmeldelse betyder alt</span>
+        </div>
+
+        <div class="badge-card badge-card-new">
+          <div class="badge-new-icon">
+            <span class="badge-new-pulse"></span>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div class="badge-new-text">
+            <strong data-da="Lanceret april 2026" data-en="Launched April 2026">Lanceret april 2026</strong>
+            <span data-da="V&#230;r blandt de f&#248;rste. Tidlige brugere former appen." data-en="Be among the first. Early users shape the app.">V&#230;r blandt de f&#248;rste. Tidlige brugere former appen.</span>
+          </div>
+        </div>
+
+        <div class="badge-card badge-card-privacy">
+          <div class="badge-privacy-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div class="badge-privacy-text">
+            <strong data-da="Privacy First" data-en="Privacy First">Privacy First</strong>
+            <span data-da="Ingen trackers. Ingen analytics. Ingen tredjeparts-SDK'er." data-en="No trackers. No analytics. No third-party SDKs.">Ingen trackers. Ingen analytics. Ingen tredjeparts-SDK'er.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq" id="faq">
+    <div class="container">
+      <div class="section-header reveal">
+        <span class="section-tag">FAQ</span>
+        <h2 data-da="Ofte stillede spørgsmål" data-en="Frequently asked questions">Ofte stillede spørgsmål</h2>
+      </div>
+
+      <div class="faq-list">
+        <details class="faq-item reveal">
+          <summary class="faq-question">
+            <span data-da="Er det virkelig gratis?" data-en="Is it really free?">Er det virkelig gratis?</span>
+            <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p data-da="Ja, helt gratis. Ingen skjulte omkostninger, intet abonnement og ingen reklamer." data-en="Yes, completely free. No hidden costs, no subscription and no ads.">Ja, helt gratis. Ingen skjulte omkostninger, intet abonnement og ingen reklamer.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary class="faq-question">
+            <span data-da="Virker appen offline?" data-en="Does the app work offline?">Virker appen offline?</span>
+            <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p data-da="Ja. Ture gemmes lokalt og synkroniseres automatisk, når du er online igen." data-en="Yes. Trips are saved locally and sync automatically when you're back online.">Ja. Ture gemmes lokalt og synkroniseres automatisk, når du er online igen.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary class="faq-question">
+            <span data-da="Kan andre se mine fiskepladser?" data-en="Can others see my fishing spots?">Kan andre se mine fiskepladser?</span>
+            <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p data-da="Nej. Dine data er 100% private. Vi deler eller sælger aldrig dine oplysninger." data-en="No. Your data is 100% private. We never share or sell your information.">Nej. Dine data er 100% private. Vi deler eller sælger aldrig dine oplysninger.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary class="faq-question">
+            <span data-da="Hvad med Android?" data-en="What about Android?">Hvad med Android?</span>
+            <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p data-da="Android-versionen er på vej, men er endnu ikke tilgængelig." data-en="The Android version is coming soon but is not yet available.">Android-versionen er på vej, men er endnu ikke tilgængelig.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary class="faq-question">
+            <span data-da="Hvilke vejrdata bruger appen?" data-en="What weather data does the app use?">Hvilke vejrdata bruger appen?</span>
+            <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p data-da="DMI-data via Open-Meteo — Danmarks officielle meteorologiske institut." data-en="DMI data via Open-Meteo — Denmark's official meteorological institute.">DMI-data via Open-Meteo — Danmarks officielle meteorologiske institut.</p>
+          </div>
+        </details>
+
+        <details class="faq-item reveal">
+          <summary class="faq-question">
+            <span data-da="Kan jeg eksportere mine data?" data-en="Can I export my data?">Kan jeg eksportere mine data?</span>
+            <svg class="faq-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p data-da="Ja, du kan eksportere PDF-rapporter med fuld statistik over dine ture og fangster." data-en="Yes, you can export PDF reports with full statistics on your trips and catches.">Ja, du kan eksportere PDF-rapporter med fuld statistik over dine ture og fangster.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta" id="download">
+    <div class="container">
+      <div class="cta-card reveal">
+        <div class="cta-glow"></div>
+        <h2 data-da="Din fangstdagbog venter" data-en="Your catch log is waiting">Din fangstdagbog venter</h2>
+        <p data-da="Gratis. Ingen reklamer. Ingen sporing. Bare fiskeri." data-en="Free. No ads. No tracking. Just fishing.">Gratis. Ingen reklamer. Ingen sporing. Bare fiskeri.</p>
+        <div class="store-buttons">
+          <a href="https://apps.apple.com/app/id6755617648" class="store-btn store-btn-accent" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+            <span><small>Download på</small>App Store</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="assets/icon.png" alt="" class="footer-icon">
+        <span>Havørred Logbog</span>
+      </div>
+      <nav class="footer-links">
+        <a href="privacy.html" data-da="Privatlivspolitik" data-en="Privacy Policy">Privatlivspolitik</a>
+        <a href="delete-account.html" data-da="Slet konto" data-en="Delete Account">Slet konto</a>
+        <a href="contact.html" data-da="Kontakt" data-en="Contact">Kontakt</a>
+      </nav>
+      <p class="footer-copy">&copy; 2026 Havørred Logbog</p>
+    </div>
+  </footer>
+
+  <script src="script.js?v=20260501"></script>
+</body>
+</html>

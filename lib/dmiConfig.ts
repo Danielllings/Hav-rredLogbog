@@ -12,3 +12,7 @@ export const DMI_EDR_BASE_URL =
 export const STAC_BASE_URL =
   (extra.stacUrl as string | undefined)?.replace(/\/$/, "") || "";
 
+// NOTE: DMI removed API key requirements on Dec 2, 2025.
+// All calls now go directly to opendataapi.dmi.dk without authentication.
+// The proxy URLs above are kept as fallback but are no longer needed.
+

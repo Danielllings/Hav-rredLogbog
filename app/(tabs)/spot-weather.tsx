@@ -19,6 +19,7 @@ import {
   Animated,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
 import Constants from "expo-constants";
 import MapView, {
   Marker,
@@ -35,6 +36,7 @@ import * as Location from "expo-location";
 import * as ExpoLinking from "expo-linking";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import SunCalc from "suncalc";
+import { BlurView } from "expo-blur";
 
 import {
   getSpotForecastEdr,
@@ -42,7 +44,6 @@ import {
   type EdrForecast,
   type Serie,
 } from "../../lib/dmi";
-import { ORTO_FORAAR_URL } from "../../lib/maps";
 import {
   createSpot,
   listSpots,
@@ -80,6 +81,7 @@ import { WaveSwellOverlay } from "../../shared/components/WaveSwellOverlay";
 import { SalinityHeatmapOverlay } from "../../shared/components/SalinityHeatmapOverlay";
 import { WaterLevelOverlay } from "../../shared/components/WaterLevelOverlay";
 import { WindOverlay } from "../../shared/components/WindOverlay";
+import { PrecipitationOverlay } from "../../shared/components/PrecipitationOverlay";
 import { SpotWeatherPanel } from "../../shared/components/SpotWeatherPanel";
 import { GlassCard } from "../../components/statistics/GlassCard";
 import { WeatherQuickPreview } from "../../components/WeatherQuickPreview";
@@ -88,7 +90,7 @@ import { APPLE } from "../../constants/appleTheme";
 
 type LatLng = { latitude: number; longitude: number };
 
-type MapLayerType = "standard" | "orto";
+type MapLayerType = "standard" | "satellite";
 
 // Storage key for map layer settings
 const MAP_SETTINGS_KEY = "spot_weather_map_settings";
@@ -147,8 +149,7 @@ const ANTHRACITE_MAP_STYLE = [
   },
   {
     featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#454545" }],
+    stylers: [{ visibility: "off" }],
   },
   {
     featureType: "road",
@@ -182,8 +183,11 @@ const ANTHRACITE_MAP_STYLE = [
   },
   {
     featureType: "road.highway",
-    elementType: "geometry",
-    stylers: [{ color: "#505050" }],
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "poi.park",
+    stylers: [{ visibility: "off" }],
   },
   {
     featureType: "water",
@@ -203,8 +207,7 @@ const LIGHT_MAP_STYLE = [
   },
   {
     featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#e5e5e5" }],
+    stylers: [{ visibility: "off" }],
   },
   {
     featureType: "road",
@@ -223,8 +226,7 @@ const LIGHT_MAP_STYLE = [
   },
   {
     featureType: "road.highway",
-    elementType: "geometry",
-    stylers: [{ color: "#dadada" }],
+    stylers: [{ visibility: "off" }],
   },
   {
     featureType: "water",
@@ -250,13 +252,7 @@ const DARK_MAP_STYLE = [
   },
   {
     featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#263c3f" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#6b9a76" }],
+    stylers: [{ visibility: "off" }],
   },
   {
     featureType: "road",
@@ -275,18 +271,7 @@ const DARK_MAP_STYLE = [
   },
   {
     featureType: "road.highway",
-    elementType: "geometry",
-    stylers: [{ color: "#746855" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#1f2835" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#f3d19c" }],
+    stylers: [{ visibility: "off" }],
   },
   {
     featureType: "water",
@@ -456,9 +441,6 @@ export default function SpotWeatherScreen() {
   // animation til bottomsheet (Vejr & Hav)
   const sheetAnim = useRef(new Animated.Value(0)).current;
 
-  // Expandable menu animation
-  const menuExpandAnim = useRef(new Animated.Value(0)).current;
-  const menuContentAnim = useRef(new Animated.Value(0)).current;
   const [activeMenuPanel, setActiveMenuPanel] = useState<"layers" | "weather" | null>(null);
 
   // SPOT-DETAIL UI
@@ -486,12 +468,16 @@ export default function SpotWeatherScreen() {
   // DMI ocean stations
   const [showDmiStations, setShowDmiStations] = useState(false);
 
+  // Map guide (one-time)
+  const [guideStep, setGuideStep] = useState<number | null>(null);
+
   // Ocean overlay state
   const [showCurrents, setShowCurrents] = useState(false);
   const [showSalinity, setShowSalinity] = useState(false);
   const [showWaves, setShowWaves] = useState(false);
   const [showWaterLevel, setShowWaterLevel] = useState(false);
   const [showWind, setShowWind] = useState(false);
+  const [showPrecipitation, setShowPrecipitation] = useState(false);
 
   // Track current map region for passing to overlays
   const [mapRegion, setMapRegion] = useState<Region>({
@@ -515,6 +501,7 @@ export default function SpotWeatherScreen() {
         setShowWaves(false);
         setShowWaterLevel(false);
         setShowWind(false);
+        setShowPrecipitation(false);
         setActiveMenuPanel(null);
       };
     }, [])
@@ -534,6 +521,11 @@ export default function SpotWeatherScreen() {
           if (typeof settings.showSpots === "boolean") setShowSpots(settings.showSpots);
           if (typeof settings.showFredningsbaelter === "boolean") setShowFredningsbaelter(settings.showFredningsbaelter);
           if (typeof settings.showDmiStations === "boolean") setShowDmiStations(settings.showDmiStations);
+        }
+        // Check if map guide has been shown
+        const guideDone = await AsyncStorage.getItem("map_guide_complete_v1");
+        if (guideDone !== "true") {
+          setGuideStep(0);
         }
       } catch (e) {
         // Ignore errors loading settings
@@ -663,15 +655,17 @@ export default function SpotWeatherScreen() {
     }
     (async () => {
       try {
+        const counts = await Promise.all(
+          spots.map((s) => getFishCountForSpot(s.id).catch(() => 0))
+        );
         let bestId: string | null = null;
         let bestCount = 0;
-        for (const s of spots) {
-          const c = await getFishCountForSpot(s.id);
-          if (c > bestCount) {
-            bestCount = c;
+        spots.forEach((s, i) => {
+          if (counts[i] > bestCount) {
+            bestCount = counts[i];
             bestId = s.id;
           }
-        }
+        });
         setBestSpotId(bestId);
       } catch (e) {
         // console.log("Could not calculate best spot", e);
@@ -819,39 +813,6 @@ export default function SpotWeatherScreen() {
     }
   }, [showForecast, sheetAnim]);
 
-  // Expandable menu animation - menu expands horizontally, then content fades in
-  useEffect(() => {
-    if (activeMenuPanel) {
-      menuContentAnim.setValue(0);
-      Animated.sequence([
-        Animated.spring(menuExpandAnim, {
-          toValue: 1,
-          tension: 100,
-          friction: 12,
-          useNativeDriver: false,
-        }),
-        Animated.timing(menuContentAnim, {
-          toValue: 1,
-          duration: 120,
-          useNativeDriver: false,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(menuContentAnim, {
-          toValue: 0,
-          duration: 80,
-          useNativeDriver: false,
-        }),
-        Animated.spring(menuExpandAnim, {
-          toValue: 0,
-          tension: 120,
-          friction: 14,
-          useNativeDriver: false,
-        }),
-      ]).start();
-    }
-  }, [activeMenuPanel, menuExpandAnim, menuContentAnim]);
 
   // Hent vejr + fiskestatistik for selectedSpot (spot-detail UI)
   // OPTIMIZED: dmi.ts håndterer nu caching internt
@@ -1026,6 +987,7 @@ export default function SpotWeatherScreen() {
       }
     }
 
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPos(c);
     setShowForecast(false);
     setEdrData(null);
@@ -1087,37 +1049,33 @@ export default function SpotWeatherScreen() {
       edrData.windSpeedSeries.length > 0 ||
       edrData.waterLevelSeries.length > 0 ||
       edrData.waveHeightSeries.length > 0 ||
+      edrData.waterTempSeries.length > 0 ||
       edrData.humiditySeries.length > 0 ||
       edrData.pressureSeries.length > 0 ||
       edrData.cloudCoverSeries.length > 0 ||
-      (edrData.precipitationSeries && edrData.precipitationSeries.length > 0));
+      edrData.precipitationSeries.length > 0 ||
+      edrData.visibilitySeries.length > 0);
 
   const forecastDays = getForecastDays(edrData, t);
 
   // Check if any ocean overlay is active
-  const oceanOverlayActive = showCurrents || showSalinity || showWaves || showWaterLevel || showWind;
-  // Use blue/anthracite background for orto, dark for standard
-  const mapBackground = mapLayer === "orto" ? "#0f1a2e" : "#0a0a12";
-  // Dark styles for both map layers
-  const currentMapStyle = mapLayer === "orto" ? DARK_MAP_STYLE : MAP_STYLE;
+  const oceanOverlayActive = showCurrents || showSalinity || showWaves || showWaterLevel || showWind || showPrecipitation;
+
+  // Active overlay indicator (Windy-style)
+  const activeOverlayName = showWind
+    ? (language === "da" ? "Vind" : "Wind")
+    : showCurrents ? (language === "da" ? "Strøm" : "Current")
+    : showWaves ? (language === "da" ? "Bølger" : "Waves")
+    : showSalinity ? (language === "da" ? "Salt" : "Salinity")
+    : showWaterLevel ? (language === "da" ? "Vand" : "Level")
+    : showPrecipitation ? (language === "da" ? "Nedbør" : "Rain")
+    : null;
+  const activeOverlayIcon: any = showWind ? "flag" : showCurrents ? "navigate" : showWaves ? "water" : showSalinity ? "flask" : showWaterLevel ? "trending-up" : showPrecipitation ? "rainy" : null;
+  const mapBackground = "#0a0a12";
   const currentUiStyle = "dark";
+  const isSatellite = mapLayer === "satellite";
   const hasGoogleMapsKey = Boolean(Constants.expoConfig?.extra?.mapsApiKey);
-  const useStandardTileFallback =
-    isAndroid && mapLayer === "standard" && !hasGoogleMapsKey;
-
-  // iOS: Use native Apple Maps dark mode for standard, "none" for orto (custom tiles)
-  // Android: Use "none" for both (CartoDB/orto tiles)
-  const mapType = isAndroid
-    ? "none"
-    : mapLayer === "standard"
-      ? "mutedStandard"
-      : "none";
-
-  // iOS: Use Apple Maps (DEFAULT) for standard mode to get native dark mode
-  // Android: Use Google Maps if available
-  const mapProvider = isAndroid
-    ? (hasGoogleMapsKey ? PROVIDER_GOOGLE : PROVIDER_DEFAULT)
-    : (mapLayer === "standard" ? PROVIDER_DEFAULT : PROVIDER_DEFAULT);
+  const mapProvider = isAndroid && hasGoogleMapsKey ? PROVIDER_GOOGLE : PROVIDER_DEFAULT;
 
   return (
     <>
@@ -1128,49 +1086,13 @@ export default function SpotWeatherScreen() {
           ref={mapRef}
           style={[StyleSheet.absoluteFillObject, { backgroundColor: mapBackground }]}
           initialRegion={DEFAULT_REGION}
-          onPress={onMapPress}
+          onLongPress={onMapPress}
           onRegionChangeComplete={setMapRegion}
           userInterfaceStyle={currentUiStyle}
-          mapType={mapType}
+          mapType={isSatellite ? "satellite" : "standard"}
           provider={mapProvider}
-          {...(currentMapStyle ? { customMapStyle: currentMapStyle } : {})}
         >
-          {useStandardTileFallback && (
-            <UrlTile
-              urlTemplate={OSM_TILE_URL}
-              maximumZ={19}
-              tileSize={256}
-              zIndex={0}
-            />
-          )}
-          {mapLayer === "orto" && (
-            <UrlTile
-              urlTemplate={ORTO_FORAAR_URL}
-              maximumZ={21}
-              tileSize={256}
-              zIndex={0}
-            />
-          )}
 
-          {/* Dark CartoDB tiles as default base map (standard mode) - Android only */}
-          {/* iOS uses native Apple Maps dark mode */}
-          {isAndroid && mapLayer !== "orto" && (
-            <>
-              <UrlTile
-                urlTemplate={CARTO_DARK_URL}
-                maximumZ={19}
-                tileSize={512}
-                zIndex={0}
-              />
-              <UrlTile
-                urlTemplate={CARTO_DARK_LABELS_URL}
-                maximumZ={19}
-                tileSize={512}
-                zIndex={10}
-                opacity={0.7}
-              />
-            </>
-          )}
 
           {/* Ocean overlays are now rendered as animated WebView overlays after MapView */}
 
@@ -1221,16 +1143,6 @@ export default function SpotWeatherScreen() {
             );
           })}
 
-          {/* DMI OceanObs stationer */}
-          {showDmiStations &&
-            OCEAN_STATIONS_DK.map((station) => (
-              <DmiStationMarker
-                key={`dmi-${station.id}`}
-                station={station}
-                t={t}
-              />
-            ))}
-
           {/* Gemte spots som røde cirkel-markører med label-boble.
               Tryk på spot -> åbner spot-detail UI. */}
           {showSpots &&
@@ -1270,6 +1182,7 @@ export default function SpotWeatherScreen() {
               </View>
             </Marker>
           )}
+
         </MapView>
 
         {/* Animated ocean overlays - vises over kortet */}
@@ -1281,6 +1194,7 @@ export default function SpotWeatherScreen() {
               initialLat={mapRegion.latitude}
               initialLng={mapRegion.longitude}
               initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+              language={language}
             />
           </View>
         )}
@@ -1292,6 +1206,7 @@ export default function SpotWeatherScreen() {
               initialLat={mapRegion.latitude}
               initialLng={mapRegion.longitude}
               initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+              language={language}
             />
           </View>
         )}
@@ -1303,6 +1218,7 @@ export default function SpotWeatherScreen() {
               initialLat={mapRegion.latitude}
               initialLng={mapRegion.longitude}
               initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+              language={language}
             />
           </View>
         )}
@@ -1314,6 +1230,7 @@ export default function SpotWeatherScreen() {
               initialLat={mapRegion.latitude}
               initialLng={mapRegion.longitude}
               initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+              language={language}
             />
           </View>
         )}
@@ -1325,6 +1242,19 @@ export default function SpotWeatherScreen() {
               initialLat={mapRegion.latitude}
               initialLng={mapRegion.longitude}
               initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+              language={language}
+            />
+          </View>
+        )}
+        {showPrecipitation && (
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+            <PrecipitationOverlay
+              visible={true}
+              onClose={() => setShowPrecipitation(false)}
+              initialLat={mapRegion.latitude}
+              initialLng={mapRegion.longitude}
+              initialZoom={Math.round(Math.log2(360 / mapRegion.latitudeDelta))}
+              language={language}
             />
           </View>
         )}
@@ -1332,15 +1262,6 @@ export default function SpotWeatherScreen() {
         {/* Scale bars and sliders are now built into each animated overlay */}
 
 
-        {mapLayer === "orto" && (
-          <View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFillObject,
-              { backgroundColor: "rgba(0,0,0,0.28)" },
-            ]}
-          />
-        )}
 
         {/* Dismiss overlay when menu is expanded */}
         {activeMenuPanel && (
@@ -1350,247 +1271,179 @@ export default function SpotWeatherScreen() {
           />
         )}
 
-        {/* Expandable Menu - knapper til højre, indhold udvider til venstre */}
-        <Animated.View
-          style={[
-            styles.expandableMenu,
-            {
-              width: menuExpandAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [58, 240],
-              }),
-            },
-          ]}
-        >
-          {/* Expanded content area (left side) */}
-          <Animated.View
-            style={[
-              styles.menuExpandedContent,
-              {
-                opacity: menuContentAnim,
-                width: menuExpandAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 182],
-                }),
-              },
-            ]}
-            pointerEvents={activeMenuPanel ? "auto" : "none"}
+        {/* Search button - top right (Windy-style individual floating buttons) */}
+        <Pressable style={[styles.searchBtn, guideStep === 1 && styles.guideHighlight]} onPress={() => setSearchOpen(true)}>
+          <Ionicons name="search" size={18} color={guideStep === 1 ? "#000" : THEME.graphYellow} />
+        </Pressable>
+
+        {/* Right tool column */}
+        <View style={styles.rightToolStack}>
+          <Pressable style={styles.floatingBtn} onPress={useCurrentLocation}>
+            <Ionicons name="locate" size={18} color={THEME.graphYellow} />
+          </Pressable>
+          <Pressable
+            style={[styles.floatingBtn, activeMenuPanel === "layers" && styles.floatingBtnActive, guideStep === 2 && styles.guideHighlight]}
+            onPress={() => setActiveMenuPanel(activeMenuPanel === "layers" ? null : "layers")}
           >
-            {activeMenuPanel === "layers" && (
-              <View style={styles.menuPanelContent}>
-                <Pressable
-                  style={styles.menuOptionRow}
-                  onPress={() => setShowSpots((v) => !v)}
-                >
-                  <View style={[styles.menuOptionIcon, showSpots && styles.menuOptionIconActive]}>
-                    <Ionicons name="location" size={14} color={showSpots ? "#000" : THEME.graphYellow} />
-                  </View>
-                  <Text style={styles.menuOptionLabel}>{language === "da" ? "Spots" : "Spots"}</Text>
-                </Pressable>
+            <Ionicons name="layers" size={18} color={(activeMenuPanel === "layers" || guideStep === 2) ? "#000" : THEME.graphYellow} />
+          </Pressable>
+          {(pos || selectedSpot) && (
+            <Pressable style={styles.floatingBtn} onPress={clearSelection}>
+              <Ionicons name="close" size={18} color={THEME.graphYellow} />
+            </Pressable>
+          )}
+        </View>
 
-                <Pressable
-                  style={styles.menuOptionRow}
-                  onPress={() => setShowFredningsbaelter((v) => !v)}
-                >
-                  <View style={[styles.menuOptionIcon, showFredningsbaelter && { backgroundColor: "#EF4444" }]}>
-                    <Ionicons name="warning" size={14} color={showFredningsbaelter ? "#FFF" : "#EF4444"} />
-                  </View>
-                  <Text style={styles.menuOptionLabel}>{language === "da" ? "Fredning" : "Zones"}</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.menuOptionRow}
-                  onPress={() => setShowDmiStations((v) => !v)}
-                >
-                  <View style={[styles.menuOptionIcon, showDmiStations && { backgroundColor: "#3B82F6" }]}>
-                    <Ionicons name="analytics" size={14} color={showDmiStations ? "#FFF" : "#3B82F6"} />
-                  </View>
-                  <Text style={styles.menuOptionLabel}>DMI</Text>
-                </Pressable>
+        {/* Layers dropdown - floats to the left of tool column */}
+        {activeMenuPanel === "layers" && (
+          <View style={styles.layersDropdown}>
+            <Pressable style={styles.layersDropdownRow} onPress={() => setShowSpots((v) => !v)}>
+              <View style={[styles.layersDropdownIcon, showSpots && styles.layersDropdownIconActive]}>
+                <Ionicons name="location" size={14} color={showSpots ? "#000" : THEME.graphYellow} />
               </View>
-            )}
-
-            {activeMenuPanel === "weather" && (
-              <View style={styles.menuPanelContent}>
-                <Pressable
-                  style={styles.menuOptionRow}
-                  onPress={() => {
-                    setShowCurrents(false);
-                    setShowSalinity(false);
-                    setShowWaves(false);
-                    setShowWaterLevel(false);
-                    setShowWind(!showWind);
-                  }}
-                >
-                  <View style={[styles.menuOptionIcon, showWind && styles.menuOptionIconActive]}>
-                    <Ionicons name="flag" size={14} color={showWind ? "#000" : THEME.graphYellow} />
-                  </View>
-                  <Text style={styles.menuOptionLabel}>{language === "da" ? "Vind" : "Wind"}</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.menuOptionRow}
-                  onPress={() => {
-                    setShowSalinity(false);
-                    setShowWaves(false);
-                    setShowWaterLevel(false);
-                    setShowWind(false);
-                    setShowCurrents(!showCurrents);
-                  }}
-                >
-                  <View style={[styles.menuOptionIcon, showCurrents && styles.menuOptionIconActive]}>
-                    <Ionicons name="navigate" size={14} color={showCurrents ? "#000" : THEME.graphYellow} />
-                  </View>
-                  <Text style={styles.menuOptionLabel}>{language === "da" ? "Strøm" : "Current"}</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.menuOptionRow}
-                  onPress={() => {
-                    setShowCurrents(false);
-                    setShowSalinity(false);
-                    setShowWaterLevel(false);
-                    setShowWind(false);
-                    setShowWaves(!showWaves);
-                  }}
-                >
-                  <View style={[styles.menuOptionIcon, showWaves && styles.menuOptionIconActive]}>
-                    <Ionicons name="water" size={14} color={showWaves ? "#000" : THEME.graphYellow} />
-                  </View>
-                  <Text style={styles.menuOptionLabel}>{language === "da" ? "Bølger" : "Waves"}</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.menuOptionRow}
-                  onPress={() => {
-                    setShowCurrents(false);
-                    setShowWaves(false);
-                    setShowWaterLevel(false);
-                    setShowWind(false);
-                    setShowSalinity(!showSalinity);
-                  }}
-                >
-                  <View style={[styles.menuOptionIcon, showSalinity && styles.menuOptionIconActive]}>
-                    <Ionicons name="flask" size={14} color={showSalinity ? "#000" : THEME.graphYellow} />
-                  </View>
-                  <Text style={styles.menuOptionLabel}>{language === "da" ? "Salt" : "Salinity"}</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.menuOptionRow}
-                  onPress={() => {
-                    setShowCurrents(false);
-                    setShowSalinity(false);
-                    setShowWaves(false);
-                    setShowWind(false);
-                    setShowWaterLevel(!showWaterLevel);
-                  }}
-                >
-                  <View style={[styles.menuOptionIcon, showWaterLevel && styles.menuOptionIconActive]}>
-                    <Ionicons name="trending-up" size={14} color={showWaterLevel ? "#000" : THEME.graphYellow} />
-                  </View>
-                  <Text style={styles.menuOptionLabel}>{language === "da" ? "Vand" : "Level"}</Text>
-                </Pressable>
-
-                {(showWind || showCurrents || showWaves || showSalinity || showWaterLevel) && (
-                  <Pressable
-                    style={styles.menuOptionRow}
-                    onPress={() => {
-                      setShowCurrents(false);
-                      setShowSalinity(false);
-                      setShowWaves(false);
-                      setShowWaterLevel(false);
-                      setShowWind(false);
-                    }}
-                  >
-                    <View style={styles.menuOptionIconOff}>
-                      <Ionicons name="eye-off" size={14} color="#666" />
-                    </View>
-                    <Text style={[styles.menuOptionLabel, { color: THEME.textTertiary }]}>
-                      {language === "da" ? "Sluk" : "Off"}
-                    </Text>
-                  </Pressable>
-                )}
+              <Text style={styles.layersDropdownLabel}>{language === "da" ? "Spots" : "Spots"}</Text>
+            </Pressable>
+            <Pressable style={styles.layersDropdownRow} onPress={() => setShowFredningsbaelter((v) => !v)}>
+              <View style={[styles.layersDropdownIcon, showFredningsbaelter && { backgroundColor: "#EF4444" }]}>
+                <Ionicons name="warning" size={14} color={showFredningsbaelter ? "#FFF" : "#EF4444"} />
               </View>
-            )}
-          </Animated.View>
+              <Text style={styles.layersDropdownLabel}>{language === "da" ? "Fredning" : "Zones"}</Text>
+            </Pressable>
+          </View>
+        )}
 
-          {/* Button bar (right side) - always visible */}
-          <View style={styles.menuButtonBar}>
+
+        {/* Map type toggle - bottom left */}
+        {!oceanOverlayActive && (
+          <View style={styles.mapTypeSelectorContainer}>
             <Pressable
-              style={styles.menuIconBtn}
-              onPress={() => setSearchOpen(true)}
+              style={[styles.mapTypeToggle, mapLayer === "standard" && styles.mapTypeToggleActive]}
+              onPress={() => setMapLayer("standard")}
             >
-              <Ionicons name="search" size={20} color={THEME.graphYellow} />
+              <Ionicons name="map" size={16} color={mapLayer === "standard" ? "#000" : THEME.graphYellow} />
             </Pressable>
-
-            <Pressable style={styles.menuIconBtn} onPress={useCurrentLocation}>
-              <Ionicons name="locate" size={20} color={THEME.graphYellow} />
-            </Pressable>
-
             <Pressable
-              style={[styles.menuIconBtn, activeMenuPanel === "layers" && styles.menuIconBtnActive]}
-              onPress={() => setActiveMenuPanel(activeMenuPanel === "layers" ? null : "layers")}
+              style={[styles.mapTypeToggle, mapLayer === "satellite" && styles.mapTypeToggleActive]}
+              onPress={() => setMapLayer("satellite")}
             >
-              <Ionicons name="layers" size={20} color={activeMenuPanel === "layers" ? "#000" : THEME.graphYellow} />
+              <Ionicons name="earth" size={16} color={mapLayer === "satellite" ? "#000" : THEME.graphYellow} />
             </Pressable>
+          </View>
+        )}
 
+        {/* Bottom-right pill: Weather overlays + Moon */}
+        <View style={[styles.bottomRightPill, oceanOverlayActive && styles.bottomRightPillRaised, guideStep === 3 && { zIndex: 999, elevation: 999 }]} pointerEvents="box-none">
+          {/* Weather panel dropdown */}
+          {activeMenuPanel === "weather" && (
+            <View style={styles.bottomRightWeatherPanel}>
+              <Pressable style={styles.bottomRightWeatherRow} onPress={() => {
+                setShowCurrents(false); setShowSalinity(false); setShowWaves(false); setShowWaterLevel(false); setShowPrecipitation(false);
+                setShowWind(!showWind);
+              }}>
+                <View style={[styles.bottomRightWeatherIcon, showWind && styles.bottomRightWeatherIconActive]}>
+                  <Ionicons name="flag" size={14} color={showWind ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.bottomRightWeatherLabel}>{language === "da" ? "Vind" : "Wind"}</Text>
+              </Pressable>
+              <Pressable style={styles.bottomRightWeatherRow} onPress={() => {
+                setShowSalinity(false); setShowWaves(false); setShowWaterLevel(false); setShowWind(false); setShowPrecipitation(false);
+                setShowCurrents(!showCurrents);
+              }}>
+                <View style={[styles.bottomRightWeatherIcon, showCurrents && styles.bottomRightWeatherIconActive]}>
+                  <Ionicons name="navigate" size={14} color={showCurrents ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.bottomRightWeatherLabel}>{language === "da" ? "Strøm" : "Current"}</Text>
+              </Pressable>
+              <Pressable style={styles.bottomRightWeatherRow} onPress={() => {
+                setShowCurrents(false); setShowSalinity(false); setShowWaterLevel(false); setShowWind(false); setShowPrecipitation(false);
+                setShowWaves(!showWaves);
+              }}>
+                <View style={[styles.bottomRightWeatherIcon, showWaves && styles.bottomRightWeatherIconActive]}>
+                  <Ionicons name="water" size={14} color={showWaves ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.bottomRightWeatherLabel}>{language === "da" ? "Bølger" : "Waves"}</Text>
+              </Pressable>
+              <Pressable style={styles.bottomRightWeatherRow} onPress={() => {
+                setShowCurrents(false); setShowWaves(false); setShowWaterLevel(false); setShowWind(false); setShowPrecipitation(false);
+                setShowSalinity(!showSalinity);
+              }}>
+                <View style={[styles.bottomRightWeatherIcon, showSalinity && styles.bottomRightWeatherIconActive]}>
+                  <Ionicons name="flask" size={14} color={showSalinity ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.bottomRightWeatherLabel}>{language === "da" ? "Salt" : "Salinity"}</Text>
+              </Pressable>
+              <Pressable style={styles.bottomRightWeatherRow} onPress={() => {
+                setShowCurrents(false); setShowSalinity(false); setShowWaves(false); setShowWind(false); setShowPrecipitation(false);
+                setShowWaterLevel(!showWaterLevel);
+              }}>
+                <View style={[styles.bottomRightWeatherIcon, showWaterLevel && styles.bottomRightWeatherIconActive]}>
+                  <Ionicons name="trending-up" size={14} color={showWaterLevel ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.bottomRightWeatherLabel}>{language === "da" ? "Vand" : "Level"}</Text>
+              </Pressable>
+              <Pressable style={styles.bottomRightWeatherRow} onPress={() => {
+                setShowCurrents(false); setShowSalinity(false); setShowWaves(false); setShowWaterLevel(false); setShowWind(false);
+                setShowPrecipitation(!showPrecipitation);
+              }}>
+                <View style={[styles.bottomRightWeatherIcon, showPrecipitation && styles.bottomRightWeatherIconActive]}>
+                  <Ionicons name="rainy" size={14} color={showPrecipitation ? "#000" : THEME.graphYellow} />
+                </View>
+                <Text style={styles.bottomRightWeatherLabel}>{language === "da" ? "Nedbør" : "Rain"}</Text>
+              </Pressable>
+              {(showWind || showCurrents || showWaves || showSalinity || showWaterLevel || showPrecipitation) && (
+                <Pressable style={styles.bottomRightWeatherRow} onPress={() => {
+                  setShowCurrents(false); setShowSalinity(false); setShowWaves(false); setShowWaterLevel(false); setShowWind(false); setShowPrecipitation(false);
+                }}>
+                  <View style={styles.bottomRightWeatherIconOff}>
+                    <Ionicons name="eye-off" size={14} color="#666" />
+                  </View>
+                  <Text style={[styles.bottomRightWeatherLabel, { color: THEME.textTertiary }]}>
+                    {language === "da" ? "Sluk" : "Off"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          {/* Active overlay label (Windy-style) */}
+          {activeOverlayName !== null && activeMenuPanel !== "weather" && (
+            <View style={styles.activeOverlayLabel}>
+              <Ionicons name={activeOverlayIcon} size={13} color={THEME.graphYellow} />
+              <Text style={styles.activeOverlayLabelText}>{activeOverlayName}</Text>
+              <Pressable
+                style={styles.activeOverlayLabelClose}
+                onPress={() => {
+                  setShowCurrents(false); setShowSalinity(false); setShowWaves(false); setShowWaterLevel(false); setShowWind(false);
+                }}
+                hitSlop={6}
+              >
+                <Ionicons name="close" size={11} color={THEME.textSec} />
+              </Pressable>
+            </View>
+          )}
+
+          {/* Pill: weather + moon */}
+          <View style={styles.bottomRightPillInner}>
             <Pressable
               style={[
-                styles.menuIconBtn,
-                (activeMenuPanel === "weather" || showWind || showCurrents || showWaves || showSalinity || showWaterLevel) && styles.menuIconBtnActive,
+                styles.bottomRightBtn,
+                (activeMenuPanel === "weather" || oceanOverlayActive) && styles.bottomRightBtnActive,
+                guideStep === 3 && styles.guideHighlightSmall,
               ]}
               onPress={() => setActiveMenuPanel(activeMenuPanel === "weather" ? null : "weather")}
             >
               <Ionicons
                 name="partly-sunny"
-                size={20}
-                color={(activeMenuPanel === "weather" || showWind || showCurrents || showWaves || showSalinity || showWaterLevel) ? "#000" : THEME.graphYellow}
+                size={18}
+                color={(activeMenuPanel === "weather" || oceanOverlayActive || guideStep === 3) ? "#000" : THEME.graphYellow}
               />
             </Pressable>
-
-            <Pressable
-              style={styles.menuIconBtn}
-              onPress={() => setShowMoonModal(true)}
-            >
-              <Ionicons name="moon" size={20} color={THEME.graphYellow} />
-            </Pressable>
-
-            {(pos || selectedSpot) && (
-              <Pressable style={styles.menuIconBtn} onPress={clearSelection}>
-                <Ionicons name="close" size={20} color={THEME.graphYellow} />
-              </Pressable>
-            )}
-          </View>
-        </Animated.View>
-
-        {/* Floating Map Type Selector - Bottom Left (hidden when ocean overlay is active) */}
-        {!oceanOverlayActive && (
-          <View style={styles.mapTypeSelectorContainer}>
-            <Pressable
-              style={[styles.mapTypeCard, mapLayer === "standard" && styles.mapTypeCardActive]}
-              onPress={() => setMapLayer("standard")}
-            >
-              <View style={[styles.mapTypeIconWrap, mapLayer === "standard" && styles.mapTypeIconWrapActive]}>
-                <Ionicons name="map" size={18} color={mapLayer === "standard" ? "#000" : THEME.graphYellow} />
-              </View>
-              <Text style={[styles.mapTypeLabel, mapLayer === "standard" && styles.mapTypeLabelActive]}>
-                {language === "da" ? "Kort" : "Map"}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.mapTypeCard, mapLayer === "orto" && styles.mapTypeCardActive]}
-              onPress={() => setMapLayer("orto")}
-            >
-              <View style={[styles.mapTypeIconWrap, mapLayer === "orto" && styles.mapTypeIconWrapActive]}>
-                <Ionicons name="earth" size={18} color={mapLayer === "orto" ? "#000" : THEME.graphYellow} />
-              </View>
-              <Text style={[styles.mapTypeLabel, mapLayer === "orto" && styles.mapTypeLabelActive]}>
-                {language === "da" ? "Satellit" : "Satellite"}
-              </Text>
+            <View style={styles.bottomRightDivider} />
+            <Pressable style={styles.bottomRightBtn} onPress={() => setShowMoonModal(true)}>
+              <Ionicons name="moon" size={18} color={THEME.graphYellow} />
             </Pressable>
           </View>
-        )}
+        </View>
 
         {/* Lille UI når en lokation er valgt på kortet (ikke spot) */}
         {pos && showLocationActions && !selectedSpot && (
@@ -1695,6 +1548,7 @@ export default function SpotWeatherScreen() {
                 <SunMoonAnimation
                   sunrise={sunTimes.sunrise}
                   sunset={sunTimes.sunset}
+                  language={language}
                 />
               )}
 
@@ -1762,12 +1616,36 @@ export default function SpotWeatherScreen() {
                       color={THEME.textSec}
                     />
                   )}
+                  {edrData.gustWindSeries.length > 0 && (
+                    <ScrollableGraph
+                      series={edrData.gustWindSeries}
+                      label={t("gustWind")}
+                      unit="m/s"
+                      color="#EF4444"
+                    />
+                  )}
+                  {edrData.waterTempSeries.length > 0 && (
+                    <ScrollableGraph
+                      series={edrData.waterTempSeries}
+                      label={t("waterTempForecast")}
+                      unit="°C"
+                      color={THEME.cyan}
+                    />
+                  )}
                   {edrData.humiditySeries.length > 0 && (
                     <ScrollableGraph
                       series={edrData.humiditySeries}
                       label={t("humidity")}
                       unit="%"
                       color={THEME.cyan}
+                    />
+                  )}
+                  {edrData.dewPointSeries.length > 0 && (
+                    <ScrollableGraph
+                      series={edrData.dewPointSeries}
+                      label={t("dewPoint")}
+                      unit="°C"
+                      color="#818CF8"
                     />
                   )}
                   {edrData.pressureSeries.length > 0 && (
@@ -1800,12 +1678,28 @@ export default function SpotWeatherScreen() {
                       iconType="rain"
                     />
                   )}
+                  {edrData.visibilitySeries.length > 0 && (
+                    <ScrollableGraph
+                      series={edrData.visibilitySeries}
+                      label={t("visibilityLabel")}
+                      unit="km"
+                      color="#94A3B8"
+                    />
+                  )}
                   {edrData.waveHeightSeries.length > 0 && (
                     <ScrollableGraph
                       series={edrData.waveHeightSeries}
                       label={t("waveHeight")}
                       unit="m"
                       color={THEME.blue}
+                    />
+                  )}
+                  {edrData.wavePeriodSeries.length > 0 && (
+                    <ScrollableGraph
+                      series={edrData.wavePeriodSeries}
+                      label={t("wavePeriod")}
+                      unit="s"
+                      color="#60A5FA"
                     />
                   )}
                   {edrData.waterLevelSeries.length > 0 && (
@@ -1828,6 +1722,99 @@ export default function SpotWeatherScreen() {
               )}
             </ScrollView>
           </Animated.View>
+        )}
+
+        {/* Map Guide Overlay */}
+        {guideStep !== null && (
+          <BlurView intensity={30} tint="dark" style={styles.guideBackdrop} pointerEvents="box-none">
+            {(() => {
+              const steps = [
+                {
+                  icon: "hand-left-outline" as const,
+                  title: language === "da" ? "Vælg lokation" : "Select location",
+                  desc: language === "da"
+                    ? "Tryk og hold på kortet for at vælge en lokation og se vejret."
+                    : "Long-press the map to select a location and see the weather.",
+                  cardPos: "center" as const,
+                },
+                {
+                  icon: "search" as const,
+                  title: language === "da" ? "Søg" : "Search",
+                  desc: language === "da"
+                    ? "Find en lokation ved at søge efter navn."
+                    : "Find a location by searching for a name.",
+                  cardPos: "below-search" as const,
+                },
+                {
+                  icon: "layers" as const,
+                  title: language === "da" ? "Lag" : "Layers",
+                  desc: language === "da"
+                    ? "Vis eller skjul dine gemte spots og fredningszoner."
+                    : "Show or hide your saved spots and protection zones.",
+                  cardPos: "below-layers" as const,
+                },
+                {
+                  icon: "partly-sunny" as const,
+                  title: language === "da" ? "Vejr-overlays" : "Weather overlays",
+                  desc: language === "da"
+                    ? "Se vind, strøm, bølger, salinitet og mere direkte på kortet."
+                    : "See wind, currents, waves, salinity and more directly on the map.",
+                  cardPos: "above-weather" as const,
+                },
+                {
+                  icon: "bookmark-outline" as const,
+                  title: language === "da" ? "Gem spots" : "Save spots",
+                  desc: language === "da"
+                    ? "Når du vælger en lokation, kan du gemme den som et spot til hurtig adgang."
+                    : "When you select a location, you can save it as a spot for quick access.",
+                  cardPos: "center" as const,
+                },
+              ];
+              const step = steps[guideStep];
+              if (!step) return null;
+              const isLast = guideStep === steps.length - 1;
+
+              const cardStyle =
+                step.cardPos === "center" ? styles.guideCardCenter
+                : step.cardPos === "below-search" ? styles.guideCardBelowSearch
+                : step.cardPos === "below-layers" ? styles.guideCardBelowLayers
+                : step.cardPos === "above-weather" ? styles.guideCardAboveWeather
+                : styles.guideCardCenter;
+
+              return (
+                <View style={[styles.guideCard, cardStyle]} pointerEvents="auto">
+                  <View style={styles.guideIconCircle}>
+                    <Ionicons name={step.icon} size={24} color={THEME.accent} />
+                  </View>
+                  <Text style={styles.guideTitle}>{step.title}</Text>
+                  <Text style={styles.guideDesc}>{step.desc}</Text>
+                  <View style={styles.guideFooter}>
+                    <Text style={styles.guideStepText}>
+                      {guideStep + 1} / {steps.length}
+                    </Text>
+                    <Pressable
+                      style={styles.guideNextBtn}
+                      onPress={async () => {
+                        if (isLast) {
+                          await AsyncStorage.setItem("map_guide_complete_v1", "true");
+                          setGuideStep(null);
+                        } else {
+                          setGuideStep(guideStep + 1);
+                        }
+                      }}
+                    >
+                      <Text style={styles.guideNextText}>
+                        {isLast
+                          ? (language === "da" ? "Forstået!" : "Got it!")
+                          : (language === "da" ? "Næste" : "Next")}
+                      </Text>
+                      {!isLast && <Ionicons name="arrow-forward" size={16} color={THEME.primaryText} />}
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })()}
+          </BlurView>
         )}
       </View>
 
@@ -2395,6 +2382,7 @@ export default function SpotWeatherScreen() {
           </View>
         </Pressable>
       </Modal>
+
     </>
   );
 }
@@ -2543,150 +2531,82 @@ function SpotDeleteConfirm({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: THEME.bg },
 
-  // Expandable Menu - glass pill that expands horizontally
-  expandableMenu: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 60 : 40,
-    right: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(12, 12, 14, 0.85)",
-    borderRadius: 28,
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.12)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.8,
-    shadowRadius: 40,
-    elevation: 20,
-    overflow: "hidden",
-  },
-  menuButtonBar: {
-    width: 58,
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    padding: 9,
-  },
-  menuIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuIconBtnActive: {
-    backgroundColor: THEME.accent,
-  },
-  menuExpandedContent: {
-    overflow: "hidden",
-    paddingVertical: 8,
-    paddingLeft: 12,
-    justifyContent: "center",
-  },
-  menuPanelContent: {
-    gap: 2,
-  },
-  menuOptionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    gap: 8,
-  },
-  menuOptionIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuOptionIconActive: {
-    backgroundColor: THEME.accent,
-  },
-  menuOptionIconOff: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuOptionLabel: {
-    color: THEME.text,
-    fontSize: 13,
-    fontWeight: "500",
-  },
+  // Dismiss overlay
   menuDismissOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "transparent",
   },
 
-  // Legacy - keep for backwards compatibility
-  topButtonsRow: {
+  // Individual floating buttons (Windy-style)
+  searchBtn: {
     position: "absolute",
     top: Platform.OS === "ios" ? 60 : 40,
-    right: 12,
-    flexDirection: "column",
-    gap: 6,
-    backgroundColor: "rgba(12, 12, 14, 0.75)",
-    borderRadius: 28,
-    padding: 8,
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.12)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.8,
-    shadowRadius: 40,
-    elevation: 20,
-  },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(22, 22, 24, 0.75)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  iconBtnActive: {
+  rightToolStack: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 112 : 92,
+    right: 16,
+    gap: 10,
+    alignItems: "center",
+  },
+  floatingBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(22, 22, 24, 0.75)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  floatingBtnActive: {
     backgroundColor: THEME.accent,
   },
 
-  // Floating Map Type Selector - Glass pill
-  mapTypeSelectorContainer: {
+  // Layers dropdown
+  layersDropdown: {
     position: "absolute",
-    bottom: 24,
-    left: 12,
-    flexDirection: "row",
-    gap: 0,
-    backgroundColor: "rgba(12, 12, 14, 0.75)",
-    borderRadius: 26,
-    padding: 5,
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    top: Platform.OS === "ios" ? 112 : 92,
+    right: 64,
+    backgroundColor: "rgba(22, 22, 24, 0.92)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    padding: 6,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.8,
-    shadowRadius: 40,
-    elevation: 20,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  mapTypeCard: {
+  layersDropdownRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "transparent",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 22,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     gap: 10,
+    borderRadius: 10,
   },
-  mapTypeCardActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-  },
-  mapTypeIconWrap: {
+  layersDropdownIcon: {
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -2694,18 +2614,159 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  mapTypeIconWrapActive: {
+  layersDropdownIconActive: {
     backgroundColor: THEME.accent,
   },
-  mapTypeLabel: {
+  layersDropdownLabel: {
+    color: THEME.text,
     fontSize: 14,
+    fontWeight: "500",
+  },
+
+  // Floating Map Type Toggle - Compact icon-only pill
+  mapTypeSelectorContainer: {
+    position: "absolute",
+    bottom: 24,
+    left: 12,
+    flexDirection: "row",
+    gap: 4,
+    backgroundColor: "rgba(22, 22, 24, 0.75)",
+    borderRadius: 20,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  mapTypeToggle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  mapTypeToggleActive: {
+    backgroundColor: THEME.accent,
+  },
+
+  // Bottom-right pill: Weather + Moon
+  bottomRightPill: {
+    position: "absolute",
+    bottom: 24,
+    right: 12,
+    alignItems: "flex-end",
+  },
+  bottomRightPillRaised: {
+    bottom: 150,
+  },
+  bottomRightPillInner: {
+    backgroundColor: "rgba(22, 22, 24, 0.75)",
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    gap: 4,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  bottomRightBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+  },
+  bottomRightBtnActive: {
+    backgroundColor: THEME.accent,
+  },
+  bottomRightDivider: {
+    width: 20,
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.10)",
+    marginVertical: 2,
+  },
+  bottomRightWeatherPanel: {
+    backgroundColor: "rgba(22, 22, 24, 0.92)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+    gap: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  bottomRightWeatherRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    gap: 8,
+  },
+  bottomRightWeatherIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomRightWeatherIconActive: {
+    backgroundColor: THEME.accent,
+  },
+  bottomRightWeatherIconOff: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomRightWeatherLabel: {
+    color: THEME.text,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+
+  // Active overlay indicator (Windy-style)
+  activeOverlayLabel: {
+    backgroundColor: "rgba(22, 22, 24, 0.75)",
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    marginBottom: 8,
+  },
+  activeOverlayLabelText: {
+    fontSize: 12,
     fontWeight: "600",
     color: THEME.text,
-    letterSpacing: 0.2,
   },
-  mapTypeLabelActive: {
-    color: THEME.text,
-    fontWeight: "700",
+  activeOverlayLabelClose: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Moon Modal
@@ -4067,6 +4128,110 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 16,
     marginBottom: 8,
+  },
+
+  // Map Guide
+  guideBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    zIndex: 50,
+  },
+  guideCard: {
+    position: "absolute",
+    backgroundColor: "rgba(22, 22, 24, 0.96)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    padding: 22,
+    width: 270,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    elevation: 60,
+    zIndex: 51,
+  },
+  guideCardCenter: {
+    top: "35%",
+    left: 20,
+    right: 20,
+    alignSelf: "center",
+  },
+  guideCardBelowSearch: {
+    top: Platform.OS === "ios" ? 108 : 88,
+    right: 68,
+  },
+  guideCardBelowLayers: {
+    top: Platform.OS === "ios" ? 160 : 140,
+    right: 68,
+  },
+  guideCardAboveWeather: {
+    bottom: 140,
+    right: 16,
+  },
+  guideHighlight: {
+    backgroundColor: THEME.accent,
+    borderColor: THEME.accent,
+    zIndex: 999,
+    elevation: 999,
+    shadowColor: THEME.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+  },
+  guideHighlightSmall: {
+    backgroundColor: THEME.accent,
+    zIndex: 999,
+    elevation: 999,
+    shadowColor: THEME.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+  },
+  guideIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  guideTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 6,
+  },
+  guideDesc: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.65)",
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  guideFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  guideStepText: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.35)",
+    fontWeight: "500",
+  },
+  guideNextBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: THEME.accent,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  guideNextText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0D0D0F",
   },
 });
 

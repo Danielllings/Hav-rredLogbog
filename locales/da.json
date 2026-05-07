@@ -1,0 +1,9 @@
+{
+  "NSLocationWhenInUseUsageDescription": "Appen bruger din position til at tracke dine fisketure og vise ruten.",
+  "NSLocationAlwaysAndWhenInUseUsageDescription": "Appen bruger din position i baggrunden mens en tur er aktiv.",
+  "NSLocationAlwaysUsageDescription": "Appen bruger din position i baggrunden mens en tur er aktiv.",
+  "NSPhotoLibraryUsageDescription": "Appen bruger adgang til dit fotobibliotek, så du kan vælge billeder af dine fangster og vedhæfte dem til din logbog. For eksempel kan du tilføje et billede af en havørred du har fanget.",
+  "NSCameraUsageDescription": "Appen bruger kameraet, så du kan tage billeder af dine fangster direkte og vedhæfte dem til din logbog.",
+  "NSMicrophoneUsageDescription": "Appen kan bruge mikrofonen i forbindelse med kameraet ved videooptagelse.",
+  "CFBundleDisplayName": "Logbog"
+}

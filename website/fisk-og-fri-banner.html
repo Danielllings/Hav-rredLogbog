@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<title>Fisk &amp; Fri Banner — Havørred Logbog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: #0a0a0b;
+    margin: 0;
+    padding: 0;
+    width: 1629px;
+    height: 1075px;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .banner {
+    width: 1629px;
+    height: 1075px;
+    background: linear-gradient(145deg, #0a0a0b 0%, #111113 35%, #161618 65%, #0e0e10 100%);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Ambient glow top-left */
+  .banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 900px 600px at 5% 0%, rgba(245,158,11,0.07) 0%, transparent 70%),
+      radial-gradient(ellipse 700px 500px at 75% 90%, rgba(245,158,11,0.04) 0%, transparent 70%);
+    z-index: 1;
+  }
+
+  /* Accent line at top */
+  .banner::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #F59E0B 0%, #F59E0B 40%, transparent 80%);
+    z-index: 10;
+  }
+
+  /* ─── Left content ─── */
+  .content {
+    position: absolute;
+    left: 80px;
+    top: 65px;
+    z-index: 10;
+    max-width: 540px;
+  }
+
+  .app-header {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 40px;
+  }
+
+  .app-icon {
+    width: 68px;
+    height: 68px;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    object-fit: cover;
+  }
+
+  .app-label {
+    font-size: 22px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.3px;
+  }
+
+  .headline {
+    font-size: 62px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.08;
+    letter-spacing: -1.5px;
+    margin-bottom: 22px;
+  }
+
+  .headline .accent {
+    color: #F59E0B;
+  }
+
+  .subtitle {
+    font-size: 20px;
+    color: rgba(255,255,255,0.45);
+    font-weight: 400;
+    line-height: 1.55;
+    margin-bottom: 48px;
+    max-width: 460px;
+  }
+
+  /* Feature pills */
+  .features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 50px;
+  }
+
+  .feature-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 24px;
+    padding: 10px 20px;
+    font-size: 15px;
+    color: rgba(255,255,255,0.7);
+    font-weight: 500;
+  }
+
+  .feature-pill .icon {
+    color: #F59E0B;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  /* App Store badge */
+  .store-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    background: #fff;
+    border-radius: 14px;
+    padding: 14px 30px 14px 22px;
+    text-decoration: none;
+    transition: transform 0.2s;
+  }
+
+  .store-badge:hover { transform: scale(1.03); }
+
+  .store-badge svg {
+    width: 32px;
+    height: 32px;
+    fill: #000;
+  }
+
+  .store-badge .text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+
+  .store-badge .text small {
+    font-size: 11px;
+    color: #555;
+    font-weight: 400;
+  }
+
+  .store-badge .text strong {
+    font-size: 20px;
+    color: #000;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+
+  /* Free label */
+  .free-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 18px;
+    font-size: 16px;
+    color: #F59E0B;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+  }
+
+  .free-tag .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+  }
+
+  /* ─── Phone mockups ─── */
+  .phones-area {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 1000px;
+    z-index: 5;
+  }
+
+  .phone-glow {
+    position: absolute;
+    width: 600px;
+    height: 700px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 65%);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .phone {
+    position: absolute;
+    z-index: 5;
+    border-radius: 32px;
+    overflow: hidden;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.6),
+      0 10px 25px rgba(0,0,0,0.4),
+      inset 0 0 0 2px rgba(255,255,255,0.08);
+    background: #000;
+  }
+
+  .phone img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Phone 1 — Statistik (center, prominent) */
+  .phone-1 {
+    width: 290px;
+    height: 628px;
+    top: 55%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(0deg);
+    z-index: 8;
+  }
+
+  /* Phone 2 — Tracking (left, tilted) */
+  .phone-2 {
+    width: 260px;
+    height: 563px;
+    top: 55%;
+    left: 14%;
+    transform: translateY(-50%) rotate(-8deg);
+    z-index: 6;
+    opacity: 0.9;
+  }
+
+  /* Phone 3 — Vejrradar (right, tilted) */
+  .phone-3 {
+    width: 260px;
+    height: 563px;
+    top: 55%;
+    right: 5%;
+    transform: translateY(-50%) rotate(8deg);
+    z-index: 6;
+    opacity: 0.9;
+  }
+
+  /* Phone 4 — Fiskemønster (far left, more tilted) */
+  .phone-4 {
+    width: 230px;
+    height: 498px;
+    top: 55%;
+    left: -4%;
+    transform: translateY(-50%) rotate(-14deg);
+    z-index: 4;
+    opacity: 0.6;
+  }
+
+  /* Phone 5 — Tracking Log (far right, more tilted) */
+  .phone-5 {
+    width: 230px;
+    height: 498px;
+    top: 55%;
+    right: -10%;
+    transform: translateY(-50%) rotate(14deg);
+    z-index: 4;
+    opacity: 0.6;
+  }
+
+
+  /* Bottom accent line */
+  .bottom-line {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #F59E0B 0%, transparent 50%);
+    z-index: 10;
+  }
+
+  /* Subtle grid texture */
+  .grid-texture {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+    background-size: 60px 60px;
+    z-index: 1;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <div class="grid-texture"></div>
+  <div class="bottom-line"></div>
+
+  <!-- Left content -->
+  <div class="content">
+    <div class="app-header">
+      <img class="app-icon" src="assets/icon-512.png" alt="Havørred Logbog">
+      <span class="app-label">Havørred Logbog</span>
+    </div>
+
+    <div class="headline">
+      Bliv klogere<br>
+      på dit <span class="accent">havørred-</span><br>
+      <span class="accent">fiskeri</span>
+    </div>
+
+    <p class="subtitle">
+      GPS-tracking, automatisk vejrdata fra DMI, smart mønsteranalyse og detaljeret statistik. Find ud af hvornår og hvor du fanger fisk.
+    </p>
+
+    <div class="features">
+      <div class="feature-pill">
+        <span class="icon">&#9678;</span> GPS Tracking
+      </div>
+      <div class="feature-pill">
+        <span class="icon">&#9729;</span> DMI Vejrdata
+      </div>
+      <div class="feature-pill">
+        <span class="icon">&#9733;</span> Fiskemønster
+      </div>
+      <div class="feature-pill">
+        <span class="icon">&#9776;</span> Statistik
+      </div>
+      <div class="feature-pill">
+        <span class="icon">&#128205;</span> Vejrradar
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;">
+      <div class="store-badge">
+        <svg viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        <div class="text">
+          <small>Download gratis</small>
+          <strong>App Store</strong>
+        </div>
+      </div>
+      <span class="free-tag">
+        <span class="dot"></span>
+        100% Gratis
+      </span>
+    </div>
+  </div>
+
+  <!-- Right: phone mockups -->
+  <div class="phones-area">
+    <div class="phone-glow"></div>
+
+    <div class="phone phone-4">
+      <img src="assets/Screenshots/Banner/Tracking.png" alt="GPS Tracking">
+    </div>
+    <div class="phone phone-2">
+      <img src="assets/Screenshots/Banner/Statistik 3.png" alt="Fiskemønster">
+    </div>
+    <div class="phone phone-1">
+      <img src="assets/Screenshots/Banner/Statistik 1.png" alt="Statistik">
+    </div>
+    <div class="phone phone-3">
+      <img src="assets/Screenshots/Banner/Tracking Log.png" alt="Vejrforhold">
+    </div>
+    <div class="phone phone-5">
+      <img src="assets/Screenshots/Banner/Vejrradar.png" alt="Vejrradar">
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

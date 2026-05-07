@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<title>App Store Screenshots — Havørred Logbog</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 60px;
+    padding: 60px 40px;
+  }
+
+  .label {
+    color: #888;
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: -40px;
+  }
+
+  .screenshot {
+    width: 1284px;
+    height: 2778px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .bg-1 { background: linear-gradient(180deg, #0a0a0b 0%, #12120f 50%, #161618 100%); }
+  .bg-2 { background: linear-gradient(180deg, #0e0c08 0%, #141210 50%, #0a0a0b 100%); }
+  .bg-3 { background: linear-gradient(180deg, #0a0a0b 0%, #0f0e0c 50%, #161618 100%); }
+  .bg-4 { background: linear-gradient(180deg, #0d0b08 0%, #111010 50%, #0a0a0b 100%); }
+  .bg-5 { background: linear-gradient(180deg, #0a0a0b 0%, #100f0c 50%, #141414 100%); }
+  .bg-6 { background: linear-gradient(180deg, #0c0b09 0%, #131210 50%, #0a0a0b 100%); }
+  .bg-7 { background: linear-gradient(180deg, #0a0a0b 0%, #110f0c 50%, #161618 100%); }
+  .bg-8 { background: linear-gradient(180deg, #0b0a08 0%, #121110 50%, #0a0a0b 100%); }
+
+  .screenshot::before {
+    content: '';
+    position: absolute;
+    width: 800px;
+    height: 800px;
+    top: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: radial-gradient(circle, rgba(245,158,11,0.06) 0%, transparent 70%);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .screenshot::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 15%;
+    right: 15%;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, #F59E0B 30%, #F59E0B 70%, transparent);
+    z-index: 10;
+    border-radius: 0 0 4px 4px;
+  }
+
+  .text-area {
+    position: relative;
+    z-index: 5;
+    text-align: center;
+    padding: 120px 100px 40px;
+    flex-shrink: 0;
+  }
+
+  .text-area .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(245,158,11,0.10);
+    border: 1px solid rgba(245,158,11,0.20);
+    border-radius: 20px;
+    padding: 10px 24px;
+    font-size: 28px;
+    color: #F59E0B;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 40px;
+  }
+
+  .text-area h1 {
+    font-size: 82px;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1.1;
+    letter-spacing: -2px;
+    margin-bottom: 20px;
+  }
+
+  .text-area h1 span {
+    color: #F59E0B;
+  }
+
+  .text-area p {
+    font-size: 36px;
+    color: rgba(255,255,255,0.45);
+    font-weight: 400;
+    line-height: 1.4;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .phone-wrap {
+    position: relative;
+    z-index: 5;
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    min-height: 0;
+  }
+
+  .phone-frame {
+    width: 880px;
+    border-radius: 48px 48px 0 0;
+    overflow: hidden;
+    box-shadow:
+      0 -20px 80px rgba(245,158,11,0.08),
+      0 0 0 3px rgba(255,255,255,0.06),
+      0 40px 100px rgba(0,0,0,0.5);
+    background: #000;
+  }
+
+  .phone-frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .phone-wrap::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+    background: linear-gradient(to top, rgba(10,10,11,1) 0%, transparent 100%);
+    z-index: 6;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<!-- 1: Galleri -->
+<p class="label">Screenshot 1</p>
+<div class="screenshot bg-1">
+  <div class="text-area">
+    <div class="badge">Fangstgalleri</div>
+    <h1>Alle dine<br><span>fangster</span><br>samlet</h1>
+    <p>Personlige rekorder, filtrering og fuld oversigt over dit fiskeri</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <img src="assets/Screenshots/Galleri.png" alt="Galleri">
+    </div>
+  </div>
+</div>
+
+<!-- 2: Tracking -->
+<p class="label">Screenshot 2</p>
+<div class="screenshot bg-2">
+  <div class="text-area">
+    <div class="badge">GPS-Tracking</div>
+    <h1>Track dine<br><span>fisketure</span></h1>
+    <p>Start en tur, følg din rute og se vejrdata i realtid</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <img src="assets/Screenshots/Tracking.png" alt="Tracking">
+    </div>
+  </div>
+</div>
+
+<!-- 3: Statistik 1 — Fangstrate -->
+<p class="label">Screenshot 3</p>
+<div class="screenshot bg-3">
+  <div class="text-area">
+    <div class="badge">Statistik</div>
+    <h1>Kend din<br><span>fangstrate</span></h1>
+    <p>Detaljeret statistik over fisk, ture, timer og din personlige succesrate</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <img src="assets/Screenshots/Statistik 1.png" alt="Fangstrate">
+    </div>
+  </div>
+</div>
+
+<!-- 4: Statistik 2 — Spots -->
+<p class="label">Screenshot 4</p>
+<div class="screenshot bg-4">
+  <div class="text-area">
+    <div class="badge">Spot-analyse</div>
+    <h1>Find din<br><span>bedste spot</span></h1>
+    <p>Se hvilke pladser der performer bedst og følg din månedsoversigt</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <img src="assets/Screenshots/Statistik 2.png" alt="Spot-præstation">
+    </div>
+  </div>
+</div>
+
+<!-- 5: Statistik 3 — Fiskemønster -->
+<p class="label">Screenshot 5</p>
+<div class="screenshot bg-5">
+  <div class="text-area">
+    <div class="badge">Fiskemønster</div>
+    <h1>Forstå<br><span>hvornår</span><br>de bider</h1>
+    <p>Analysér dine fangster op mod vejr, vind, vandtemperatur og årstid</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <img src="assets/Screenshots/Statistik 3.png" alt="Fiskemønster">
+    </div>
+  </div>
+</div>
+
+<!-- 6: Vejrradar -->
+<p class="label">Screenshot 6</p>
+<div class="screenshot bg-6">
+  <div class="text-area">
+    <div class="badge">Vejrkort</div>
+    <h1>Vind og<br><span>vejrradar</span><br>live</h1>
+    <p>Se vindretning, styrke og vejrudvikling direkte på kortet</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <img src="assets/Screenshots/Vejrradar.png" alt="Vejrradar">
+    </div>
+  </div>
+</div>
+
+<!-- 7: Tracking Log — Vejrforhold -->
+<p class="label">Screenshot 7</p>
+<div class="screenshot bg-7">
+  <div class="text-area">
+    <div class="badge">Vejrdata</div>
+    <h1>Præcise<br><span>vejrforhold</span><br>under turen</h1>
+    <p>Temperatur, vind, vandstand, tryk og meget mere — automatisk logget</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <img src="assets/Screenshots/Tracking Log.png" alt="Vejrforhold">
+    </div>
+  </div>
+</div>
+
+<!-- 8: Tracking Log 2 — Live grafer -->
+<p class="label">Screenshot 8</p>
+<div class="screenshot bg-8">
+  <div class="text-area">
+    <div class="badge">Live data</div>
+    <h1>Følg<br><span>havet</span><br>i realtid</h1>
+    <p>Vandtemperatur, vandstand og tryk vist som live grafer under din tur</p>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <img src="assets/Screenshots/Tracking Log 2.png" alt="Live grafer">
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

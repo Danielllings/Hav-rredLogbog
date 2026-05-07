@@ -524,8 +524,6 @@ export default function TripDetailScreen() {
   }
 
   const showDeleteButton = trip.duration_sec <= MAX_DELETE_DURATION_SEC;
-  const hasClimate = !!(evaluation?.stationName || evaluation?.stationId);
-  const hasOcean = !!(evaluation?.oceanStationName || evaluation?.oceanStationId);
 
   // Check if trip has GPS path data for replay
   const hasReplayData = (() => {
@@ -807,6 +805,19 @@ export default function TripDetailScreen() {
                   <View style={styles.weatherStatCard}>
                     <Text style={styles.weatherStatValue}>{evaluation.windMS.avg.toFixed(1)} m/s</Text>
                     <Text style={styles.weatherStatLabel}>{t("windSpeed")}</Text>
+                    {evaluation.windDirDeg && Number.isFinite(evaluation.windDirDeg.avg) && (
+                      <View style={styles.windDirRow}>
+                        <Ionicons
+                          name="arrow-up"
+                          size={16}
+                          color={theme.primary}
+                          style={{ transform: [{ rotate: `${((evaluation.windDirDeg.avg ?? 0) + 180) % 360}deg` }] }}
+                        />
+                        <Text style={styles.windDirLabel}>
+                          {degToCompass(evaluation.windDirDeg.avg)} ({Math.round(evaluation.windDirDeg.avg)}°)
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 )}
                 {evaluation.waterTempC && (
@@ -898,23 +909,6 @@ export default function TripDetailScreen() {
                 )}
               </>
 
-              {/* Data source */}
-              <View style={styles.sourceSection}>
-                <View style={styles.sourceChip}>
-                  <Ionicons name="analytics" size={12} color="#606068" />
-                  <Text style={styles.sourceChipText}>DMI Open Data</Text>
-                </View>
-                <View style={styles.sourceStatusRow}>
-                  <View style={styles.sourceStatusItem}>
-                    <View style={[styles.sourceStatusDot, hasClimate && styles.sourceStatusDotActive]} />
-                    <Text style={styles.sourceStatusLabel}>Klima</Text>
-                  </View>
-                  <View style={styles.sourceStatusItem}>
-                    <View style={[styles.sourceStatusDot, hasOcean && styles.sourceStatusDotActive]} />
-                    <Text style={styles.sourceStatusLabel}>Hav</Text>
-                  </View>
-                </View>
-              </View>
             </View>
           )}
         </View>
@@ -1895,6 +1889,16 @@ const styles = StyleSheet.create({
     color: "#606068",
     textTransform: "uppercase",
   },
+  windDirRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
+  windDirLabel: {
+    fontSize: 12,
+    color: "#606068",
+  },
 
   // === NO WEATHER ===
   noWeatherIcon: {
@@ -1911,32 +1915,6 @@ const styles = StyleSheet.create({
     color: "#606068",
     marginBottom: 16,
     textAlign: "center",
-  },
-
-  // === SOURCE SECTION ===
-  sourceChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#1E1E21",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: "flex-start",
-  },
-  sourceChipText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#606068",
-  },
-  sourceStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#606068",
-  },
-  sourceStatusDotActive: {
-    backgroundColor: "#F59E0B",
   },
 
   // === MAP MARKERS ===
@@ -2145,15 +2123,6 @@ const styles = StyleSheet.create({
     color: "#A0A0A8",
     fontSize: 14,
   },
-  sourceSection: {
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#2A2A2E",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
   sourceHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2179,21 +2148,6 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 10,
     backgroundColor: "#F59E0B20",
-  },
-  sourceStatusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  sourceStatusItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  sourceStatusLabel: {
-    fontSize: 12,
-    color: "#606068",
-    fontWeight: "500",
   },
   noteText: {
     color: "#FF3B30",

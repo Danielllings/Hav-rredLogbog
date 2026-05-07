@@ -7,7 +7,7 @@
 - Tracke fisketure med GPS
 - Logge fangster med billeder og detaljer
 - Gemme yndlingsspots
-- Se vejr- og havdata fra DMI automatisk koblet til ture
+- Se vejr- og havdata fra Open-Meteo (DMI HARMONIE-model) automatisk koblet til ture
 - Se statistik over fisketure og fangster
 - Måle vandtemperatur selv under ture
 
@@ -25,7 +25,7 @@
 | Lokation | expo-location |
 | Kort | react-native-maps |
 | Grafer | react-native-svg (custom) |
-| Vejrdata | DMI Open Data API (via Cloud Functions) |
+| Vejrdata | Open-Meteo API (DMI HARMONIE-model, 2km opløsning) |
 | Auth | Firebase Authentication |
 | Sprog | TypeScript |
 
@@ -54,11 +54,11 @@ sea-trout-log/
 │   ├── catches.ts          # Fangst CRUD
 │   ├── trips.ts            # Tur CRUD + statistik
 │   ├── spots.ts            # Spots CRUD
-│   ├── dmi.ts              # DMI orchestration (samler climate + ocean)
-│   ├── dmiClimate.ts       # DMI Climate API (luft-temp, vind)
-│   ├── dmiOcean.ts         # DMI Ocean API (vandtemp, vandstand) + STATIONSLISTE
-│   ├── dmiGridData.ts      # DMI EDR grid data (strøm + salinitet)
-│   ├── dmiConfig.ts        # DMI URL-konfiguration
+│   ├── dmi.ts              # Vejr orchestration (Open-Meteo + DMI)
+│   ├── openMeteoGrid.ts    # Open-Meteo grid fetch til overlays
+│   ├── dmiOcean.ts         # DMI Ocean stationsliste (OCEAN_STATIONS_DK)
+│   ├── dmiGridData.ts      # DMI EDR grid data (salinitet)
+│   ├── dmiConfig.ts        # DMI URL-konfiguration (salinitet)
 │   ├── firebase.ts         # Firebase init
 │   ├── firestore.ts        # Firestore helpers
 │   ├── db.ts               # Lokal SQLite (legacy, bruges ikke)
@@ -88,7 +88,7 @@ sea-trout-log/
 ├── constants/              # Konstanter
 │   └── theme.ts            # THEME farver (bg, card, graphYellow, graphBlue, etc.)
 ├── assets/                 # Billeder, fonte osv.
-├── functions/              # Firebase Cloud Functions (proxy)
+├── functions/              # Firebase Cloud Functions (DMI salinitet proxy + push alerts)
 └── app.config.ts           # Expo config (miljøvariabler)
 ```
 
@@ -121,9 +121,9 @@ Første gang appen startes vises onboarding:
   - Modal til indtastning af temperatur (°C)
   - Kan måle flere gange under turen (timestamps)
   - Viser seneste måling + antal på knappen
-  - Bruges i grafer/evaluering i stedet for DMI hvis målt
+  - Bruges i grafer/evaluering i stedet for Open-Meteo data hvis målt
 - **Automatisk** kobling til nærmeste spot ved afslutning
-- **DMI-evaluering** ved gem (vejr + havdata for turens periode)
+- **Open-Meteo-evaluering** ved gem (vejr + havdata for turens periode)
 - **Loading overlay** mens turen gemmes
 - **"Opret spot først" modal:** Vises hvis bruger prøver at starte tracking uden spots
 
@@ -150,7 +150,7 @@ Animeret afspilning af gemte ture:
 - Viser **varighed, distance, antal fisk**
 - **Vejrgrafer** (lufttemp, vindstyrke, vandtemp, vandstand)
 - Grafer viser **pile** for tur-start (grøn) og tur-slut (rød)
-- Viser data fra **nærmeste DMI-station** eller **selvmålt vandtemp**
+- Viser data fra **Open-Meteo (DMI HARMONIE)** eller **selvmålt vandtemp**
 - Kort med GPS-track og fangstpunkter
 - Link til **Tur-replay**
 
@@ -170,7 +170,7 @@ Animeret afspilning af gemte ture:
 
 ### 8. Spot Weather / Prognose (`app/(tabs)/spot-weather.tsx`)
 
-- Vælg et spot og se **48-timers prognose** fra DMI EDR
+- Vælg et spot og se **48-timers prognose** fra Open-Meteo (DMI HARMONIE-model)
 - Lufttemp, vind, vandstand, bølgehøjde
 - Sol op/ned tider via `suncalc`
 - **Kort/Satellit knapper:** Skjules når Hav & vejr overlay er aktivt
@@ -194,13 +194,14 @@ Fire interaktive overlays i Vejrkort (spot-weather), alle med **WebView + Leafle
 - Mørk glasmorfisme design
 - **Kort/Satellit vælger skjules** når overlay er aktivt
 
-#### Datakilder (DMI EDR API):
-| Overlay | Collection | Parameter | Format |
-|---------|-----------|-----------|--------|
-| Havstrøm | `dkss_idw`, `dkss_nsbs` | `current-u`, `current-v` | CoverageJSON |
-| Salinitet | `dkss_idw`, `dkss_nsbs` | `salinity` | CoverageJSON |
-| Bølger | `wam_nsb`, `wam_dw` | `significant-wave-height` | CoverageJSON |
-| Vandstand | `dkss_nsbs` | `sea-mean-deviation` | CoverageJSON |
+#### Datakilder:
+| Overlay | Kilde | Endpoint / Parameter |
+|---------|-------|----------------------|
+| Havstrøm | Open-Meteo Marine | `ocean_current_velocity`, `ocean_current_direction` |
+| Bølger | Open-Meteo Marine | `wave_height`, `wave_direction` |
+| Vandstand | Open-Meteo Marine | `sea_level` heatmap punkter |
+| Vind | Open-Meteo Weather | `wind_speed_10m`, `wind_direction_10m` |
+| Salinitet | DMI EDR API | `dkss_idw`/`dkss_nsbs` → `salinity` (CoverageJSON) |
 
 #### Farveskalaer (vertikal legend):
 - **Havstrøm:** Blå → Cyan → Grøn → Gul → Rød (0-2+ m/s)
@@ -228,73 +229,60 @@ Fire interaktive overlays i Vejrkort (spot-weather), alle med **WebView + Leafle
 - Ture gemmes lokalt hvis netværk er nede
 - Automatisk sync ved app-start eller netværksgenetablering
 - Retry-logik med exponential backoff
-- DMI-data hentes ved sync hvis ikke tilgængelig offline
+- Vejrdata hentes fra Open-Meteo ved sync hvis ikke tilgængelig offline
 - **Selvmålte vandtemperaturer** bevares og anvendes ved sync
 
 ---
 
-## DMI Integration
+## Vejr Integration
 
-Appen bruger tre DMI API'er via Firebase Cloud Functions som proxy:
+Appen bruger **Open-Meteo** som primær vejrdatakilde (gratis, ingen API-key, ~250ms responstid). Open-Meteo leverer data fra DMI's HARMONIE-model med 2km opløsning. **DMI EDR** bruges kun til salinitet.
 
-### Climate API (`lib/dmiClimate.ts`)
-- **Data:** Lufttemperatur, vindstyrke, vindretning
-- **Opløsning:** Timebaseret (fra-tidspunkt er hele timer)
-- **Stationer:** 30+ danske kyststationer
-- **Parameter-ID'er:** `mean_temp`, `mean_wind_speed`, `mean_wind_dir`
+### Open-Meteo API (primær) (`lib/dmi.ts`, `lib/openMeteoGrid.ts`)
 
-### Ocean API (`lib/dmiOcean.ts`)
-- **Data:** Vandtemperatur, vandstand
-- **Stationer:** 80+ danske havnestationer (se `OCEAN_STATIONS_DK` array)
-- **Parameter-ID'er:** `tw` (temp), `sealev_dvr`, `sealev_ln` (vandstand)
-- **Fallback:** Prøver nærmeste stationer indtil data findes
+**Spot-vejr** (`dmi.ts` -> `getSpotForecastEdr()`):
+- 2 parallelle requests: Weather API + Marine API (~250ms total)
+- Weather: temperatur, vind, vindstød, fugtighed, tryk, skydække, nedbør, dugpunkt, sigtbarhed
+- Marine: bølgehøjde, bølgeperiode, bølgeretning, vandtemperatur, vandstand, havstrøm
 
-#### Ocean Stationsliste (`lib/dmiOcean.ts` linje 21-246)
+**Endpoints:**
+```
+Weather: https://api.open-meteo.com/v1/forecast
+Marine:  https://marine-api.open-meteo.com/v1/marine
+```
+
+**Tur-evaluering** (`dmi.ts` -> `evaluateTripWithDmi()`):
+- 2 parallelle Open-Meteo kald med `start_date`/`end_date` for turens tidspunkt
+- Bruger DMI HARMONIE 2km model (via `models=dmi_seamless`) for ture <90 dage
+- Bruger archive API (`archive-api.open-meteo.com`) for ture >90 dage
+- Beregner Stat (avg/min/max) + tidsserier for: luft-temp, vind, vindretning, tryk, fugtighed, vandtemp, vandstand
+
+**Kort-overlays** (`lib/openMeteoGrid.ts`):
+- Genererer 18x18 grid af punkter over danske farvande
+- Kalder Open-Meteo med komma-separerede koordinater (max ~1000 punkter)
+- Returnerer CoverageJSON-kompatibelt format til Leaflet-velocity
+- **Havstrom**: `fetchCurrentGrid()` -> u/v komponenter fra velocity+direction
+- **Bolger**: `fetchWaveGrid()` -> pseudo u/v fra hojde+retning
+- **Vind**: `fetchWindGrid()` -> u/v fra speed+direction
+- **Vandstand**: `fetchWaterLevelGrid()` -> heatmap punkter
+
+### DMI (kun salinitet + stationsmarkorer)
+
+**Salinitet** (`lib/dmiGridData.ts` via `SalinityHeatmapOverlay.tsx`):
+- Direkte DMI EDR API (Open-Meteo har ikke salinitet)
+- Collections: `dkss_idw`, `dkss_nsbs`
+- Format: CoverageJSON cube
+
+**Stationsmarkorer** (`lib/dmiOcean.ts`):
+- `OCEAN_STATIONS_DK` array med 80+ danske havstationer
+- Bruges til kort-pins (toggle i lag-modalen under "DMI Stationer")
 
 ```typescript
 export const OCEAN_STATIONS_DK: OceanStation[] = [
-  // Sjælland / København / Falster
   { id: "31417", name: "Nakskov I", lat: 54.828, lon: 11.1363, coastal: true, hasTemp: true, hasLevel: true },
-  { id: "30017", name: "Hornbæk Havn", lat: 56.0934, lon: 12.4571, coastal: true, hasTemp: true, hasLevel: true },
+  { id: "30017", name: "Hornbaek Havn", lat: 56.0934, lon: 12.4571, coastal: true, hasTemp: true, hasLevel: true },
   // ... 80+ stationer
 ];
-
-// Afledte lister:
-export const COASTAL_OCEAN_STATIONS_DK  // Kun kyststationer
-const TEMP_STATIONS_DK                   // Stationer med temperaturmåling
-const LEVEL_STATIONS_DK                  // Stationer med vandstandsmåling
-```
-
-### EDR API (Forecast) (`lib/dmi.ts`)
-- **Data:** HARMONIE vejrmodel (luft, vind), DKSS/WAM havmodel
-- **Bruges til:** Spot Weather prognose
-- **Cache:** 15 min TTL for gentagne opslag
-- **Proxy warm-up:** Kaldes ved app-start for hurtigere første kald
-
-### EDR Grid API (`lib/dmiGridData.ts`)
-- **Data:** Havstrøm, salinitet, bølgehøjde
-- **Collections:**
-  - DKSS: `dkss_idw`, `dkss_nsbs` (strøm + salinitet)
-  - WAM: `wam_dw`, `wam_nsb` (bølger)
-- **Format:** CoverageJSON cube
-- **Strømretning:** Beregnet med `atan2(u, v)` fra DMI's u/v komponenter
-- **Parallel fetch:** Alle modeller hentes parallelt via `Promise.any()`
-
-### Vigtig DMI-logik
-
-```typescript
-// DMI Climate bruger hele timer - timestamps skal rundes
-function floorToHour(ms: number): number {
-  const d = new Date(ms);
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
-}
-
-// DMI har ~1-2 timers forsinkelse - start mindst 2 timer i fortiden
-const twoHoursAgo = floorToHour(nowMs - 2 * 60 * 60 * 1000);
-if (effectiveStartMs > twoHoursAgo) {
-  effectiveStartMs = twoHoursAgo;
-}
 ```
 
 ---
@@ -316,7 +304,7 @@ type SaveTripPayload = {
 2. Indtaster temperatur i modal (valideres: -5 til 35°C)
 3. Gemmes med timestamp i `manualWaterTemps` array
 4. Ved tur-afslutning:
-   - Hvis målinger findes → bruges i stedet for DMI's `waterTempC`
+   - Hvis målinger findes -> bruges i stedet for Open-Meteo's `waterTempC`
    - `waterTempSeries` bygges fra målingerne
    - `evaluation.manualWaterTemp = true` markerer selvmålt
 5. Ved offline sync → samme logik anvendes
@@ -348,7 +336,7 @@ type TripRow = {
   distance_m: number;
   fish_count: number;
   path_json?: string;       // GPS-punkter
-  meta_json?: string;       // DMI-evaluering (inkl. evt. manualWaterTemp)
+  meta_json?: string;       // Vejr-evaluering fra Open-Meteo (inkl. evt. manualWaterTemp)
   fish_events_json?: string; // Fangst-tidspunkter
   spot_id?: string;
   spot_name?: string;
@@ -396,10 +384,8 @@ export const THEME = {
 | `firebaseStorageBucket` | Firebase Storage bucket |
 | `firebaseMessagingSenderId` | Firebase messaging sender |
 | `firebaseAppId` | Firebase app ID |
-| `dmiClimateUrl` | Cloud Function proxy for DMI Climate |
-| `dmiOceanUrl` | Cloud Function proxy for DMI Ocean |
-| `dmiEdrUrl` | Cloud Function proxy for DMI EDR (forecast) |
-| `dmiEdrBaseUrl` | Cloud Function proxy for DMI EDR grid data (strøm/salinitet) |
+| `dmiEdrUrl` | Cloud Function proxy for DMI EDR (kun salinitet) |
+| `dmiEdrBaseUrl` | Cloud Function proxy for DMI EDR grid data (salinitet) |
 
 ---
 
@@ -418,25 +404,20 @@ export const THEME = {
 
 ## Kendte Udfordringer & Løsninger
 
-### 1. DMI Climate returnerer ingen data
-**Problem:** Query-timestamps matcher ikke DMI's timebaserede `from`-felt.
-**Løsning:** Rund start/slut til hele timer med `floorToHour`/`ceilToHour`.
+### 1. Vejrdata for korte ture
+**Problem:** Meget korte ture kan have begrænset datadækning.
+**Løsning:** Open-Meteo leverer timebaserede prognoser; minimum vejrdata vindue er 2 timer.
 
-### 2. Stadig ingen data for korte ture
-**Problem:** DMI har ~1-2 timers forsinkelse, så data for "nu" eksisterer ikke.
-**Løsning:** Udvid query-vinduet til at starte mindst 2 timer i fortiden.
-
-### 3. Loading spinner ikke synlig
+### 2. Loading spinner ikke synlig
 **Problem:** Overlay var inde i ScrollView og dækkede kun scrollbart indhold.
 **Løsning:** Flyt overlay udenfor ScrollView med `position: absolute` og `zIndex: 9999`.
 
-### 4. Tur-pile vises ikke på grafer
+### 3. Tur-pile vises ikke på grafer
 **Problem:** Tur-tidspunkter var efter grafens data-range (ratio > 1).
 **Løsning:** Clamp ratios til 0-1 for at vise pile på grafkanten.
 
-### 5. DMI langsom første kald
-**Problem:** Cloud Function cold start giver langsom respons.
-**Løsning:** `warmUpDmiProxy()` kaldes ved app-start + request timeouts.
+### 4. Open-Meteo responstid
+**Bemærkning:** Open-Meteo er gratis og kræver ingen API-key. Responstid er typisk ~200-400ms. Ingen Cloud Function proxy nødvendig (direkte kald fra app).
 
 ---
 
@@ -498,4 +479,4 @@ For spørgsmål om appen, kontakt udvikleren.
 
 ---
 
-*Sidst opdateret: 28. februar 2026*
+*Sidst opdateret: 25. april 2026*

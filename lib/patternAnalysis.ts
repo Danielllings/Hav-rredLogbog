@@ -4,6 +4,11 @@
 import SunCalc from "suncalc";
 import { getWindType, type CoastDirection } from "./spots";
 
+// Translation function type - accepts any key→string function
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type TFunc = (key: any) => string;
+export type Language = "da" | "en";
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -93,95 +98,103 @@ const TEMP_BANDS: TempBand[] = [
 // Bucket/Label Functions
 // ============================================================================
 
-export function waterLevelBucket(cm?: number | null): string {
-  if (cm == null || !Number.isFinite(cm)) return "ukendt";
-  if (cm < -20) return "Lavvande";
-  if (cm > 20) return "Højvande";
-  return "Middel vandstand";
+export function waterLevelBucket(cm?: number | null, t?: TFunc): string {
+  const tr = t ?? ((k: string) => k);
+  if (cm == null || !Number.isFinite(cm)) return tr("unknown");
+  if (cm < -20) return tr("lowWater");
+  if (cm > 20) return tr("highWater");
+  return tr("midWater");
 }
 
-export function seasonFromMonth(month: number): string {
-  if (month >= 2 && month <= 4) return "Foråret";
-  if (month >= 5 && month <= 7) return "Sommeren";
-  if (month >= 8 && month <= 10) return "Efteråret";
-  return "Vinteren";
+export function seasonFromMonth(month: number, t?: TFunc): string {
+  const tr = t ?? ((k: string) => k);
+  if (month >= 2 && month <= 4) return tr("spring");
+  if (month >= 5 && month <= 7) return tr("summer");
+  if (month >= 8 && month <= 10) return tr("autumn");
+  return tr("winter");
 }
 
-export function timeOfDayBucket(h: number): string {
-  if (h >= 5 && h < 9) return "Morgenen";
-  if (h >= 9 && h < 12) return "Formiddagen";
-  if (h >= 12 && h < 17) return "Eftermiddagen";
-  if (h >= 17 && h < 22) return "Aftenen";
-  return "Natten";
+export function timeOfDayBucket(h: number, t?: TFunc): string {
+  const tr = t ?? ((k: string) => k);
+  if (h >= 5 && h < 9) return tr("theMorning");
+  if (h >= 9 && h < 12) return tr("theLateMorning");
+  if (h >= 12 && h < 17) return tr("theAfternoon");
+  if (h >= 17 && h < 22) return tr("theEvening");
+  return tr("theNight");
 }
 
-export function tempBucketLabel(t?: number | null): string {
-  if (t == null || !Number.isFinite(t)) return "ukendt";
-  const band = TEMP_BANDS.find((b) => t >= b.min && t < b.max);
-  return band ? band.label : "ukendt";
+export function tempBucketLabel(temp?: number | null, t?: TFunc): string {
+  const tr = t ?? ((k: string) => k);
+  if (temp == null || !Number.isFinite(temp)) return tr("unknown");
+  const band = TEMP_BANDS.find((b) => temp >= b.min && temp < b.max);
+  return band ? band.label : tr("unknown");
 }
 
-export function windSpeedBucketLabel(ms?: number | null): string {
-  if (ms == null || !Number.isFinite(ms)) return "ukendt";
-  if (ms < 4) return "svag vind";
-  if (ms < 8) return "mild vind";
-  if (ms < 12) return "frisk vind";
-  return "hård vind";
+export function windSpeedBucketLabel(ms?: number | null, t?: TFunc): string {
+  const tr = t ?? ((k: string) => k);
+  if (ms == null || !Number.isFinite(ms)) return tr("unknown");
+  if (ms < 4) return tr("weakWind");
+  if (ms < 8) return tr("mildWind");
+  if (ms < 12) return tr("freshWind");
+  return tr("hardWind");
 }
 
-export function coastWindLabel(raw?: string | null): string | null {
+export function coastWindLabel(raw?: string | null, t?: TFunc): string | null {
   if (!raw) return null;
+  const tr = t ?? ((k: string) => k);
   const v = raw.toLowerCase();
 
-  if (v.includes("fraland")) return "fralandsvind";
-  if (v.includes("påland") || v.includes("på-land")) return "pålandsvind";
+  if (v.includes("fraland") || v.includes("offshore")) return tr("offshoreWind");
+  if (v.includes("påland") || v.includes("på-land") || v.includes("onshore")) return tr("onshoreWind");
   if (v.includes("side") || v.includes("langs") || v.includes("tvaers"))
-    return "sidevind";
-  if (v.includes("offshore")) return "fralandsvind";
-  if (v.includes("onshore")) return "pålandsvind";
+    return tr("sideWind");
 
-  if (v === "ukendt") return null;
+  if (v === "ukendt" || v === "unknown") return null;
   return raw;
 }
 
-export function windDirLabelFromDeg(deg: number): string {
+export function windDirLabelFromDeg(deg: number, t?: TFunc): string {
+  const tr = t ?? ((k: string) => k);
   const d = ((deg % 360) + 360) % 360;
 
-  if (d >= 337.5 || d < 22.5) return "Nord";
-  if (d >= 22.5 && d < 67.5) return "Nordøst";
-  if (d >= 67.5 && d < 112.5) return "Øst";
-  if (d >= 112.5 && d < 157.5) return "Sydøst";
-  if (d >= 157.5 && d < 202.5) return "Syd";
-  if (d >= 202.5 && d < 247.5) return "Sydvest";
-  if (d >= 247.5 && d < 292.5) return "Vest";
-  return "Nordvest";
+  if (d >= 337.5 || d < 22.5) return tr("north");
+  if (d >= 22.5 && d < 67.5) return tr("northEast");
+  if (d >= 67.5 && d < 112.5) return tr("east");
+  if (d >= 112.5 && d < 157.5) return tr("southEast");
+  if (d >= 157.5 && d < 202.5) return tr("south");
+  if (d >= 202.5 && d < 247.5) return tr("southWest");
+  if (d >= 247.5 && d < 292.5) return tr("west");
+  return tr("northWest");
 }
 
-export function durationBucketLabel(durationSec?: number | null): string | null {
+export function durationBucketLabel(durationSec?: number | null, t?: TFunc): string | null {
   if (!Number.isFinite(durationSec ?? null)) return null;
+  const tr = t ?? ((k: string) => k);
   const hrs = (durationSec as number) / 3600;
-  if (hrs < 2) return "<2 timer";
-  if (hrs < 4) return "2-4 timer";
-  if (hrs < 6) return "4-6 timer";
-  return "6+ timer";
+  if (hrs < 2) return tr("lessThan2Hours");
+  if (hrs < 4) return tr("hours2to4");
+  if (hrs < 6) return tr("hours4to6");
+  return tr("hours6plus");
 }
 
 export function movementLabel(
   distanceM?: number | null,
-  durationSec?: number | null
+  durationSec?: number | null,
+  t?: TFunc
 ): string | null {
   if (
     !Number.isFinite(distanceM ?? null) ||
     !Number.isFinite(durationSec ?? null)
   )
     return null;
+  const tr = t ?? ((k: string) => k);
   const dist = distanceM as number;
   const dur = durationSec as number;
   if (dur <= 0) return null;
   const speed = dist / dur;
-  if (dist <= 300) return "Stillestående/let bevægelse";
-  if (dist >= 1500 || speed >= 0.35) return "Affiskning af vand";
-  return "Roligt tempo";
+  if (dist <= 300) return tr("standingLightMovement");
+  if (dist >= 1500 || speed >= 0.35) return tr("fishingTheWater");
+  return tr("calmPace");
 }
 
 // ============================================================================
@@ -233,7 +246,7 @@ export function buildBucketItems(
   const filtered = entries.filter((e) => e.trips >= minTrips);
   if (filtered.length) list = filtered;
 
-  let cleaned = list.filter((e) => e.label !== "ukendt");
+  let cleaned = list.filter((e) => e.label !== "ukendt" && e.label !== "unknown");
   if (!cleaned.length) cleaned = list;
 
   cleaned.sort((a, b) => b.fish - a.fish || a.label.localeCompare(b.label));
@@ -251,8 +264,12 @@ export function buildBucketItems(
 
 export function buildPatternGroups(
   stats: PatternStats,
-  minTrips: number
+  minTrips: number,
+  t?: TFunc,
+  language?: Language
 ): PatternGroup[] {
+  const tr = t ?? ((k: string) => k);
+  const lang = language ?? "da";
   const groups: PatternGroup[] = [];
   const totalFish = stats.totalFish;
 
@@ -267,20 +284,20 @@ export function buildPatternGroups(
     }
   };
 
-  pushGroup("Årstid", stats.seasonStats);
-  pushGroup("Tid på dagen", stats.todStats);
-  pushGroup("Vandstand", stats.tideStats);
-  pushGroup("Havtemperatur", stats.waterTempStats);
-  pushGroup("Lufttemperatur", stats.airTempStats);
-  pushGroup("Vindstyrke", stats.windSpeedStats);
-  pushGroup("Vindretning", stats.windDirStats);
-  pushGroup("Vind ift. kyst", stats.coastWindStats);
-  pushGroup("Turlængde", stats.durationStats);
-  pushGroup("Bevægelse", stats.movementStats);
+  pushGroup(tr("season"), stats.seasonStats);
+  pushGroup(tr("timeOfDay"), stats.todStats);
+  pushGroup(tr("waterLevel"), stats.tideStats);
+  pushGroup(tr("seaTemp"), stats.waterTempStats);
+  pushGroup(tr("airTemp"), stats.airTempStats);
+  pushGroup(tr("windSpeed"), stats.windSpeedStats);
+  pushGroup(tr("windDirection"), stats.windDirStats);
+  pushGroup(tr("windRelativeToCoast"), stats.coastWindStats);
+  pushGroup(tr("tripDuration"), stats.durationStats);
+  pushGroup(tr("movement"), stats.movementStats);
 
   const spotCount = Object.keys(stats.spotStats).length;
   const spotLimit = spotCount > 10 ? 10 : undefined;
-  pushGroup("Spots med flest fisk", stats.spotStats, spotLimit);
+  pushGroup(lang === "da" ? "Spots med flest fisk" : "Spots with most fish", stats.spotStats, spotLimit);
 
   return groups;
 }
@@ -289,8 +306,10 @@ export function buildPatternGroups(
 // Main Pattern Analysis
 // ============================================================================
 
-export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternReport | null {
-  const tripsWithFish = allTrips.filter((t) => (t.fish_count ?? 0) > 0);
+export function buildWeatherSummary(allTrips: any[], spots?: any[], t?: TFunc, language?: Language): PatternReport | null {
+  const tr = t ?? ((k: string) => k);
+  const lang = language ?? "da";
+  const tripsWithFish = allTrips.filter((tp) => (tp.fish_count ?? 0) > 0);
   if (!tripsWithFish.length) return null;
 
   // Byg et map fra spot_id til coastDirection for hurtig lookup
@@ -322,13 +341,13 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
     sunsetCount: 0,
   };
 
-  const getTripLocation = (t: any): { lat: number; lng: number } | null => {
-    if (Number.isFinite(t.spot_lat) && Number.isFinite(t.spot_lng)) {
-      return { lat: t.spot_lat, lng: t.spot_lng };
+  const getTripLocation = (tp: any): { lat: number; lng: number } | null => {
+    if (Number.isFinite(tp.spot_lat) && Number.isFinite(tp.spot_lng)) {
+      return { lat: tp.spot_lat, lng: tp.spot_lng };
     }
-    if (t.path_json) {
+    if (tp.path_json) {
       try {
-        const parsed = JSON.parse(t.path_json);
+        const parsed = JSON.parse(tp.path_json);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const first = parsed[0];
           const lat =
@@ -374,14 +393,14 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
 
   let totalFish = 0;
 
-  for (const t of tripsWithFish) {
-    const fishCount = t.fish_count ?? 0;
+  for (const trip of tripsWithFish) {
+    const fishCount = trip.fish_count ?? 0;
 
     let meta: any = {};
     let evaluation: any = null;
 
     try {
-      meta = t.meta_json ? JSON.parse(t.meta_json) : {};
+      meta = trip.meta_json ? JSON.parse(trip.meta_json) : {};
     } catch {
       meta = {};
     }
@@ -422,10 +441,10 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
         null) ?? null;
 
     // Hent spotets kystretning - enten fra trip eller via spot lookup
-    const tripSpotId = t.spot_id ?? t.spotId ?? null;
+    const tripSpotId = trip.spot_id ?? trip.spotId ?? null;
     const spotCoastDir: CoastDirection | null =
-      t.spot_coast_direction ??
-      t.coastDirection ??
+      trip.spot_coast_direction ??
+      trip.coastDirection ??
       (tripSpotId ? spotCoastMap.get(String(tripSpotId)) : null) ??
       null;
 
@@ -433,45 +452,46 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
     let cw: string | null = null;
     if (windDirDeg != null && Number.isFinite(windDirDeg) && spotCoastDir) {
       const windType = getWindType(windDirDeg, spotCoastDir);
-      cw = windType === 'offshore' ? 'fralandsvind'
-         : windType === 'onshore' ? 'pålandsvind'
-         : 'sidevind';
+      cw = windType === 'offshore' ? tr('offshoreWind')
+         : windType === 'onshore' ? tr('onshoreWind')
+         : tr('sideWind');
     } else {
       // Fallback til gammel metode hvis vi ikke har kystretning
       const cwRaw: string | null = evaluation?.coastWind?.category ?? null;
-      cw = coastWindLabel(cwRaw);
+      cw = coastWindLabel(cwRaw, tr);
     }
 
     const windDirKey =
       windDirDeg != null && Number.isFinite(windDirDeg)
-        ? windDirLabelFromDeg(windDirDeg)
+        ? windDirLabelFromDeg(windDirDeg, tr)
         : null;
 
-    const tideKey = waterLevelBucket(wl);
-    const airKey = tempBucketLabel(airT);
-    const waterKey = tempBucketLabel(waterT);
-    const windSpeedKey = windSpeedBucketLabel(windMs);
+    const tideKey = waterLevelBucket(wl, tr);
+    const airKey = tempBucketLabel(airT, tr);
+    const waterKey = tempBucketLabel(waterT, tr);
+    const windSpeedKey = windSpeedBucketLabel(windMs, tr);
     const durationLabel =
       durationBucketLabel(
-        Number.isFinite(t.duration_sec)
-          ? t.duration_sec
-          : t.start_ts && t.end_ts
+        Number.isFinite(trip.duration_sec)
+          ? trip.duration_sec
+          : trip.start_ts && trip.end_ts
           ? Math.max(
               0,
-              (new Date(t.end_ts).getTime() - new Date(t.start_ts).getTime()) /
+              (new Date(trip.end_ts).getTime() - new Date(trip.start_ts).getTime()) /
                 1000
             )
-          : null
+          : null,
+        tr
       ) ?? null;
-    const moveLabel = movementLabel(t.distance_m, t.duration_sec);
-    const tripLocation = getTripLocation(t);
+    const moveLabel = movementLabel(trip.distance_m, trip.duration_sec, tr);
+    const tripLocation = getTripLocation(trip);
 
     // Catch timestamps
     let catchMs: number[] = [];
 
-    if (t.fish_events_json) {
+    if (trip.fish_events_json) {
       try {
-        const raw = JSON.parse(t.fish_events_json);
+        const raw = JSON.parse(trip.fish_events_json);
         if (Array.isArray(raw)) {
           for (const ev of raw) {
             if (typeof ev === "string") {
@@ -487,8 +507,8 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
       }
     }
 
-    if (!catchMs.length && fishCount > 0 && t.start_ts) {
-      const base = new Date(t.start_ts).getTime();
+    if (!catchMs.length && fishCount > 0 && trip.start_ts) {
+      const base = new Date(trip.start_ts).getTime();
       for (let i = 0; i < fishCount; i++) {
         catchMs.push(base);
       }
@@ -496,7 +516,7 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
 
     if (!catchMs.length) continue;
 
-    const spotName: string | null = t.spot_name ?? null;
+    const spotName: string | null = trip.spot_name ?? null;
 
     for (const ts of catchMs) {
       const d = new Date(ts);
@@ -508,7 +528,7 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
       const hour = d.getHours();
 
       if (month != null && Number.isFinite(month)) {
-        const seasonKey = seasonFromMonth(month);
+        const seasonKey = seasonFromMonth(month, tr);
         if (!seasonStats[seasonKey]) {
           seasonStats[seasonKey] = { trips: 0, fish: 0 };
         }
@@ -517,7 +537,7 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
       }
 
       if (hour != null && Number.isFinite(hour)) {
-        const todKey = timeOfDayBucket(hour);
+        const todKey = timeOfDayBucket(hour, tr);
         if (!todStats[todKey]) {
           todStats[todKey] = { trips: 0, fish: 0 };
         }
@@ -629,53 +649,56 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
   const bestSpot = pickBestBucket(spotStats, MIN_TRIPS);
   const bestWindDir = pickBestBucket(windDirStats, MIN_TRIPS);
 
+  const unknownLabel = tr("unknown");
   const lines: string[] = [];
 
-  if (bestSpot && bestSpot.label !== "ukendt") {
-    lines.push(`Spot: ${bestSpot.label}`);
+  if (bestSpot && bestSpot.label !== unknownLabel) {
+    lines.push(`${tr("spotLabel")}: ${bestSpot.label}`);
   }
 
-  if (bestTide && bestTide.label !== "ukendt") {
+  if (bestTide && bestTide.label !== unknownLabel) {
     lines.push(bestTide.label);
   }
 
-  if (bestWindSpeed && bestWindSpeed.label !== "ukendt") {
-    const ws = bestWindSpeed.label;
-    lines.push(
-      ws.endsWith("vind") ? `${ws[0].toUpperCase()}${ws.slice(1)}styrke` : ws
-    );
+  if (bestWindSpeed && bestWindSpeed.label !== unknownLabel) {
+    lines.push(`${tr("windSpeed")}: ${bestWindSpeed.label}`);
   }
 
-  if (bestWindDir && bestWindDir.label !== "ukendt") {
-    lines.push(`Vindretning: ${bestWindDir.label}`);
+  if (bestWindDir && bestWindDir.label !== unknownLabel) {
+    lines.push(`${tr("windDirection")}: ${bestWindDir.label}`);
   }
 
   if (bestTod) {
-    lines.push(`Om ${bestTod.label.toLowerCase()}`);
+    lines.push(lang === "da"
+      ? `Om ${bestTod.label.toLowerCase()}`
+      : `${tr("inThe")} ${bestTod.label.toLowerCase()}`);
   }
 
   if (bestSeason) {
-    lines.push(`Om ${bestSeason.label.toLowerCase()}`);
+    lines.push(lang === "da"
+      ? `Om ${bestSeason.label.toLowerCase()}`
+      : `${tr("inThe")} ${bestSeason.label.toLowerCase()}`);
   }
 
-  if (bestWater && bestWater.label !== "ukendt") {
-    lines.push(`Havtemperatur: ${bestWater.label}`);
+  if (bestWater && bestWater.label !== unknownLabel) {
+    lines.push(`${tr("seaTemp")}: ${bestWater.label}`);
   }
 
-  if (bestAir && bestAir.label !== "ukendt") {
-    lines.push(`Lufttemperatur: ${bestAir.label}`);
+  if (bestAir && bestAir.label !== unknownLabel) {
+    lines.push(`${tr("airTemp")}: ${bestAir.label}`);
   }
 
   if (bestCoastWind) {
-    const key = bestCoastWind.label.toLowerCase();
-    if (key.includes("fraland")) {
-      lines.push("Ved fralandsvind");
-    } else if (key.includes("påland") || key.includes("på-land")) {
-      lines.push("Ved pålandsvind");
-    } else if (key.includes("side") || key.includes("langs") || key.includes("tvaers")) {
-      lines.push("Ved sidevind");
+    const cwLabel = bestCoastWind.label;
+    const cwLower = cwLabel.toLowerCase();
+    if (cwLower.includes("fraland") || cwLower.includes("offshore")) {
+      lines.push(tr("atOffshoreWind"));
+    } else if (cwLower.includes("påland") || cwLower.includes("på-land") || cwLower.includes("onshore")) {
+      lines.push(tr("atOnshoreWind"));
+    } else if (cwLower.includes("side") || cwLower.includes("langs") || cwLower.includes("tvaers")) {
+      lines.push(tr("atSideWind"));
     } else {
-      lines.push(`Vind ift. kyst: ${bestCoastWind.label}`);
+      lines.push(`${tr("windRelativeToCoast")}: ${cwLabel}`);
     }
   }
 
@@ -683,61 +706,61 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
     const avg = sunOffset.sumMinutes / sunOffset.count;
     const event =
       sunOffset.sunriseCount >= sunOffset.sunsetCount
-        ? "solopgang"
-        : "solnedgang";
-    const dir = avg < 0 ? "før" : "efter";
+        ? tr("sunrise").toLowerCase()
+        : tr("sunset").toLowerCase();
+    const dir = avg < 0 ? tr("before") : tr("after");
     const absMinutes = Math.abs(avg);
 
-    // Rund til 30-minutters intervaller eller timer
     let timeLabel: string;
     if (absMinutes >= 90) {
-      // 1.5+ timer -> vis i hele timer
       const hours = Math.round(absMinutes / 60);
-      timeLabel = `${hours} time${hours > 1 ? "r" : ""}`;
+      timeLabel = lang === "da"
+        ? `${hours} time${hours > 1 ? "r" : ""}`
+        : `${hours} hour${hours > 1 ? "s" : ""}`;
     } else if (absMinutes >= 45) {
-      // 45-89 min -> "1 time"
-      timeLabel = "1 time";
+      timeLabel = lang === "da" ? "1 time" : "1 hour";
     } else {
-      // Under 45 min -> rund til nærmeste 30 min
       const rounded = Math.round(absMinutes / 30) * 30;
-      timeLabel = rounded === 0 ? "ved" : `${rounded} min`;
+      timeLabel = rounded === 0 ? tr("at") : `${rounded} min`;
     }
 
-    if (timeLabel === "ved") {
-      lines.push(`Typisk ${timeLabel} ${event}`);
+    if (timeLabel === tr("at")) {
+      lines.push(`${tr("typicalMinutes")} ${timeLabel} ${event}`);
     } else {
-      lines.push(`Typisk ${timeLabel} ${dir} ${event}`);
+      lines.push(`${tr("typicalMinutes")} ${timeLabel} ${dir} ${event}`);
     }
   }
 
   if (bestDuration) {
-    lines.push(`Turlængde: ${bestDuration.label} giver flest fisk`);
+    lines.push(`${tr("tripLength")}: ${bestDuration.label} ${tr("givesMostFish")}`);
   }
 
   if (bestMovement) {
     const mv = bestMovement.label.toLowerCase();
-    if (mv.includes("affiskning")) {
-      lines.push("Flest fisk ved affiskning af vand");
-    } else if (mv.includes("still")) {
-      lines.push("Flest fisk ved stillestående/rolig placering");
+    if (mv.includes("affiskning") || mv.includes("fishing the water")) {
+      lines.push(`${tr("mostFishAt")} ${tr("fishingWater")}`);
+    } else if (mv.includes("still") || mv.includes("standing")) {
+      lines.push(`${tr("mostFishAt")} ${tr("standingStill")}`);
     } else {
-      lines.push(`Flest fisk ved ${bestMovement.label.toLowerCase()}`);
+      lines.push(`${tr("mostFishAt")} ${bestMovement.label.toLowerCase()}`);
     }
   }
 
   const forecastHints: string[] = [];
-  if (bestWindSpeed && bestWindSpeed.label !== "ukendt") {
+  if (bestWindSpeed && bestWindSpeed.label !== unknownLabel) {
     forecastHints.push(bestWindSpeed.label);
   }
-  if (bestTide && bestTide.label !== "ukendt") {
+  if (bestTide && bestTide.label !== unknownLabel) {
     forecastHints.push(bestTide.label);
   }
-  if (bestWater && bestWater.label !== "ukendt") {
-    forecastHints.push(`Havtemp ${bestWater.label}`);
+  if (bestWater && bestWater.label !== unknownLabel) {
+    forecastHints.push(lang === "da"
+      ? `Havtemp ${bestWater.label}`
+      : `Sea temp ${bestWater.label}`);
   }
   if (forecastHints.length) {
     lines.push(
-      `Prognose: kig efter ${forecastHints.slice(0, 3).join(", ")} for bedste match`
+      `${tr("forecastLookFor")} ${forecastHints.slice(0, 3).join(", ")} ${tr("forBestMatch")}`
     );
   }
 
@@ -756,7 +779,9 @@ export function buildWeatherSummary(allTrips: any[], spots?: any[]): PatternRepo
       spotStats,
       windDirStats,
     },
-    MIN_TRIPS
+    MIN_TRIPS,
+    tr,
+    lang
   );
 
   if (!lines.length && !groups.length) return null;

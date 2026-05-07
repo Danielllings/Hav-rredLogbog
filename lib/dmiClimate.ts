@@ -3,6 +3,9 @@
 // og logik til "nærmeste time med data" for korte ture.
 
 import { DMI_CLIMATE_BASE_URL } from "./dmiConfig";
+
+// Direct DMI endpoint - no API key needed since Dec 2025
+const DMI_CLIMATE_DIRECT_URL = "https://opendataapi.dmi.dk/v2/climateData/collections/stationValue/items";
 import { getClimateCache, setClimateCache } from "./climateOceanCache";
 
 export type ClimateStation = {
@@ -150,11 +153,12 @@ async function fetchStationValues(
 ): Promise<{ ts: number; value: number }[]> {
   const datetime = `${startIso}/${endIso}`;
 
-  if (!DMI_CLIMATE_BASE_URL) {
+  const baseUrl = DMI_CLIMATE_DIRECT_URL || DMI_CLIMATE_BASE_URL;
+  if (!baseUrl) {
     return [];
   }
 
-  const url = new URL(DMI_CLIMATE_BASE_URL);
+  const url = new URL(baseUrl);
   url.searchParams.set("stationId", stationId);
   url.searchParams.set("parameterId", parameterId);
   url.searchParams.set("timeResolution", "hour");

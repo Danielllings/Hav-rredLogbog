@@ -3,6 +3,9 @@
 // og logik til "nærmeste time med data" for korte ture.
 
 import { DMI_OCEAN_BASE_URL } from "./dmiConfig";
+
+// Direct DMI endpoint - no API key needed since Dec 2025
+const DMI_OCEAN_DIRECT_URL = "https://opendataapi.dmi.dk/v2/oceanObs/collections/observation/items";
 import { getOceanCache, setOceanCache } from "./climateOceanCache";
 
 export type OceanStation = {
@@ -424,10 +427,10 @@ async function fetchObservationValues(
   parameterId: string,
   startIso: string,
   endIso: string,
-  timeoutMs: number = 6000
+  timeoutMs: number = 4000
 ): Promise<{ ts: number; value: number }[]> {
   const datetime = `${startIso}/${endIso}`;
-  const url = new URL(DMI_OCEAN_BASE_URL);
+  const url = new URL(DMI_OCEAN_DIRECT_URL || DMI_OCEAN_BASE_URL);
   url.searchParams.set("stationId", stationId);
   url.searchParams.set("parameterId", parameterId);
   url.searchParams.set("datetime", datetime);
@@ -478,7 +481,7 @@ async function fetchObservationValuesCached(
   parameterId: string,
   startIso: string,
   endIso: string,
-  timeoutMs: number = 6000
+  timeoutMs: number = 4000
 ): Promise<{ ts: number; value: number }[]> {
   // 1. Try cache first (with error handling)
   let cached: { data: string; isStale: boolean } | null = null;

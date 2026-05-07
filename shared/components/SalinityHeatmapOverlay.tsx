@@ -15,10 +15,11 @@ interface Props {
   initialLat?: number;
   initialLng?: number;
   initialZoom?: number;
+  language?: "da" | "en";
 }
 
-const extra = (Constants.expoConfig?.extra as any) || {};
-const DMI_EDR_BASE_URL = (extra.dmiEdrUrl as string | undefined)?.replace(/\/$/, "") || "";
+// Salinitet er kun tilgængelig fra DMI (Open-Meteo har ikke salinitet)
+const DMI_EDR_DIRECT = "https://opendataapi.dmi.dk/v1/forecastedr";
 
 // Convert CoverageJSON salinity data to heatmap points
 function coverageJsonToHeatmapData(coverageJson: any): { points: [number, number, number][]; min: number; max: number } | null {
@@ -98,6 +99,7 @@ export function SalinityHeatmapOverlay({
   initialLat = 55.5,
   initialLng = 11.0,
   initialZoom = 6,
+  language = "da",
 }: Props) {
   const { theme } = useTheme();
   const webViewRef = useRef<WebView>(null);
@@ -109,39 +111,62 @@ export function SalinityHeatmapOverlay({
   // Theme color for UI elements
   const accentColor = theme.primary;
 
-  // Fetch salinity data from DMI EDR API
-  const fetchSalinityData = useCallback(async (hourIndex: number) => {
-    if (!DMI_EDR_BASE_URL) {
-      setError("DMI API ikke konfigureret");
-      setLoading(false);
-      return;
-    }
+  const L = language === "da" ? {
+    loadingWebview: "Indlæser salinitet...",
+    salinity: "salinitet",
+    brackish: "brakvand",
+    lowSalt: "lavt salt",
+    mediumSalt: "medium salt",
+    seawater: "havvand",
+    noData: "ingen data",
+    noDataForDay: "Ingen data for denne dag",
+    noSalinityData: "Ingen salinitetdata fra DMI",
+    errorFetching: "Fejl ved hentning af data",
+    fetchingData: "Henter salinitetdata...",
+    tryAgain: "Prøv igen",
+    close: "Luk",
+  } : {
+    loadingWebview: "Loading salinity...",
+    salinity: "salinity",
+    brackish: "brackish",
+    lowSalt: "low salt",
+    mediumSalt: "medium salt",
+    seawater: "seawater",
+    noData: "no data",
+    noDataForDay: "No data for this day",
+    noSalinityData: "No salinity data from DMI",
+    errorFetching: "Error fetching data",
+    fetchingData: "Fetching salinity data...",
+    tryAgain: "Try again",
+    close: "Close",
+  };
 
+  // Fetch salinity data direkte fra DMI EDR (ingen proxy, ingen API key)
+  // Salinitet er den ENESTE parameter der stadig kræver DMI
+  const fetchSalinityData = useCallback(async (hourIndex: number) => {
     try {
       setLoading(true);
       setError(null);
 
-      // Use hourly forecast time like other overlays
-      const datetime = getForecastValue("hourly", hourIndex) || new Date().toISOString();
+      const datetime = getForecastValue("hourly", hourIndex, 48) || new Date().toISOString();
       const bbox = "7.5,54.0,16.0,58.5";
 
-      // Use primary collection only (dkss_nsbs has best coverage)
       const collection = "dkss_nsbs";
       let allPoints: [number, number, number][] = [];
       let globalMin = Infinity;
       let globalMax = -Infinity;
 
-      console.log(`Fetching salinity for datetime: ${datetime}`);
       const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=salinity&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-      const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
-
-      console.log(`Salinity query for ${collection}:`, query);
+      const directUrl = `${DMI_EDR_DIRECT}${query}`;
 
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        const response = await fetch(proxyUrl, { signal: controller.signal });
+        const response = await fetch(directUrl, {
+          signal: controller.signal,
+          headers: { Accept: "application/prs.coverage+json, application/json" },
+        });
         clearTimeout(timeoutId);
 
         console.log(`${collection} response status:`, response.status);
@@ -181,15 +206,15 @@ export function SalinityHeatmapOverlay({
 
         setHeatmapData({ points: allPoints, min: globalMin, max: globalMax });
       } else {
-        setError("Ingen salinitetdata fra DMI");
+        setError(L.noSalinityData);
       }
     } catch (e) {
-      setError("Fejl ved hentning af data");
+      setError(L.errorFetching);
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [L.noSalinityData, L.errorFetching]);
 
   const _unusedGenerateSyntheticData = () => {
     // Removed - only use real DMI data
@@ -247,7 +272,7 @@ export function SalinityHeatmapOverlay({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Salinitet</title>
+  <title>${L.salinity}</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -417,7 +442,7 @@ export function SalinityHeatmapOverlay({
   <div id="map"></div>
   <div id="loading" class="loading-overlay">
     <div class="spinner"></div>
-    <div>Indlæser salinitet...</div>
+    <div>${L.loadingWebview}</div>
   </div>
 
   <!-- Center crosshair -->
@@ -431,7 +456,7 @@ export function SalinityHeatmapOverlay({
   <div id="center-salinity" class="center-salinity">
     <span id="salinity-value" class="center-salinity-value">--</span>
     <span class="center-salinity-unit">PSU</span>
-    <div id="salinity-label" class="center-salinity-label">salinitet</div>
+    <div id="salinity-label" class="center-salinity-label">${L.salinity}</div>
   </div>
 
   <div class="salinity-legend">
@@ -508,17 +533,17 @@ export function SalinityHeatmapOverlay({
         salinityValueEl.textContent = salinity.toFixed(1);
         // Add description based on salinity level
         if (salinity < 10) {
-          salinityLabelEl.textContent = 'brakvand';
+          salinityLabelEl.textContent = '${L.brackish}';
         } else if (salinity < 20) {
-          salinityLabelEl.textContent = 'lavt salt';
+          salinityLabelEl.textContent = '${L.lowSalt}';
         } else if (salinity < 30) {
-          salinityLabelEl.textContent = 'medium salt';
+          salinityLabelEl.textContent = '${L.mediumSalt}';
         } else {
-          salinityLabelEl.textContent = 'havvand';
+          salinityLabelEl.textContent = '${L.seawater}';
         }
       } else {
         salinityValueEl.textContent = '--';
-        salinityLabelEl.textContent = 'ingen data';
+        salinityLabelEl.textContent = '${L.noData}';
       }
     }
 
@@ -531,7 +556,7 @@ export function SalinityHeatmapOverlay({
       currentData = data;
 
       if (!data || !data.points || data.points.length === 0) {
-        loadingEl.innerHTML = '<div style="color:#ff6b6b;">Ingen data for denne dag</div>';
+        loadingEl.innerHTML = '<div style="color:#ff6b6b;">${L.noDataForDay}</div>';
         loadingEl.style.display = 'block';
         return;
       }
@@ -655,7 +680,7 @@ export function SalinityHeatmapOverlay({
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={accentColor} />
-          <Text style={styles.loadingText}>Henter salinitetdata...</Text>
+          <Text style={styles.loadingText}>{L.fetchingData}</Text>
         </View>
       )}
 
@@ -665,10 +690,10 @@ export function SalinityHeatmapOverlay({
           <Text style={styles.errorText}>{error}</Text>
           <View style={styles.errorButtons}>
             <Pressable style={styles.retryButton} onPress={() => fetchSalinityData(forecastHourIndex)}>
-              <Text style={styles.retryButtonText}>Prøv igen</Text>
+              <Text style={styles.retryButtonText}>{L.tryAgain}</Text>
             </Pressable>
             <Pressable style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeButtonText}>Luk</Text>
+              <Text style={styles.closeButtonText}>{L.close}</Text>
             </Pressable>
           </View>
         </View>
@@ -679,6 +704,8 @@ export function SalinityHeatmapOverlay({
         value={forecastHourIndex}
         onValueChange={setForecastHourIndex}
         color={accentColor}
+        language={language}
+        maxHours={48}
       />
     </View>
   );

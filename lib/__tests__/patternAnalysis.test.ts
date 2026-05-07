@@ -13,146 +13,167 @@ import {
   buildSpotSummary,
   withTimeout,
   type SimpleBucket,
+  type TFunc,
 } from "../patternAnalysis";
+import { da, en } from "../i18n/translations";
+
+// Helper: create a t() function for a given language
+const makeTFunc = (translations: Record<string, string>): TFunc =>
+  (key: any) => translations[key] ?? key;
+
+const tDa = makeTFunc(da as unknown as Record<string, string>);
+const tEn = makeTFunc(en as unknown as Record<string, string>);
 
 describe("patternAnalysis", () => {
   describe("waterLevelBucket", () => {
-    it("returns 'ukendt' for null", () => {
-      expect(waterLevelBucket(null)).toBe("ukendt");
+    it("returns translated 'unknown' for null", () => {
+      expect(waterLevelBucket(null, tDa)).toBe("ukendt");
+      expect(waterLevelBucket(null, tEn)).toBe("unknown");
     });
 
-    it("returns 'ukendt' for undefined", () => {
-      expect(waterLevelBucket(undefined)).toBe("ukendt");
+    it("returns key when no t function passed", () => {
+      expect(waterLevelBucket(null)).toBe("unknown");
+      expect(waterLevelBucket(undefined)).toBe("unknown");
+      expect(waterLevelBucket(NaN)).toBe("unknown");
     });
 
-    it("returns 'ukendt' for NaN", () => {
-      expect(waterLevelBucket(NaN)).toBe("ukendt");
+    it("returns translated low water for values below -20", () => {
+      expect(waterLevelBucket(-25, tDa)).toBe("Lavvande");
+      expect(waterLevelBucket(-100, tEn)).toBe("Low water");
     });
 
-    it("returns 'Lavvande' for values below -20", () => {
-      expect(waterLevelBucket(-25)).toBe("Lavvande");
-      expect(waterLevelBucket(-100)).toBe("Lavvande");
+    it("returns translated high water for values above 20", () => {
+      expect(waterLevelBucket(25, tDa)).toBe("Højvande");
+      expect(waterLevelBucket(100, tEn)).toBe("High water");
     });
 
-    it("returns 'Højvande' for values above 20", () => {
-      expect(waterLevelBucket(25)).toBe("Højvande");
-      expect(waterLevelBucket(100)).toBe("Højvande");
-    });
-
-    it("returns 'Middel vandstand' for values between -20 and 20", () => {
-      expect(waterLevelBucket(0)).toBe("Middel vandstand");
-      expect(waterLevelBucket(-20)).toBe("Middel vandstand");
-      expect(waterLevelBucket(20)).toBe("Middel vandstand");
-      expect(waterLevelBucket(10)).toBe("Middel vandstand");
+    it("returns translated mid water for values between -20 and 20", () => {
+      expect(waterLevelBucket(0, tDa)).toBe("Middel vandstand");
+      expect(waterLevelBucket(-20, tDa)).toBe("Middel vandstand");
+      expect(waterLevelBucket(20, tDa)).toBe("Middel vandstand");
+      expect(waterLevelBucket(10, tEn)).toBe("Medium water level");
     });
   });
 
   describe("seasonFromMonth", () => {
-    it("returns 'Vinteren' for December, January", () => {
-      expect(seasonFromMonth(11)).toBe("Vinteren"); // December
-      expect(seasonFromMonth(0)).toBe("Vinteren"); // January
-      expect(seasonFromMonth(1)).toBe("Vinteren"); // February is border
+    it("returns winter for December, January", () => {
+      expect(seasonFromMonth(11, tDa)).toBe("Vinteren");
+      expect(seasonFromMonth(0, tDa)).toBe("Vinteren");
+      expect(seasonFromMonth(1, tDa)).toBe("Vinteren");
+      expect(seasonFromMonth(11, tEn)).toBe("Winter");
     });
 
-    it("returns 'Foråret' for February-April", () => {
-      expect(seasonFromMonth(2)).toBe("Foråret"); // March
-      expect(seasonFromMonth(3)).toBe("Foråret"); // April
-      expect(seasonFromMonth(4)).toBe("Foråret"); // May
+    it("returns spring for February-April", () => {
+      expect(seasonFromMonth(2, tDa)).toBe("Foråret");
+      expect(seasonFromMonth(3, tDa)).toBe("Foråret");
+      expect(seasonFromMonth(4, tDa)).toBe("Foråret");
+      expect(seasonFromMonth(3, tEn)).toBe("Spring");
     });
 
-    it("returns 'Sommeren' for May-July", () => {
-      expect(seasonFromMonth(5)).toBe("Sommeren"); // June
-      expect(seasonFromMonth(6)).toBe("Sommeren"); // July
-      expect(seasonFromMonth(7)).toBe("Sommeren"); // August
+    it("returns summer for May-July", () => {
+      expect(seasonFromMonth(5, tDa)).toBe("Sommeren");
+      expect(seasonFromMonth(6, tDa)).toBe("Sommeren");
+      expect(seasonFromMonth(7, tDa)).toBe("Sommeren");
+      expect(seasonFromMonth(6, tEn)).toBe("Summer");
     });
 
-    it("returns 'Efteråret' for August-October", () => {
-      expect(seasonFromMonth(8)).toBe("Efteråret"); // September
-      expect(seasonFromMonth(9)).toBe("Efteråret"); // October
-      expect(seasonFromMonth(10)).toBe("Efteråret"); // November
+    it("returns autumn for August-October", () => {
+      expect(seasonFromMonth(8, tDa)).toBe("Efteråret");
+      expect(seasonFromMonth(9, tDa)).toBe("Efteråret");
+      expect(seasonFromMonth(10, tDa)).toBe("Efteråret");
+      expect(seasonFromMonth(9, tEn)).toBe("Autumn");
     });
   });
 
   describe("timeOfDayBucket", () => {
-    it("returns 'Natten' for late night/early morning", () => {
-      expect(timeOfDayBucket(0)).toBe("Natten");
-      expect(timeOfDayBucket(3)).toBe("Natten");
-      expect(timeOfDayBucket(4)).toBe("Natten");
+    it("returns night for late night/early morning", () => {
+      expect(timeOfDayBucket(0, tDa)).toBe("Natten");
+      expect(timeOfDayBucket(3, tDa)).toBe("Natten");
+      expect(timeOfDayBucket(4, tDa)).toBe("Natten");
+      expect(timeOfDayBucket(0, tEn)).toBe("Night");
     });
 
-    it("returns 'Morgenen' for early morning", () => {
-      expect(timeOfDayBucket(5)).toBe("Morgenen");
-      expect(timeOfDayBucket(7)).toBe("Morgenen");
-      expect(timeOfDayBucket(8)).toBe("Morgenen");
+    it("returns morning for early morning", () => {
+      expect(timeOfDayBucket(5, tDa)).toBe("Morgenen");
+      expect(timeOfDayBucket(7, tDa)).toBe("Morgenen");
+      expect(timeOfDayBucket(8, tDa)).toBe("Morgenen");
+      expect(timeOfDayBucket(5, tEn)).toBe("Morning");
     });
 
-    it("returns 'Formiddagen' for late morning", () => {
-      expect(timeOfDayBucket(9)).toBe("Formiddagen");
-      expect(timeOfDayBucket(10)).toBe("Formiddagen");
-      expect(timeOfDayBucket(11)).toBe("Formiddagen");
+    it("returns late morning for mid-morning", () => {
+      expect(timeOfDayBucket(9, tDa)).toBe("Formiddagen");
+      expect(timeOfDayBucket(10, tDa)).toBe("Formiddagen");
+      expect(timeOfDayBucket(11, tDa)).toBe("Formiddagen");
+      expect(timeOfDayBucket(9, tEn)).toBe("Late morning");
     });
 
-    it("returns 'Eftermiddagen' for afternoon", () => {
-      expect(timeOfDayBucket(12)).toBe("Eftermiddagen");
-      expect(timeOfDayBucket(14)).toBe("Eftermiddagen");
-      expect(timeOfDayBucket(16)).toBe("Eftermiddagen");
+    it("returns afternoon for afternoon", () => {
+      expect(timeOfDayBucket(12, tDa)).toBe("Eftermiddagen");
+      expect(timeOfDayBucket(14, tDa)).toBe("Eftermiddagen");
+      expect(timeOfDayBucket(16, tDa)).toBe("Eftermiddagen");
+      expect(timeOfDayBucket(12, tEn)).toBe("Afternoon");
     });
 
-    it("returns 'Aftenen' for evening", () => {
-      expect(timeOfDayBucket(17)).toBe("Aftenen");
-      expect(timeOfDayBucket(19)).toBe("Aftenen");
-      expect(timeOfDayBucket(21)).toBe("Aftenen");
+    it("returns evening for evening", () => {
+      expect(timeOfDayBucket(17, tDa)).toBe("Aftenen");
+      expect(timeOfDayBucket(19, tDa)).toBe("Aftenen");
+      expect(timeOfDayBucket(21, tDa)).toBe("Aftenen");
+      expect(timeOfDayBucket(17, tEn)).toBe("Evening");
     });
 
-    it("returns 'Natten' for late night", () => {
-      expect(timeOfDayBucket(22)).toBe("Natten");
-      expect(timeOfDayBucket(23)).toBe("Natten");
+    it("returns night for late night", () => {
+      expect(timeOfDayBucket(22, tDa)).toBe("Natten");
+      expect(timeOfDayBucket(23, tDa)).toBe("Natten");
     });
   });
 
   describe("tempBucketLabel", () => {
-    it("returns 'ukendt' for null/undefined/NaN", () => {
-      expect(tempBucketLabel(null)).toBe("ukendt");
-      expect(tempBucketLabel(undefined)).toBe("ukendt");
-      expect(tempBucketLabel(NaN)).toBe("ukendt");
+    it("returns unknown for null/undefined/NaN", () => {
+      expect(tempBucketLabel(null, tDa)).toBe("ukendt");
+      expect(tempBucketLabel(undefined, tDa)).toBe("ukendt");
+      expect(tempBucketLabel(NaN, tDa)).toBe("ukendt");
+      expect(tempBucketLabel(null, tEn)).toBe("unknown");
     });
 
     it("returns correct temperature ranges", () => {
-      expect(tempBucketLabel(2)).toBe("0–4°C");
-      expect(tempBucketLabel(6)).toBe("4–8°C");
-      expect(tempBucketLabel(10)).toBe("8–12°C");
-      expect(tempBucketLabel(14)).toBe("12–16°C");
-      expect(tempBucketLabel(20)).toBe("16°C+");
+      expect(tempBucketLabel(2, tDa)).toBe("0–4°C");
+      expect(tempBucketLabel(6, tDa)).toBe("4–8°C");
+      expect(tempBucketLabel(10, tDa)).toBe("8–12°C");
+      expect(tempBucketLabel(14, tDa)).toBe("12–16°C");
+      expect(tempBucketLabel(20, tDa)).toBe("16°C+");
     });
 
     it("handles boundary values", () => {
-      expect(tempBucketLabel(0)).toBe("0–4°C");
-      expect(tempBucketLabel(4)).toBe("4–8°C");
-      expect(tempBucketLabel(8)).toBe("8–12°C");
-      expect(tempBucketLabel(12)).toBe("12–16°C");
-      expect(tempBucketLabel(16)).toBe("16°C+");
+      expect(tempBucketLabel(0, tDa)).toBe("0–4°C");
+      expect(tempBucketLabel(4, tDa)).toBe("4–8°C");
+      expect(tempBucketLabel(8, tDa)).toBe("8–12°C");
+      expect(tempBucketLabel(12, tDa)).toBe("12–16°C");
+      expect(tempBucketLabel(16, tDa)).toBe("16°C+");
     });
   });
 
   describe("windSpeedBucketLabel", () => {
-    it("returns 'ukendt' for null/undefined/NaN", () => {
-      expect(windSpeedBucketLabel(null)).toBe("ukendt");
-      expect(windSpeedBucketLabel(undefined)).toBe("ukendt");
-      expect(windSpeedBucketLabel(NaN)).toBe("ukendt");
+    it("returns unknown for null/undefined/NaN", () => {
+      expect(windSpeedBucketLabel(null, tDa)).toBe("ukendt");
+      expect(windSpeedBucketLabel(undefined, tDa)).toBe("ukendt");
+      expect(windSpeedBucketLabel(NaN, tDa)).toBe("ukendt");
+      expect(windSpeedBucketLabel(null, tEn)).toBe("unknown");
     });
 
     it("returns correct wind speed categories", () => {
-      expect(windSpeedBucketLabel(2)).toBe("svag vind");
-      expect(windSpeedBucketLabel(5)).toBe("mild vind");
-      expect(windSpeedBucketLabel(10)).toBe("frisk vind");
-      expect(windSpeedBucketLabel(15)).toBe("hård vind");
+      expect(windSpeedBucketLabel(2, tDa)).toBe("svag vind");
+      expect(windSpeedBucketLabel(5, tDa)).toBe("mild vind");
+      expect(windSpeedBucketLabel(10, tDa)).toBe("frisk vind");
+      expect(windSpeedBucketLabel(15, tDa)).toBe("hård vind");
+      expect(windSpeedBucketLabel(2, tEn)).toBe("weak wind");
+      expect(windSpeedBucketLabel(15, tEn)).toBe("hard wind");
     });
 
     it("handles boundary values", () => {
-      expect(windSpeedBucketLabel(0)).toBe("svag vind");
-      expect(windSpeedBucketLabel(4)).toBe("mild vind");
-      expect(windSpeedBucketLabel(8)).toBe("frisk vind");
-      expect(windSpeedBucketLabel(12)).toBe("hård vind");
+      expect(windSpeedBucketLabel(0, tDa)).toBe("svag vind");
+      expect(windSpeedBucketLabel(4, tDa)).toBe("mild vind");
+      expect(windSpeedBucketLabel(8, tDa)).toBe("frisk vind");
+      expect(windSpeedBucketLabel(12, tDa)).toBe("hård vind");
     });
   });
 
@@ -163,26 +184,30 @@ describe("patternAnalysis", () => {
       expect(coastWindLabel("")).toBeNull();
     });
 
-    it("detects fralandsvind", () => {
-      expect(coastWindLabel("fralandsvind")).toBe("fralandsvind");
-      expect(coastWindLabel("Fraland")).toBe("fralandsvind");
-      expect(coastWindLabel("offshore")).toBe("fralandsvind");
+    it("detects offshore wind", () => {
+      expect(coastWindLabel("fralandsvind", tDa)).toBe("fralandsvind");
+      expect(coastWindLabel("Fraland", tDa)).toBe("fralandsvind");
+      expect(coastWindLabel("offshore", tDa)).toBe("fralandsvind");
+      expect(coastWindLabel("offshore", tEn)).toBe("offshore wind");
     });
 
-    it("detects pålandsvind", () => {
-      expect(coastWindLabel("pålandsvind")).toBe("pålandsvind");
-      expect(coastWindLabel("på-land")).toBe("pålandsvind");
-      expect(coastWindLabel("onshore")).toBe("pålandsvind");
+    it("detects onshore wind", () => {
+      expect(coastWindLabel("pålandsvind", tDa)).toBe("pålandsvind");
+      expect(coastWindLabel("på-land", tDa)).toBe("pålandsvind");
+      expect(coastWindLabel("onshore", tDa)).toBe("pålandsvind");
+      expect(coastWindLabel("onshore", tEn)).toBe("onshore wind");
     });
 
-    it("detects sidevind", () => {
-      expect(coastWindLabel("sidevind")).toBe("sidevind");
-      expect(coastWindLabel("langs kysten")).toBe("sidevind");
-      expect(coastWindLabel("tvaers")).toBe("sidevind");
+    it("detects side wind", () => {
+      expect(coastWindLabel("sidevind", tDa)).toBe("sidevind");
+      expect(coastWindLabel("langs kysten", tDa)).toBe("sidevind");
+      expect(coastWindLabel("tvaers", tDa)).toBe("sidevind");
+      expect(coastWindLabel("sidevind", tEn)).toBe("side wind");
     });
 
     it("returns null for 'ukendt'", () => {
       expect(coastWindLabel("ukendt")).toBeNull();
+      expect(coastWindLabel("unknown")).toBeNull();
     });
 
     it("returns original value for unrecognized patterns", () => {
@@ -191,25 +216,36 @@ describe("patternAnalysis", () => {
   });
 
   describe("windDirLabelFromDeg", () => {
-    it("returns correct compass directions", () => {
-      expect(windDirLabelFromDeg(0)).toBe("Nord");
-      expect(windDirLabelFromDeg(45)).toBe("Nordøst");
-      expect(windDirLabelFromDeg(90)).toBe("Øst");
-      expect(windDirLabelFromDeg(135)).toBe("Sydøst");
-      expect(windDirLabelFromDeg(180)).toBe("Syd");
-      expect(windDirLabelFromDeg(225)).toBe("Sydvest");
-      expect(windDirLabelFromDeg(270)).toBe("Vest");
-      expect(windDirLabelFromDeg(315)).toBe("Nordvest");
+    it("returns correct compass directions in Danish", () => {
+      expect(windDirLabelFromDeg(0, tDa)).toBe("Nord");
+      expect(windDirLabelFromDeg(45, tDa)).toBe("Nordøst");
+      expect(windDirLabelFromDeg(90, tDa)).toBe("Øst");
+      expect(windDirLabelFromDeg(135, tDa)).toBe("Sydøst");
+      expect(windDirLabelFromDeg(180, tDa)).toBe("Syd");
+      expect(windDirLabelFromDeg(225, tDa)).toBe("Sydvest");
+      expect(windDirLabelFromDeg(270, tDa)).toBe("Vest");
+      expect(windDirLabelFromDeg(315, tDa)).toBe("Nordvest");
+    });
+
+    it("returns correct compass directions in English", () => {
+      expect(windDirLabelFromDeg(0, tEn)).toBe("North");
+      expect(windDirLabelFromDeg(45, tEn)).toBe("Northeast");
+      expect(windDirLabelFromDeg(90, tEn)).toBe("East");
+      expect(windDirLabelFromDeg(135, tEn)).toBe("Southeast");
+      expect(windDirLabelFromDeg(180, tEn)).toBe("South");
+      expect(windDirLabelFromDeg(225, tEn)).toBe("Southwest");
+      expect(windDirLabelFromDeg(270, tEn)).toBe("West");
+      expect(windDirLabelFromDeg(315, tEn)).toBe("Northwest");
     });
 
     it("handles values over 360", () => {
-      expect(windDirLabelFromDeg(360)).toBe("Nord");
-      expect(windDirLabelFromDeg(450)).toBe("Øst"); // 450 % 360 = 90
+      expect(windDirLabelFromDeg(360, tDa)).toBe("Nord");
+      expect(windDirLabelFromDeg(450, tDa)).toBe("Øst"); // 450 % 360 = 90
     });
 
     it("handles negative values", () => {
-      expect(windDirLabelFromDeg(-90)).toBe("Vest"); // -90 + 360 = 270
-      expect(windDirLabelFromDeg(-180)).toBe("Syd"); // -180 + 360 = 180
+      expect(windDirLabelFromDeg(-90, tDa)).toBe("Vest"); // -90 + 360 = 270
+      expect(windDirLabelFromDeg(-180, tDa)).toBe("Syd"); // -180 + 360 = 180
     });
   });
 
@@ -220,18 +256,25 @@ describe("patternAnalysis", () => {
       expect(durationBucketLabel(NaN)).toBeNull();
     });
 
-    it("returns correct duration categories", () => {
-      expect(durationBucketLabel(3600)).toBe("<2 timer"); // 1 hour
-      expect(durationBucketLabel(10800)).toBe("2-4 timer"); // 3 hours
-      expect(durationBucketLabel(18000)).toBe("4-6 timer"); // 5 hours
-      expect(durationBucketLabel(25200)).toBe("6+ timer"); // 7 hours
+    it("returns correct duration categories in Danish", () => {
+      expect(durationBucketLabel(3600, tDa)).toBe("<2 timer"); // 1 hour
+      expect(durationBucketLabel(10800, tDa)).toBe("2-4 timer"); // 3 hours
+      expect(durationBucketLabel(18000, tDa)).toBe("4-6 timer"); // 5 hours
+      expect(durationBucketLabel(25200, tDa)).toBe("6+ timer"); // 7 hours
+    });
+
+    it("returns correct duration categories in English", () => {
+      expect(durationBucketLabel(3600, tEn)).toBe("<2 hours"); // 1 hour
+      expect(durationBucketLabel(10800, tEn)).toBe("2-4 hours"); // 3 hours
+      expect(durationBucketLabel(18000, tEn)).toBe("4-6 hours"); // 5 hours
+      expect(durationBucketLabel(25200, tEn)).toBe("6+ hours"); // 7 hours
     });
 
     it("handles boundary values", () => {
-      expect(durationBucketLabel(7199)).toBe("<2 timer"); // just under 2 hours
-      expect(durationBucketLabel(7200)).toBe("2-4 timer"); // exactly 2 hours
-      expect(durationBucketLabel(14400)).toBe("4-6 timer"); // exactly 4 hours
-      expect(durationBucketLabel(21600)).toBe("6+ timer"); // exactly 6 hours
+      expect(durationBucketLabel(7199, tDa)).toBe("<2 timer"); // just under 2 hours
+      expect(durationBucketLabel(7200, tDa)).toBe("2-4 timer"); // exactly 2 hours
+      expect(durationBucketLabel(14400, tDa)).toBe("4-6 timer"); // exactly 4 hours
+      expect(durationBucketLabel(21600, tDa)).toBe("6+ timer"); // exactly 6 hours
     });
   });
 
@@ -247,18 +290,21 @@ describe("patternAnalysis", () => {
       expect(movementLabel(1000, 0)).toBeNull();
     });
 
-    it("returns 'Stillestående/let bevægelse' for short distances", () => {
-      expect(movementLabel(100, 3600)).toBe("Stillestående/let bevægelse");
-      expect(movementLabel(300, 3600)).toBe("Stillestående/let bevægelse");
+    it("returns standing/light movement for short distances", () => {
+      expect(movementLabel(100, 3600, tDa)).toBe("Stillestående/let bevægelse");
+      expect(movementLabel(300, 3600, tDa)).toBe("Stillestående/let bevægelse");
+      expect(movementLabel(100, 3600, tEn)).toBe("Standing still/light movement");
     });
 
-    it("returns 'Affiskning af vand' for long distances or high speed", () => {
-      expect(movementLabel(2000, 3600)).toBe("Affiskning af vand");
-      expect(movementLabel(1500, 3600)).toBe("Affiskning af vand");
+    it("returns fishing the water for long distances or high speed", () => {
+      expect(movementLabel(2000, 3600, tDa)).toBe("Affiskning af vand");
+      expect(movementLabel(1500, 3600, tDa)).toBe("Affiskning af vand");
+      expect(movementLabel(2000, 3600, tEn)).toBe("Fishing the water");
     });
 
-    it("returns 'Roligt tempo' for moderate movement", () => {
-      expect(movementLabel(800, 3600)).toBe("Roligt tempo");
+    it("returns calm pace for moderate movement", () => {
+      expect(movementLabel(800, 3600, tDa)).toBe("Roligt tempo");
+      expect(movementLabel(800, 3600, tEn)).toBe("Calm pace");
     });
   });
 
@@ -333,7 +379,7 @@ describe("patternAnalysis", () => {
       expect(items.map(i => i.label)).toEqual(["A", "M", "Z"]);
     });
 
-    it("excludes 'ukendt' when other options exist", () => {
+    it("excludes 'ukendt' and 'unknown' when other options exist", () => {
       const stats: Record<string, SimpleBucket> = {
         "ukendt": { trips: 10, fish: 50 },
         "Known": { trips: 5, fish: 30 },
@@ -341,6 +387,14 @@ describe("patternAnalysis", () => {
       const items = buildBucketItems(stats, 80, 1);
       expect(items.length).toBe(1);
       expect(items[0].label).toBe("Known");
+
+      const statsEn: Record<string, SimpleBucket> = {
+        "unknown": { trips: 10, fish: 50 },
+        "Known": { trips: 5, fish: 30 },
+      };
+      const itemsEn = buildBucketItems(statsEn, 80, 1);
+      expect(itemsEn.length).toBe(1);
+      expect(itemsEn[0].label).toBe("Known");
     });
 
     it("respects limit parameter", () => {

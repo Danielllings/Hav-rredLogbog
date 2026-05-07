@@ -6,12 +6,9 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { StyleSheet, View, Text, Pressable, ActivityIndicator } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import Constants from "expo-constants";
 import { ForecastSlider, getForecastValue } from "./ForecastSlider";
 import { useTheme } from "../../lib/theme";
-
-const extra = (Constants.expoConfig?.extra as any) || {};
-const DMI_EDR_BASE_URL = (extra.dmiEdrUrl as string | undefined)?.replace(/\/$/, "") || "";
+import { fetchWaveGrid } from "../../lib/openMeteoGrid";
 
 interface Props {
   visible: boolean;
@@ -19,6 +16,7 @@ interface Props {
   initialLat?: number;
   initialLng?: number;
   initialZoom?: number;
+  language?: "da" | "en";
 }
 
 // Convert wave height + direction to leaflet-velocity format
@@ -49,8 +47,8 @@ function swellToVelocityData(
         const dirDeg = directions[idx] ?? 270; // Default westerly if no direction
 
         if (height === null || height === undefined || isNaN(height)) {
-          uData.push(0);
-          vData.push(0);
+          uData.push(null);
+          vData.push(null);
           continue;
         }
 
@@ -122,7 +120,7 @@ function swellToVelocityData(
           dx,
           dy
         },
-        data: heights.map(h => (h === null || h === undefined || isNaN(h)) ? 0 : h)
+        data: heights.map(h => (h === null || h === undefined || isNaN(h)) ? null : h)
       }
     ];
   } catch (e) {
@@ -137,6 +135,7 @@ export function WaveSwellOverlay({
   initialLat = 55.5,
   initialLng = 11.0,
   initialZoom = 6,
+  language = "da",
 }: Props) {
   const { theme } = useTheme();
   const webViewRef = useRef<WebView>(null);
@@ -180,13 +179,15 @@ export function WaveSwellOverlay({
 
 
       // Try various parameter names for wave height and direction (DMI WAM uses significant-wave-height)
-      const heightData = ranges["significant-wave-height"]?.values ||
+      const heightData = ranges["wave_height"]?.values ||
+                         ranges["significant-wave-height"]?.values ||
                          ranges["hs"]?.values ||
                          ranges["swh"]?.values ||
                          ranges["VHM0"]?.values ||
                          ranges["wave-height"]?.values ||
                          ranges["sea-surface-wave-significant-height"]?.values || [];
-      const dirData = ranges["mean-wave-dir"]?.values ||
+      const dirData = ranges["wave_direction"]?.values ||
+                      ranges["mean-wave-dir"]?.values ||
                       ranges["mean-wave-direction"]?.values ||
                       ranges["mwd"]?.values ||
                       ranges["VMDR"]?.values ||
@@ -216,66 +217,47 @@ export function WaveSwellOverlay({
 
   // Fetch swell data from DMI EDR API
   const fetchSwellData = useCallback(async (hourIndex: number) => {
+    const datetime = hourIndex > 0 ? getForecastValue("hourly", hourIndex, 168) : undefined;
     try {
       setLoading(true);
       setError(null);
 
-      const datetime = getForecastValue("hourly", hourIndex) || new Date().toISOString();
-      const bbox = "7.5,54.0,16.0,58.5";
+      const waveResult = await fetchWaveGrid(
+        { minLat: 54.0, maxLat: 58.5, minLng: 7.5, maxLng: 16.0 },
+        20,
+        datetime
+      );
 
-      let converted: any[] | null = null;
+      if (waveResult) {
+        const { coverage, rawHeights } = waveResult;
+        const parsed = parseCoverageJson(coverage);
 
-      // Use primary WAM collection only (wam_nsb has best coverage for Danish waters)
-      if (DMI_EDR_BASE_URL) {
-        const collection = "wam_nsb";
-        // Fetch wave height AND direction from WAM model
-        const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=significant-wave-height,mean-wave-dir&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-        const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
-
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-          const response = await fetch(proxyUrl, { signal: controller.signal });
-          clearTimeout(timeoutId);
-
-          if (response.ok) {
-            const json = await response.json();
-            console.log(`WAM ${collection} response:`, JSON.stringify(json).substring(0, 500));
-            const parsed = parseCoverageJson(json);
-
-            if (parsed && parsed.heights.length > 0) {
-              // If no direction data, fallback to westerly direction
-              if (parsed.directions.length === 0) {
-                parsed.directions = parsed.heights.map(() => 270);
-              }
-              converted = swellToVelocityData(
-                parsed.heights,
-                parsed.directions,
-                parsed.bounds,
-                parsed.nx,
-                parsed.ny
-              );
-              if (converted) {
-                console.log(`Got wave data from ${collection}: ${parsed.heights.length} points`);
-              }
-            }
-          } else {
-            const text = await response.text();
-            console.warn(`${collection} error:`, text.substring(0, 200));
+        if (parsed && parsed.heights.length > 0) {
+          if (parsed.directions.length === 0) {
+            parsed.directions = parsed.heights.map(() => 270);
           }
-        } catch (e) {
-          console.warn(`Failed to fetch ${collection}:`, e);
+          const converted = swellToVelocityData(
+            parsed.heights,
+            parsed.directions,
+            parsed.bounds,
+            parsed.nx,
+            parsed.ny
+          );
+          if (converted) {
+            // Attach raw heights for bilinear interpolation
+            converted.push(rawHeights);
+            setVelocityData(converted);
+          } else {
+            setError(language === "da" ? "Ingen b\u00f8lgedata tilg\u00e6ngelig" : "No wave data available");
+          }
+        } else {
+          setError(language === "da" ? "Ingen b\u00f8lgedata tilg\u00e6ngelig" : "No wave data available");
         }
-      }
-
-      if (converted) {
-        setVelocityData(converted);
       } else {
-        setError("Ingen bølgedata fra DMI");
+        setError(language === "da" ? "Ingen b\u00f8lgedata tilg\u00e6ngelig" : "No wave data available");
       }
     } catch (e) {
-      setError("Fejl ved hentning af data");
+      setError(language === "da" ? "Fejl ved hentning af data" : "Error fetching data");
       console.error(e);
     } finally {
       setLoading(false);
@@ -330,7 +312,7 @@ export function WaveSwellOverlay({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Dønninger</title>
+  <title>${language === "da" ? "Dønninger" : "Swells"}</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -484,7 +466,7 @@ export function WaveSwellOverlay({
   <div id="map"></div>
   <div id="loading" class="loading-overlay">
     <div class="spinner"></div>
-    <div>Indlæser dønninger...</div>
+    <div>${language === "da" ? "Indlæser dønninger..." : "Loading swells..."}</div>
   </div>
 
   <!-- Center crosshair -->
@@ -498,7 +480,7 @@ export function WaveSwellOverlay({
   <div id="center-height" class="center-height">
     <span id="height-value" class="center-height-value">--</span>
     <span class="center-height-unit">m</span>
-    <div class="center-height-label">bølgehøjde</div>
+    <div class="center-height-label">${language === "da" ? "bølgehøjde" : "wave height"}</div>
   </div>
 
   <div class="wave-legend">
@@ -576,10 +558,15 @@ export function WaveSwellOverlay({
       const idx10 = y1 * nx + x0;
       const idx11 = y1 * nx + x1;
 
-      const h00 = waveData.heightData[idx00] || 0;
-      const h01 = waveData.heightData[idx01] || 0;
-      const h10 = waveData.heightData[idx10] || 0;
-      const h11 = waveData.heightData[idx11] || 0;
+      const h00 = waveData.heightData[idx00];
+      const h01 = waveData.heightData[idx01];
+      const h10 = waveData.heightData[idx10];
+      const h11 = waveData.heightData[idx11];
+
+      // If any corner is null/land, return null
+      if (h00 == null || h01 == null || h10 == null || h11 == null) {
+        return null;
+      }
 
       // Bilinear interpolation
       const h0 = h00 * (1 - xFrac) + h01 * xFrac;
@@ -609,7 +596,7 @@ export function WaveSwellOverlay({
       loadingEl.style.display = 'none';
 
       if (!data || data.length < 3) {
-        loadingEl.innerHTML = '<div style="color:#ff6b6b;">Ingen data</div>';
+        loadingEl.innerHTML = '<div style="color:#ff6b6b;">${language === "da" ? "Ingen bølgedata tilgængelig" : "No wave data available"}</div>';
         loadingEl.style.display = 'block';
         return;
       }
@@ -695,7 +682,7 @@ export function WaveSwellOverlay({
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={accentColor} />
-          <Text style={styles.loadingText}>Henter bølgedata...</Text>
+          <Text style={styles.loadingText}>{language === "da" ? "Henter bølgedata..." : "Fetching wave data..."}</Text>
         </View>
       )}
 
@@ -705,10 +692,10 @@ export function WaveSwellOverlay({
           <Text style={styles.errorText}>{error}</Text>
           <View style={styles.errorButtons}>
             <Pressable style={styles.retryButton} onPress={() => fetchSwellData(forecastHourIndex)}>
-              <Text style={styles.retryButtonText}>Prøv igen</Text>
+              <Text style={styles.retryButtonText}>{language === "da" ? "Prøv igen" : "Try again"}</Text>
             </Pressable>
             <Pressable style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeButtonText}>Luk</Text>
+              <Text style={styles.closeButtonText}>{language === "da" ? "Luk" : "Close"}</Text>
             </Pressable>
           </View>
         </View>
@@ -719,6 +706,8 @@ export function WaveSwellOverlay({
         value={forecastHourIndex}
         onValueChange={setForecastHourIndex}
         color={accentColor}
+        language={language}
+        maxHours={168}
       />
     </View>
   );

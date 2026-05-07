@@ -5,7 +5,7 @@ En React Native/Expo app til at logge havørredfiskeri med GPS-tracking, vejrdat
 ## Features
 
 - **GPS Tracking**: Optager din fisketur med høj præcision (20m afstand, 5s interval, 30m accuracy filter)
-- **Vejrdata fra DMI**: Automatisk hentning af temperatur, vind, havtemperatur og vandstand
+- **Vejrdata fra Open-Meteo**: Automatisk hentning af temperatur, vind, havtemperatur og vandstand (DMI HARMONIE-model, 2km opløsning)
 - **Offline Support**: Ture gemmes lokalt og synkroniseres når der er forbindelse
 - **Spot Management**: Gem og administrer dine favoritfiskepladser
 - **Fangstregistrering**: Log dine fangster med billeder og detaljer
@@ -24,7 +24,7 @@ En React Native/Expo app til at logge havørredfiskeri med GPS-tracking, vejrdat
 - **Auth**: Firebase Authentication
 - **Maps**: Google Maps (react-native-maps)
 - **Location**: expo-location med baggrundstracking
-- **Vejr API**: DMI Climate, Ocean og EDR API'er
+- **Vejr API**: Open-Meteo API (DMI HARMONIE-model) + DMI EDR (kun salinitet)
 
 ## Installation
 
@@ -68,10 +68,8 @@ FIREBASE_APP_ID_ANDROID=1:xxx:android:xxx  # Android-specifik App ID
 # Google Maps
 MAPS_API_KEY=...
 
-# DMI Backend URLs (Firebase Cloud Functions)
-DMI_CLIMATE_URL=...
+# DMI Backend URLs (kun brugt til salinitet via Cloud Functions)
 DMI_EDR_URL=...
-DMI_OCEAN_URL=...
 STAC_URL=...
 ```
 
@@ -90,10 +88,8 @@ eas secret:create --scope project --name FIREBASE_APP_ID_ANDROID --value "1:xxx:
 # Google Maps
 eas secret:create --scope project --name MAPS_API_KEY --value "..."
 
-# DMI URLs
-eas secret:create --scope project --name DMI_CLIMATE_URL --value "..."
+# DMI URLs (kun brugt til salinitet)
 eas secret:create --scope project --name DMI_EDR_URL --value "..."
-eas secret:create --scope project --name DMI_OCEAN_URL --value "..."
 eas secret:create --scope project --name STAC_URL --value "..."
 
 # Google Services filer (base64 encoded)
@@ -168,7 +164,7 @@ eas secret:create --scope project --name GOOGLE_SERVICE_INFO_PLIST --type file -
   - Øget distanceInterval til 20m, timeInterval til 5s
 - Hint-box UI med to bullet points (tryk på kort / hold på spot)
 - Slow loading indikator efter 5 sekunder
-- Warning når ocean data mangler fra DMI
+- Warning når ocean data mangler fra Open-Meteo
 
 ### 2026-02-09 - Release Build
 
@@ -232,7 +228,7 @@ eas secret:create --scope project --name GOOGLE_SERVICE_INFO_PLIST --type file -
 - Splash screen implementering
 - Login UI med Firebase Auth
 - Offline sync system med AsyncStorage queue
-- DMI vejr integration (Climate, Ocean, EDR)
+- Open-Meteo vejr integration (DMI HARMONIE-model) + DMI salinitet
 - GPS baggrundstracking med expo-location
 - Fangstregistrering med billeder
 - Spot management med kort
@@ -255,10 +251,10 @@ sea-trout-log/
 │       ├── DmiStationMarker.tsx # DMI station-markør
 │       └── ScrollableGraph.tsx # Vejrgraf
 ├── lib/                   # Utilities og services
-│   ├── dmi.ts            # DMI integration
-│   ├── dmiClimate.ts     # Climate API
-│   ├── dmiOcean.ts       # Ocean API (stationer)
-│   ├── dmiEdr.ts         # EDR API
+│   ├── dmi.ts            # Vejr orchestration (Open-Meteo + DMI)
+│   ├── openMeteoGrid.ts  # Open-Meteo grid fetch til overlays
+│   ├── dmiOcean.ts       # DMI Ocean stationsliste
+│   ├── dmiGridData.ts    # DMI EDR grid data (salinitet)
 │   ├── patternAnalysis.ts # Fiskemønster-analyse
 │   ├── spots.ts          # Spot management + getWindType
 │   ├── firebase.ts       # Firebase config

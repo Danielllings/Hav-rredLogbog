@@ -28,6 +28,7 @@ export type CatchRow = {
   bait?: string | null;
   notes?: string | null;
   photo_uri: string; // nu skal dette altid være en cloud-URL i databasen
+  bait_photo_uri?: string | null; // valgfrit billede af agn/flue
   lat?: number | null;
   lng?: number | null;
   created_at: string;
@@ -40,14 +41,15 @@ const mapSnapshotToCatchRow = (snap: QueryDocumentSnapshot): CatchRow => {
 };
 
 // Hjælpefunktion: upload lokalt billede til Firebase Storage og få en downloadURL tilbage
-async function uploadCatchPhoto(localUri: string, catchId: string) {
+async function uploadCatchPhoto(localUri: string, catchId: string, suffix = "") {
   // localUri kommer typisk fra ImagePicker (file:///…)
   const response = await fetch(localUri);
   const blob = await response.blob();
 
   // læg billeder i en mappe pr. bruger, så det kan skilles ad i Storage
   const userId = getUserId();
-  const imageRef = ref(storage, `catches/${userId}/${catchId}.jpg`);
+  const filename = suffix ? `${catchId}_${suffix}.jpg` : `${catchId}.jpg`;
+  const imageRef = ref(storage, `catches/${userId}/${filename}`);
 
   await uploadBytes(imageRef, blob);
   const downloadUrl = await getDownloadURL(imageRef);
@@ -70,9 +72,16 @@ export async function addCatch(
   // upload billede til Storage – input.photo_uri er en LOKAL sti her
   const photoUrl = await uploadCatchPhoto(input.photo_uri, catchId);
 
+  // upload valgfrit agn-foto
+  let baitPhotoUrl: string | null = null;
+  if (input.bait_photo_uri) {
+    baitPhotoUrl = await uploadCatchPhoto(input.bait_photo_uri, catchId, "bait");
+  }
+
   const payload: Omit<CatchRow, "id"> = {
     ...input,
     photo_uri: photoUrl, // vi gemmer DOWNLOAD-URL i databasen, ikke lokal sti
+    bait_photo_uri: baitPhotoUrl,
     userId,
     created_at: now,
     updated_at: now,
@@ -103,6 +112,19 @@ export async function updateCatch(
       // lokal sti -> upload til Storage og erstat med downloadURL
       const photoUrl = await uploadCatchPhoto(patch.photo_uri, id);
       patchToSave.photo_uri = photoUrl;
+    }
+  }
+
+  // Håndter agn-foto på samme måde
+  if (patch.bait_photo_uri) {
+    const isBaitRemote =
+      typeof patch.bait_photo_uri === "string" &&
+      (patch.bait_photo_uri.startsWith("http://") ||
+        patch.bait_photo_uri.startsWith("https://"));
+
+    if (!isBaitRemote) {
+      const baitPhotoUrl = await uploadCatchPhoto(patch.bait_photo_uri, id, "bait");
+      patchToSave.bait_photo_uri = baitPhotoUrl;
     }
   }
 

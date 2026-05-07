@@ -2,9 +2,9 @@
 // Samler Climate + Ocean til én evaluering
 // OPTIMIZED: SQLite persistent cache, request coalescing, stale-while-revalidate
 
-import { fetchClimateForTrip, ClimateStats } from "./dmiClimate";
-import { fetchOceanForTrip, OceanStats, OCEAN_STATIONS_DK, OceanStation } from "./dmiOcean";
-import { DMI_EDR_BASE_URL } from "./dmiConfig";
+// DMI Climate/Ocean bruges stadig af spot-weather (stationsmarkører) og salinitet-overlay
+// men ikke længere til tur-evaluering (erstattet med Open-Meteo)
+// DMI_EDR_BASE_URL ikke længere nødvendig - bruger Open-Meteo i stedet
 import {
   getCachedWeather,
   setCachedWeather,
@@ -25,42 +25,15 @@ const MEMORY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min memory cache
 // In-flight request deduplication - prevents duplicate API calls
 const inFlightRequests: Map<string, Promise<EdrForecast | null>> = new Map();
 
-// Warm-up flag - undgå gentagne warm-up kald
-let proxyWarmedUp = false;
-
 /**
- * Pre-warm proxy Cloud Function + SQLite cache for faster first call.
- * Call this at app start to reduce cold-start latency.
+ * Warm up SQLite cache for faster first read.
  */
 export async function warmUpDmiProxy(): Promise<void> {
-  if (proxyWarmedUp || !DMI_EDR_BASE_URL) return;
-  proxyWarmedUp = true;
-
-  // Warm up both proxy and SQLite in parallel
-  await Promise.all([
-    // 1. Proxy warm-up
-    (async () => {
-      try {
-        const controller = new AbortController();
-        setTimeout(() => controller.abort(), 5000);
-        await fetch(`${DMI_EDR_BASE_URL}?target=/collections`, {
-          method: "GET",
-          signal: controller.signal,
-        });
-      } catch {
-        // Ignore errors - this is just for warm-up
-      }
-    })(),
-
-    // 2. SQLite warm-up (triggers DB initialization)
-    (async () => {
-      try {
-        await getCacheStats();
-      } catch {
-        // Ignore errors
-      }
-    })(),
-  ]);
+  try {
+    await getCacheStats();
+  } catch {
+    // Ignore errors
+  }
 }
 
 export type Stat = {
@@ -99,9 +72,11 @@ export type DmiEvaluation = {
   pressureSeries?: Serie[];
   humiditySeries?: Serie[];
 
-  // Lufttryk og fugtighed stats
+  // Lufttryk, fugtighed og skydække stats
   pressureHPa?: Stat;
   humidityPct?: Stat;
+  cloudCoverPct?: Stat;
+  cloudCoverSeries?: Serie[];
 
   // --- NYT: kyst-/vindrelation baseret på GPS-track ---
   coastWind?: CoastWindInfo;
@@ -320,130 +295,142 @@ export async function evaluateTripWithDmi(
 
   const { lat, lon } = middleOfRoute(points);
 
-  // Beregn varighed og udvid til minimum 2 timer hvis nødvendigt
+  // Beregn tidsvindue (udvid korte ture til min 2 timer)
   const startMs = new Date(startIso).getTime();
   const endMs = new Date(endIso).getTime();
   const durationMs = endMs - startMs;
-  const MIN_DURATION_MS = 2 * 60 * 60 * 1000; // 2 timer i ms
+  const MIN_DURATION_MS = 2 * 60 * 60 * 1000;
 
   let effectiveStartMs: number;
   let effectiveEndMs: number;
 
   if (durationMs < MIN_DURATION_MS) {
-    // Udvid tidsintervallet til 2 timer, centreret omkring turen
     const centerMs = startMs + durationMs / 2;
-    const halfMinDuration = MIN_DURATION_MS / 2;
-    effectiveStartMs = centerMs - halfMinDuration;
-    effectiveEndMs = centerMs + halfMinDuration;
+    effectiveStartMs = centerMs - MIN_DURATION_MS / 2;
+    effectiveEndMs = centerMs + MIN_DURATION_MS / 2;
   } else {
     effectiveStartMs = startMs;
     effectiveEndMs = endMs;
   }
 
-  // Rund til hele timer for at matche DMI Climate API's timebaserede data
   effectiveStartMs = floorToHour(effectiveStartMs);
   effectiveEndMs = ceilToHour(effectiveEndMs);
 
-  // DMI Climate data har ca. 1-2 timers forsinkelse.
-  // Hvis vi spørger for tæt på "nu", får vi ingen data.
-  // Sørg for at starte mindst 2 timer før nuværende tid.
-  const nowMs = Date.now();
-  const twoHoursAgo = floorToHour(nowMs - 2 * 60 * 60 * 1000);
-  if (effectiveStartMs > twoHoursAgo) {
-    effectiveStartMs = twoHoursAgo;
-  }
+  // Open-Meteo bruger YYYY-MM-DD datoer
+  const startDate = new Date(effectiveStartMs).toISOString().slice(0, 10);
+  const endDate = new Date(effectiveEndMs).toISOString().slice(0, 10);
 
-  const effectiveStartIso = new Date(effectiveStartMs).toISOString();
-  const effectiveEndIso = new Date(effectiveEndMs).toISOString();
+  // Vælg forecast API (recent) eller archive API (>92 dage)
+  const daysAgo = (Date.now() - effectiveStartMs) / (24 * 60 * 60 * 1000);
+  const weatherBase = daysAgo > 90
+    ? "https://archive-api.open-meteo.com/v1/archive"
+    : OPEN_METEO_WEATHER;
 
-  // OPTIMIZED: Fetch climate and ocean data in PARALLEL instead of sequential
-  const [climateResult, oceanResult] = await Promise.allSettled([
-    fetchClimateForTrip({ startIso: effectiveStartIso, endIso: effectiveEndIso, lat, lon }),
-    fetchOceanForTrip({ startIso: effectiveStartIso, endIso: effectiveEndIso, lat, lon }),
+  // 2 parallelle requests til Open-Meteo (~250ms total)
+  const weatherUrl = `${weatherBase}?latitude=${lat}&longitude=${lon}`
+    + `&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,cloud_cover`
+    + `&wind_speed_unit=ms&start_date=${startDate}&end_date=${endDate}&timezone=auto`
+    + `&apikey=${OPEN_METEO_API_KEY}`
+    + (daysAgo <= 90 ? `&models=dmi_seamless` : "");
+
+  const marineUrl = `${OPEN_METEO_MARINE}?latitude=${lat}&longitude=${lon}`
+    + `&hourly=sea_surface_temperature,sea_level_height_msl`
+    + `&start_date=${startDate}&end_date=${endDate}&timezone=auto`
+    + `&apikey=${OPEN_METEO_API_KEY}`;
+
+  const [weatherResult, marineResult] = await Promise.allSettled([
+    fetchOpenMeteo(weatherUrl),
+    fetchOpenMeteo(marineUrl),
   ]);
 
-  const climate: ClimateStats | null = climateResult.status === 'fulfilled' ? climateResult.value : null;
-  const ocean: OceanStats | null = oceanResult.status === 'fulfilled' ? oceanResult.value : null;
+  const weather = weatherResult.status === "fulfilled" ? weatherResult.value : null;
+  const marine = marineResult.status === "fulfilled" ? marineResult.value : null;
 
-  const evalRes: DmiEvaluation = {
-    source: "DMI",
-  };
+  const evalRes: DmiEvaluation = { source: "DMI" };
 
-  const notes: string[] = [];
-
-  if (!climate && !ocean) {
-    evalRes.note = "Ingen DMI klima- eller ocean-data fundet for denne tur.";
+  if (!weather?.hourly?.time && !marine?.hourly?.time) {
+    evalRes.note = "Ingen vejrdata fundet for denne tur.";
     return evalRes;
   }
-  if (!climate) notes.push("Ingen DMI klimadata fundet.");
-  if (!ocean) notes.push("Ingen DMI ocean-data fundet.");
-  if (notes.length) {
-    evalRes.note = notes.join(" ");
-  }
 
-  // Climate -> DmiEvaluation
-  if (climate) {
-    if (climate.airTempC) evalRes.airTempC = climate.airTempC;
-    if (climate.windMS) evalRes.windMS = climate.windMS;
-    if (climate.windDirDeg) evalRes.windDirDeg = climate.windDirDeg;
-    if (climate.pressureHPa) evalRes.pressureHPa = climate.pressureHPa;
-    if (climate.humidityPct) evalRes.humidityPct = climate.humidityPct;
-
-    if (climate.series && climate.series.length) {
-      evalRes.airTempSeries = climate.series
-        .filter((p) => typeof p.airTempC === "number")
-        .map((p) => ({ ts: p.ts, v: p.airTempC as number }));
-
-      evalRes.windSpeedSeries = climate.series
-        .filter((p) => typeof p.windMS === "number")
-        .map((p) => ({ ts: p.ts, v: p.windMS as number }));
-
-      evalRes.pressureSeries = climate.series
-        .filter((p) => typeof p.pressureHPa === "number")
-        .map((p) => ({ ts: p.ts, v: p.pressureHPa as number }));
-
-      evalRes.humiditySeries = climate.series
-        .filter((p) => typeof p.humidityPct === "number")
-        .map((p) => ({ ts: p.ts, v: p.humidityPct as number }));
+  // Filtrer til turens tidsvindue
+  const filterToTrip = (
+    times: string[],
+    values: (number | null)[]
+  ): Serie[] => {
+    const series: Serie[] = [];
+    for (let i = 0; i < times.length; i++) {
+      const ts = new Date(times[i]).getTime();
+      if (ts >= effectiveStartMs && ts <= effectiveEndMs && values[i] != null) {
+        series.push({ ts, v: values[i]! });
+      }
     }
+    return series;
+  };
 
-    if (climate.stationName) evalRes.stationName = climate.stationName;
-    if (climate.stationId) evalRes.stationId = climate.stationId;
-  }
-
-  // Ocean -> DmiEvaluation
-  if (ocean) {
-    if (ocean.waterTempC) evalRes.waterTempC = ocean.waterTempC;
-    if (ocean.waterLevelCM) evalRes.waterLevelCM = ocean.waterLevelCM;
-
-    if (ocean.stationName) evalRes.oceanStationName = ocean.stationName;
-    if (ocean.stationId) evalRes.oceanStationId = ocean.stationId;
-
-    if (ocean.series && ocean.series.length) {
-      evalRes.waterTempSeries = ocean.series
-        .filter((p) => typeof p.waterTempC === "number")
-        .map((p) => ({ ts: p.ts, v: p.waterTempC as number }));
-
-      evalRes.waterLevelSeries = ocean.series
-        .filter((p) => typeof p.waterLevelCM === "number")
-        .map((p) => ({ ts: p.ts, v: p.waterLevelCM as number }));
+  const buildStat = (series: Serie[]): Stat | undefined => {
+    if (!series.length) return undefined;
+    let min = series[0].v, max = series[0].v, sum = 0;
+    for (const s of series) {
+      if (s.v < min) min = s.v;
+      if (s.v > max) max = s.v;
+      sum += s.v;
     }
+    return { avg: sum / series.length, min, max };
+  };
+
+  // Weather → DmiEvaluation
+  if (weather?.hourly?.time) {
+    const h = weather.hourly;
+    const times = h.time as string[];
+
+    const tempSeries = filterToTrip(times, (h.temperature_2m || []) as (number | null)[]);
+    const windSeries = filterToTrip(times, (h.wind_speed_10m || []) as (number | null)[]);
+    const dirSeries = filterToTrip(times, (h.wind_direction_10m || []) as (number | null)[]);
+    const humSeries = filterToTrip(times, (h.relative_humidity_2m || []) as (number | null)[]);
+    const presSeries = filterToTrip(times, (h.surface_pressure || []) as (number | null)[]);
+    const cloudSeries = filterToTrip(times, (h.cloud_cover || []) as (number | null)[]);
+
+    if (tempSeries.length) { evalRes.airTempSeries = tempSeries; evalRes.airTempC = buildStat(tempSeries); }
+    if (windSeries.length) { evalRes.windSpeedSeries = windSeries; evalRes.windMS = buildStat(windSeries); }
+    if (dirSeries.length) { evalRes.windDirDeg = buildStat(dirSeries); }
+    if (humSeries.length) { evalRes.humiditySeries = humSeries; evalRes.humidityPct = buildStat(humSeries); }
+    if (presSeries.length) { evalRes.pressureSeries = presSeries; evalRes.pressureHPa = buildStat(presSeries); }
+    if (cloudSeries.length) { evalRes.cloudCoverSeries = cloudSeries; evalRes.cloudCoverPct = buildStat(cloudSeries); }
+
+    // Open-Meteo som "station"
+    evalRes.stationName = "Open-Meteo (HARMONIE 2km)";
+    evalRes.stationId = `${lat.toFixed(4)},${lon.toFixed(4)}`;
   }
 
-  // --- NYT: kyst-/vindrelation baseret på GPS-track ---
+  // Marine → DmiEvaluation
+  if (marine?.hourly?.time) {
+    const m = marine.hourly;
+    const times = m.time as string[];
+
+    const sstSeries = filterToTrip(times, (m.sea_surface_temperature || []) as (number | null)[]);
+    const levelSeries = filterToTrip(times, (m.sea_level_height_msl || []) as (number | null)[]);
+
+    // Konverter vandstand m → cm
+    const levelCmSeries = levelSeries.map((s) => ({ ts: s.ts, v: s.v * 100 }));
+
+    if (sstSeries.length) { evalRes.waterTempSeries = sstSeries; evalRes.waterTempC = buildStat(sstSeries); }
+    if (levelCmSeries.length) { evalRes.waterLevelSeries = levelCmSeries; evalRes.waterLevelCM = buildStat(levelCmSeries); }
+
+    evalRes.oceanStationName = "Open-Meteo Marine";
+    evalRes.oceanStationId = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+  }
+
+  // Kyst-/vindrelation baseret på GPS-track
   if (evalRes.windDirDeg?.avg != null) {
     const cw = computeCoastWindInfo(points, evalRes.windDirDeg.avg);
-    if (cw) {
-      evalRes.coastWind = cw;
-    }
+    if (cw) evalRes.coastWind = cw;
   }
 
   return evalRes;
 }
 
-// --- Forecast EDR (DMI punktprognose via Cloud Function proxy) ---
-
-const EDR_BASE_URL = DMI_EDR_BASE_URL;
+// --- Forecast (via Open-Meteo, ~200ms, DMI HARMONIE model) ---
 
 export type StacForecastFile = {
   id: string;
@@ -461,194 +448,45 @@ export type EdrForecast = {
   airTempSeries: Serie[];
   windSpeedSeries: Serie[];
   windDirSeries: Serie[];
+  gustWindSeries: Serie[];        // Vindstød m/s
   waterLevelSeries: Serie[];
   waveHeightSeries: Serie[];
+  wavePeriodSeries: Serie[];      // Bølgeperiode (s)
+  waveDirSeries: Serie[];         // Bølgeretning (grader)
+  waterTempSeries: Serie[];       // Vandtemperatur fra DKSS (°C)
   currentSpeedSeries: Serie[];
   humiditySeries: Serie[];
   pressureSeries: Serie[];
   cloudCoverSeries: Serie[];
-  precipitationSeries: Serie[];  // Nedbør i mm
-  oceanFallbackStation?: string; // Navn på station hvis ocean-data kom fra fallback
+  precipitationSeries: Serie[];   // Nedbør i mm/h
+  dewPointSeries: Serie[];        // Dugpunkt °C
+  visibilitySeries: Serie[];      // Sigtbarhed km
+  uvIndexSeries: Serie[];         // UV-indeks
+  oceanFallbackStation?: string;
 };
 
-/**
- * Fælles helper til EDR-kald via proxy.
- * OPTIMIZED: Tilføjet timeout så langsomme requests ikke blokerer.
- */
-async function fetchEdrData(pathAndQuery: string, timeoutMs: number = 8000) {
+// --- Open-Meteo API (customer subscription) ---
+const OPEN_METEO_API_KEY = "uwsI1lSZ2idaPwlD";
+const OPEN_METEO_WEATHER = "https://customer-api.open-meteo.com/v1/forecast";
+const OPEN_METEO_MARINE = "https://customer-marine-api.open-meteo.com/v1/marine";
+
+type OpenMeteoHourly = {
+  time?: string[];
+  [key: string]: (number | null)[] | string[] | undefined;
+};
+
+async function fetchOpenMeteo(url: string, timeoutMs = 5000): Promise<{ hourly?: OpenMeteoHourly } | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    if (!EDR_BASE_URL) {
-      return null;
-    }
-
-    const proxyUrl = `${EDR_BASE_URL}?target=${encodeURIComponent(
-      pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`
-    )}`;
-
-    // Timeout med AbortController
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const res = await fetch(proxyUrl, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        return null;
-      }
-      return await res.json();
-    } catch (e) {
-      clearTimeout(timeoutId);
-      return null;
-    }
-  } catch (e) {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    clearTimeout(timeoutId);
     return null;
   }
-}
-
-/**
- * Tjekker om HARMONIE CoverageJSON har gyldige data.
- */
-function harmonieHasData(result: DmiCoverageJson | null): boolean {
-  if (!result?.domain?.axes?.t?.values?.length) return false;
-  if (!result?.ranges) return false;
-
-  const ranges = result.ranges;
-  for (const key of Object.keys(ranges)) {
-    const vals = ranges[key]?.values;
-    if (vals && vals.length > 0 && vals.some(v => v != null)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Tjekker om ocean GeoJSON har gyldige data.
- */
-function oceanGeoJsonHasData(result: DmiGeoJsonResponse | null, paramName: string): boolean {
-  if (!result?.features?.length) return false;
-  return result.features.some(f => f.properties?.[paramName] != null);
-}
-
-/**
- * Henter ALT vejr- og havdata.
- * Simpel implementering: prøver original koordinat først,
- * og kun ÉN fallback koordinat (~3km mod havet) hvis data mangler.
- */
-async function fetchAllDataWithNearbySearch(
-  lat: number,
-  lon: number
-): Promise<{
-  harmonieMain: DmiCoverageJson | null;
-  harmonieExtras: DmiCoverageJson | null;
-  waterLevel: DmiGeoJsonResponse | null;
-  waveHeight: DmiGeoJsonResponse | null;
-  nearbyInfo: {
-    weatherNearby: boolean;
-    oceanNearby: boolean;
-  };
-}> {
-  const geoOpts = "&crs=crs84&f=GeoJSON";
-  const covOpts = "&crs=crs84&f=CoverageJSON";
-  const coords = `coords=POINT(${lon.toFixed(4)} ${lat.toFixed(4)})`;
-
-  // 1) Hent alle data fra original koordinat parallelt (3 requests - kombineret HARMONIE)
-  const [harmonieAll, waterLevel, waveHeight] = await Promise.all([
-    // KOMBINERET: alle vejrparametre i ÉT kald
-    fetchEdrData(`/collections/harmonie_dini_sf/position?${coords}&parameter-name=temperature-2m,wind-speed,wind-dir,total-precipitation,relative-humidity-2m,total-cloud-cover,mean-sea-level-pressure${covOpts}`) as Promise<DmiCoverageJson | null>,
-    fetchEdrData(`/collections/dkss_nsbs/position?${coords}&parameter-name=sea-mean-deviation${geoOpts}`) as Promise<DmiGeoJsonResponse | null>,
-    fetchEdrData(`/collections/wam_nsb/position?${coords}&parameter-name=significant-wave-height${geoOpts}`) as Promise<DmiGeoJsonResponse | null>,
-  ]);
-
-  // Brug samme data til begge (harmonieMain og harmonieExtras er nu identiske)
-  const harmonieMain = harmonieAll;
-  const harmonieExtras = harmonieAll;
-
-  // Tjek hvad vi mangler
-  const hasWeather = harmonieHasData(harmonieMain);
-  const hasWaterLevel = oceanGeoJsonHasData(waterLevel, "sea-mean-deviation");
-  const hasWaveHeight = oceanGeoJsonHasData(waveHeight, "significant-wave-height");
-
-  // Hvis vi har alt, returner med det samme
-  if (hasWeather && hasWaterLevel && hasWaveHeight) {
-    return {
-      harmonieMain,
-      harmonieExtras,
-      waterLevel,
-      waveHeight,
-      nearbyInfo: { weatherNearby: false, oceanNearby: false },
-    };
-  }
-
-  // 2) Prøv ÉN fallback koordinat (~3km mod syd-øst, typisk mod havet i DK)
-  const fallbackLat = lat - 0.03;
-  const fallbackLon = lon + 0.03;
-  const fallbackCoords = `coords=POINT(${fallbackLon.toFixed(4)} ${fallbackLat.toFixed(4)})`;
-
-  // Kun hent det vi mangler
-  const fallbackPromises: Promise<unknown>[] = [];
-  const fallbackTypes: string[] = [];
-
-  if (!hasWeather) {
-    // KOMBINERET: alle vejrparametre i ÉT kald
-    fallbackPromises.push(
-      fetchEdrData(`/collections/harmonie_dini_sf/position?${fallbackCoords}&parameter-name=temperature-2m,wind-speed,wind-dir,total-precipitation,relative-humidity-2m,total-cloud-cover,mean-sea-level-pressure${covOpts}`)
-    );
-    fallbackTypes.push("weather");
-  }
-  if (!hasWaterLevel) {
-    fallbackPromises.push(
-      fetchEdrData(`/collections/dkss_nsbs/position?${fallbackCoords}&parameter-name=sea-mean-deviation${geoOpts}`)
-    );
-    fallbackTypes.push("waterLevel");
-  }
-  if (!hasWaveHeight) {
-    fallbackPromises.push(
-      fetchEdrData(`/collections/wam_nsb/position?${fallbackCoords}&parameter-name=significant-wave-height${geoOpts}`)
-    );
-    fallbackTypes.push("waveHeight");
-  }
-
-  const fallbackResults = await Promise.all(fallbackPromises);
-
-  // Saml resultater
-  let finalWeather = harmonieMain;
-  let finalExtras = harmonieExtras;
-  let finalWaterLevel = waterLevel;
-  let finalWaveHeight = waveHeight;
-  let weatherNearby = false;
-  let oceanNearby = false;
-
-  fallbackTypes.forEach((type, i) => {
-    const result = fallbackResults[i];
-    if (type === "weather" && harmonieHasData(result as DmiCoverageJson)) {
-      finalWeather = result as DmiCoverageJson;
-      finalExtras = result as DmiCoverageJson; // Samme data - alle parametre inkluderet
-      weatherNearby = true;
-    } else if (type === "waterLevel" && oceanGeoJsonHasData(result as DmiGeoJsonResponse, "sea-mean-deviation")) {
-      finalWaterLevel = result as DmiGeoJsonResponse;
-      oceanNearby = true;
-    } else if (type === "waveHeight" && oceanGeoJsonHasData(result as DmiGeoJsonResponse, "significant-wave-height")) {
-      finalWaveHeight = result as DmiGeoJsonResponse;
-      oceanNearby = true;
-    }
-  });
-
-  return {
-    harmonieMain: finalWeather,
-    harmonieExtras: finalExtras,
-    waterLevel: finalWaterLevel,
-    waveHeight: finalWaveHeight,
-    nearbyInfo: { weatherNearby, oceanNearby },
-  };
 }
 
 /**
@@ -677,19 +515,48 @@ export async function getSpotForecastEdr(
   // Create fetch promise
   const fetchPromise = (async (): Promise<EdrForecast | null> => {
     try {
-      // L2: Check SQLite cache (async, non-blocking)
+      // L2: Check SQLite cache
       try {
         const sqliteCached = await getCachedWeather(lat, lon);
-        if (sqliteCached && !sqliteCached.isStale) {
-          const parsedData = JSON.parse(sqliteCached.data) as EdrForecast;
+        if (sqliteCached) {
+          const raw = JSON.parse(sqliteCached.data);
+          // Sikr at nye felter har defaults (cache kan stamme fra ældre version)
+          const parsedData: EdrForecast = {
+            airTempSeries: raw.airTempSeries ?? [],
+            windSpeedSeries: raw.windSpeedSeries ?? [],
+            windDirSeries: raw.windDirSeries ?? [],
+            gustWindSeries: raw.gustWindSeries ?? [],
+            waterLevelSeries: raw.waterLevelSeries ?? [],
+            waveHeightSeries: raw.waveHeightSeries ?? [],
+            wavePeriodSeries: raw.wavePeriodSeries ?? [],
+            waveDirSeries: raw.waveDirSeries ?? [],
+            waterTempSeries: raw.waterTempSeries ?? [],
+            currentSpeedSeries: raw.currentSpeedSeries ?? [],
+            humiditySeries: raw.humiditySeries ?? [],
+            pressureSeries: raw.pressureSeries ?? [],
+            cloudCoverSeries: raw.cloudCoverSeries ?? [],
+            precipitationSeries: raw.precipitationSeries ?? [],
+            dewPointSeries: raw.dewPointSeries ?? [],
+            visibilitySeries: raw.visibilitySeries ?? [],
+            uvIndexSeries: raw.uvIndexSeries ?? [],
+            oceanFallbackStation: raw.oceanFallbackStation,
+          };
           memoryCache.set(cacheKey, { data: parsedData, ts: Date.now() });
+
+          if (!sqliteCached.isStale) {
+            // Fresh cache - return immediately
+            return parsedData;
+          }
+
+          // Stale cache - return stale data NOW, refresh in background
+          fetchWeatherFromApi(lat, lon, cacheKey).catch(() => {});
           return parsedData;
         }
       } catch {
         // Ignore SQLite errors, continue to API
       }
 
-      // Fetch from API
+      // No cache at all - must fetch from API
       const result = await fetchWeatherFromApi(lat, lon, cacheKey);
       return result;
     } finally {
@@ -702,200 +569,117 @@ export async function getSpotForecastEdr(
 }
 
 /**
- * Actual API fetch - søger i nærliggende koordinater hvis data mangler.
+ * Henter vejr + marine data fra Open-Meteo (~200ms parallelt).
+ * Bruger DMI's eget HARMONIE-model via Open-Meteo (dmi_seamless, 2km opløsning).
  */
 async function fetchWeatherFromApi(
   lat: number,
   lon: number,
   cacheKey: string
 ): Promise<EdrForecast | null> {
-  // Hent data med automatisk søgning i nærliggende koordinater
-  const allData = await fetchAllDataWithNearbySearch(lat, lon);
+  // 2 parallelle requests (~200ms hver, parallelt = ~250ms total)
+  const weatherUrl = `${OPEN_METEO_WEATHER}?latitude=${lat}&longitude=${lon}`
+    + `&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,`
+    + `relative_humidity_2m,surface_pressure,cloud_cover,precipitation,`
+    + `dew_point_2m,visibility,uv_index`
+    + `&wind_speed_unit=ms&forecast_days=3&timezone=auto`
+    + `&apikey=${OPEN_METEO_API_KEY}`
+    + `&models=dmi_seamless`;
 
-  const harmonieJson = allData.harmonieMain;
-  const extrasJson = allData.harmonieExtras;
-  const waterLevelJson = allData.waterLevel;
-  const waveHeightJson = allData.waveHeight;
+  const marineUrl = `${OPEN_METEO_MARINE}?latitude=${lat}&longitude=${lon}`
+    + `&hourly=wave_height,wave_period,wave_direction,`
+    + `ocean_current_velocity,ocean_current_direction,`
+    + `sea_surface_temperature,sea_level_height_msl`
+    + `&forecast_days=3&timezone=auto`
+    + `&apikey=${OPEN_METEO_API_KEY}`;
+
+  const [weather, marine] = await Promise.all([
+    fetchOpenMeteo(weatherUrl),
+    fetchOpenMeteo(marineUrl),
+  ]);
 
   const result: EdrForecast = {
     airTempSeries: [],
     windSpeedSeries: [],
     windDirSeries: [],
+    gustWindSeries: [],
     waterLevelSeries: [],
     waveHeightSeries: [],
+    wavePeriodSeries: [],
+    waveDirSeries: [],
+    waterTempSeries: [],
     currentSpeedSeries: [],
     humiditySeries: [],
     pressureSeries: [],
     cloudCoverSeries: [],
     precipitationSeries: [],
+    dewPointSeries: [],
+    visibilitySeries: [],
+    uvIndexSeries: [],
   };
 
-  // 1) Vejr (HARMONIE - CoverageJSON)
-  const parseCoverage = (json: DmiCoverageJson | null, seriesHandler: (ts: number, ranges: DmiCoverageRanges, i: number, keys: Record<string, string | undefined>) => void) => {
-    if (
-      !json ||
-      !json.domain ||
-      !json.domain.axes ||
-      !json.domain.axes.t ||
-      !Array.isArray(json.domain.axes.t.values) ||
-      !json.ranges
-    ) {
-      return;
-    }
-    const times: string[] = json.domain.axes.t.values;
-    const ranges = json.ranges;
-    const keys: Record<string, string | undefined> = {
-      tempKey: Object.keys(ranges).find((k) =>
-        k.toLowerCase().includes("temperature")
-      ),
-      windKey: Object.keys(ranges).find((k) =>
-        k.toLowerCase().includes("wind-speed")
-      ),
-      dirKey: Object.keys(ranges).find((k) =>
-        k.toLowerCase().includes("wind-dir")
-      ),
-      humidityKey: Object.keys(ranges).find((k) =>
-        k.toLowerCase().includes("humidity")
-      ),
-      pressureKey: Object.keys(ranges).find((k) =>
-        k.toLowerCase().includes("pressure")
-      ),
-      cloudKey: Object.keys(ranges).find((k) =>
-        k.toLowerCase().includes("cloud")
-      ),
-      precipKey: Object.keys(ranges).find((k) =>
-        k.toLowerCase().includes("precip") || k.toLowerCase().includes("rain")
-      ),
-    };
+  // 1) Parse vejrdata (Open-Meteo: °C, m/s, hPa, %, mm direkte)
+  if (weather?.hourly?.time) {
+    const h = weather.hourly;
+    const times = h.time as string[];
+    const temp = h.temperature_2m as (number | null)[] | undefined;
+    const wind = h.wind_speed_10m as (number | null)[] | undefined;
+    const wdir = h.wind_direction_10m as (number | null)[] | undefined;
+    const gust = h.wind_gusts_10m as (number | null)[] | undefined;
+    const hum = h.relative_humidity_2m as (number | null)[] | undefined;
+    const pres = h.surface_pressure as (number | null)[] | undefined;
+    const cloud = h.cloud_cover as (number | null)[] | undefined;
+    const precip = h.precipitation as (number | null)[] | undefined;
+    const dew = h.dew_point_2m as (number | null)[] | undefined;
+    const vis = h.visibility as (number | null)[] | undefined;
+    const uvi = h.uv_index as (number | null)[] | undefined;
 
-    times.forEach((t, i) => {
-      const ts = new Date(t).getTime();
-      seriesHandler(ts, ranges, i, keys);
-    });
-  };
+    for (let i = 0; i < times.length; i++) {
+      const ts = new Date(times[i]).getTime();
+      if (!Number.isFinite(ts)) continue;
 
-  // Temp/vind + fugt/tryk/skydække hvis tilgængeligt
-  // Prøv CoverageJSON format først
-  parseCoverage(harmonieJson, (ts, ranges, i, keys) => {
-    if (keys.tempKey && ranges[keys.tempKey]?.values?.[i] != null) {
-      let val = ranges[keys.tempKey]!.values![i] as number;
-      if (val > 200) val -= 273.15;
-      result.airTempSeries.push({ ts, v: val });
+      if (temp?.[i] != null) result.airTempSeries.push({ ts, v: temp[i]! });
+      if (wind?.[i] != null) result.windSpeedSeries.push({ ts, v: wind[i]! });
+      if (wdir?.[i] != null) result.windDirSeries.push({ ts, v: wdir[i]! });
+      if (gust?.[i] != null) result.gustWindSeries.push({ ts, v: gust[i]! });
+      if (hum?.[i] != null) result.humiditySeries.push({ ts, v: hum[i]! });
+      if (pres?.[i] != null) result.pressureSeries.push({ ts, v: pres[i]! });
+      if (cloud?.[i] != null) result.cloudCoverSeries.push({ ts, v: cloud[i]! });
+      if (precip?.[i] != null) result.precipitationSeries.push({ ts, v: precip[i]! });
+      if (dew?.[i] != null) result.dewPointSeries.push({ ts, v: dew[i]! });
+      if (vis?.[i] != null) result.visibilitySeries.push({ ts, v: vis[i]! / 1000 }); // m → km
+      if (uvi?.[i] != null) result.uvIndexSeries.push({ ts, v: uvi[i]! });
     }
-    if (keys.windKey && ranges[keys.windKey]?.values?.[i] != null) {
-      const val = ranges[keys.windKey]!.values![i] as number;
-      result.windSpeedSeries.push({ ts, v: val });
-    }
-    if (keys.dirKey && ranges[keys.dirKey]?.values?.[i] != null) {
-      const val = ranges[keys.dirKey]!.values![i] as number;
-      result.windDirSeries.push({ ts, v: val });
-    }
-    if (keys.humidityKey && ranges[keys.humidityKey]?.values?.[i] != null) {
-      const raw = ranges[keys.humidityKey]!.values![i] as number;
-      const val = raw > 1 ? raw : raw * 100;
-      result.humiditySeries.push({ ts, v: val });
-    }
-    if (keys.pressureKey && ranges[keys.pressureKey]?.values?.[i] != null) {
-      let val = ranges[keys.pressureKey]!.values![i] as number;
-      if (val > 2000) val = val / 100;
-      result.pressureSeries.push({ ts, v: val });
-    }
-    if (keys.cloudKey && ranges[keys.cloudKey]?.values?.[i] != null) {
-      const raw = ranges[keys.cloudKey]!.values![i] as number;
-      const val = raw > 1 ? raw : raw * 100;
-      result.cloudCoverSeries.push({ ts, v: val });
-    }
-    if (keys.precipKey && ranges[keys.precipKey]?.values?.[i] != null) {
-      const raw = ranges[keys.precipKey]!.values![i] as number;
-      // precipitation-rate er typisk i kg/m²/s, konverter til mm/h
-      // 1 kg/m²/s = 3600 mm/h
-      const val = raw < 0.01 ? raw * 3600 : raw;
-      result.precipitationSeries.push({ ts, v: val });
-    }
-  });
-
-  // Parse ekstra vejrparametre (nedbør, fugt, sky) fra separat request
-  parseCoverage(extrasJson, (ts, ranges, i, keys) => {
-    if (keys.humidityKey && ranges[keys.humidityKey]?.values?.[i] != null) {
-      const raw = ranges[keys.humidityKey]!.values![i] as number;
-      const val = raw > 1 ? raw : raw * 100;
-      result.humiditySeries.push({ ts, v: val });
-    }
-    if (keys.cloudKey && ranges[keys.cloudKey]?.values?.[i] != null) {
-      const raw = ranges[keys.cloudKey]!.values![i] as number;
-      const val = raw > 1 ? raw : raw * 100;
-      result.cloudCoverSeries.push({ ts, v: val });
-    }
-    if (keys.precipKey && ranges[keys.precipKey]?.values?.[i] != null) {
-      const raw = ranges[keys.precipKey]!.values![i] as number;
-      const val = raw < 0.01 ? raw * 3600 : raw;
-      result.precipitationSeries.push({ ts, v: val });
-    }
-  });
-
-  // 2) Vandstand (DKSS)
-  if (waterLevelJson && Array.isArray(waterLevelJson.features)) {
-    waterLevelJson.features.forEach((f: DmiGeoJsonFeature) => {
-      const props = f.properties || {};
-      const ts = Date.parse(
-        String(props.datetime ??
-          props.step ??
-          props.time ??
-          props.timestamp ??
-          props.validTime ??
-          "")
-      );
-
-      // DMI kan kalde den både ved navn og intern kode
-      const val =
-        props["sea-mean-deviation"] !== undefined
-          ? props["sea-mean-deviation"]
-          : props["82-0.0-1"];
-
-      if (Number.isFinite(ts) && typeof val === "number" && !Number.isNaN(val)) {
-        // m → cm
-        result.waterLevelSeries.push({ ts, v: val * 100 });
-      }
-    });
-
-    result.waterLevelSeries.sort((a, b) => a.ts - b.ts);
   }
 
-  // 3) Bølger (WAM)
-  if (waveHeightJson && Array.isArray(waveHeightJson.features)) {
-    waveHeightJson.features.forEach((f: DmiGeoJsonFeature) => {
-      const props = f.properties || {};
-      const ts = Date.parse(
-        String(props.datetime ??
-          props.step ??
-          props.time ??
-          props.timestamp ??
-          props.validTime ??
-          "")
-      );
-      const val = props["significant-wave-height"];
+  // 2) Parse marine data (bølger, vandtemp, vandstand, havstrøm)
+  if (marine?.hourly?.time) {
+    const m = marine.hourly;
+    const times = m.time as string[];
+    const waveH = m.wave_height as (number | null)[] | undefined;
+    const waveP = m.wave_period as (number | null)[] | undefined;
+    const waveD = m.wave_direction as (number | null)[] | undefined;
+    const sst = m.sea_surface_temperature as (number | null)[] | undefined;
+    const level = m.sea_level_height_msl as (number | null)[] | undefined;
+    const curVel = m.ocean_current_velocity as (number | null)[] | undefined;
 
-      if (Number.isFinite(ts) && typeof val === "number" && !Number.isNaN(val)) {
-        // m
-        result.waveHeightSeries.push({ ts, v: val });
-      }
-    });
+    for (let i = 0; i < times.length; i++) {
+      const ts = new Date(times[i]).getTime();
+      if (!Number.isFinite(ts)) continue;
 
-    result.waveHeightSeries.sort((a, b) => a.ts - b.ts);
+      if (waveH?.[i] != null) result.waveHeightSeries.push({ ts, v: waveH[i]! });
+      if (waveP?.[i] != null) result.wavePeriodSeries.push({ ts, v: waveP[i]! });
+      if (waveD?.[i] != null) result.waveDirSeries.push({ ts, v: waveD[i]! });
+      if (sst?.[i] != null) result.waterTempSeries.push({ ts, v: sst[i]! });
+      if (level?.[i] != null) result.waterLevelSeries.push({ ts, v: level[i]! * 100 }); // m → cm
+      if (curVel?.[i] != null) result.currentSpeedSeries.push({ ts, v: curVel[i]! / 3.6 }); // km/h → m/s
+    }
   }
 
-  // Tilføj info hvis data kom fra nærliggende koordinater
-  if (allData.nearbyInfo.oceanNearby) {
-    result.oceanFallbackStation = "nærliggende position";
-  }
-
-  // OPTIMIZED: All weather parameters (incl. precipitation, clouds, humidity) are fetched in one request
-  // and parsed automatically by parseCoverage above - no separate requests necessary
-
-  // Store in memory cache (instant access)
+  // Store in memory cache
   memoryCache.set(cacheKey, { data: result, ts: Date.now() });
 
-  // Store in SQLite cache (non-blocking, fire and forget)
+  // Store in SQLite cache (non-blocking)
   setCachedWeather(lat, lon, JSON.stringify(result)).catch(() => {});
 
   return result;

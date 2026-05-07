@@ -25,6 +25,7 @@ const THEME = {
 interface SunMoonAnimationProps {
   sunrise: string; // "HH:MM"
   sunset: string;  // "HH:MM"
+  language?: "da" | "en";
 }
 
 // Parse "HH:MM" to minutes since midnight
@@ -33,7 +34,7 @@ function parseTime(timeStr: string): number {
   return h * 60 + m;
 }
 
-export function SunMoonAnimation({ sunrise, sunset }: SunMoonAnimationProps) {
+export function SunMoonAnimation({ sunrise, sunset, language = "da" }: SunMoonAnimationProps) {
   const now = new Date();
   const sunriseMin = parseTime(sunrise);
   const sunsetMin = parseTime(sunset);
@@ -203,13 +204,13 @@ export function SunMoonAnimation({ sunrise, sunset }: SunMoonAnimationProps) {
         <View style={styles.labelItem}>
           <View style={[styles.dot, { backgroundColor: "#FFA500" }]} />
           <View>
-            <Text style={styles.labelTitle}>Solopgang</Text>
+            <Text style={styles.labelTitle}>{language === "da" ? "Solopgang" : "Sunrise"}</Text>
             <Text style={styles.labelValue}>{sunrise}</Text>
           </View>
         </View>
 
         <View style={styles.centerLabel}>
-          <Text style={styles.nowLabel}>{isDaytime ? "NU" : "NAT"}</Text>
+          <Text style={styles.nowLabel}>{isDaytime ? (language === "da" ? "NU" : "NOW") : (language === "da" ? "NAT" : "NIGHT")}</Text>
           <Text style={styles.nowValue}>
             {now.getHours().toString().padStart(2, "0")}:
             {now.getMinutes().toString().padStart(2, "0")}
@@ -218,7 +219,7 @@ export function SunMoonAnimation({ sunrise, sunset }: SunMoonAnimationProps) {
 
         <View style={[styles.labelItem, { alignItems: "flex-end" }]}>
           <View>
-            <Text style={[styles.labelTitle, { textAlign: "right" }]}>Solnedgang</Text>
+            <Text style={[styles.labelTitle, { textAlign: "right" }]}>{language === "da" ? "Solnedgang" : "Sunset"}</Text>
             <Text style={[styles.labelValue, { textAlign: "right" }]}>{sunset}</Text>
           </View>
           <View style={[styles.dot, { backgroundColor: "#FF6347" }]} />

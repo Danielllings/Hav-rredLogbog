@@ -2,6 +2,13 @@
 // Simple, fast grid data fetching for ocean overlays
 
 import { DMI_EDR_BASE_URL } from "./dmiConfig";
+
+// Direct DMI endpoint - no API key needed since Dec 2025
+const DMI_EDR_DIRECT_URL = "https://opendataapi.dmi.dk/v1/forecastedr";
+
+function buildEdrUrl(query: string): string {
+  return `${DMI_EDR_DIRECT_URL}${query}`;
+}
 // TEMP disabled: import { filterSeaPoints, isLandDataLoaded } from "./coastCutter";
 
 // --- Types ---
@@ -215,16 +222,14 @@ export async function fetchOceanGridData(
 
     // Primary collection only - dkss_nsbs has better coverage
     const query = `/collections/dkss_nsbs/cube?bbox=${bbox}&parameter-name=${oceanParams.join(",")}&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-    const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
-    fetchPromises.push(tryFetchCollection(proxyUrl, "dkss_nsbs", fetchBounds, fetchBounds, datetime, options));
+    fetchPromises.push(tryFetchCollection(buildEdrUrl(query), "dkss_nsbs", fetchBounds, fetchBounds, datetime, options));
   }
 
   // OPTIMIZED: Only fetch from primary WAM collection
   if (includeWaves) {
     const waveParams = ["significant-wave-height"];
     const query = `/collections/wam_nsb/cube?bbox=${bbox}&parameter-name=${waveParams.join(",")}&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-    const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
-    fetchPromises.push(tryFetchCollection(proxyUrl, "wam_nsb", fetchBounds, fetchBounds, datetime, { ...options, includeCurrents: false, includeSalinity: false, includeWaves: true }));
+    fetchPromises.push(tryFetchCollection(buildEdrUrl(query), "wam_nsb", fetchBounds, fetchBounds, datetime, { ...options, includeCurrents: false, includeSalinity: false, includeWaves: true }));
   }
 
   if (fetchPromises.length === 0) return null;
@@ -271,13 +276,16 @@ async function tryFetchCollection(
   bounds: BoundingBox,
   datetime: string,
   options: FetchGridOptions,
-  timeoutMs: number = 6000 // Reduced from 10s to 6s
+  timeoutMs: number = 4000 // Reduced from 6s to 4s
 ): Promise<OceanGridData | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    const res = await fetch(proxyUrl, { signal: controller.signal });
+    const res = await fetch(proxyUrl, {
+      signal: controller.signal,
+      headers: { Accept: "application/prs.coverage+json, application/json, */*" },
+    });
     clearTimeout(timeout);
 
     if (!res.ok) return null;

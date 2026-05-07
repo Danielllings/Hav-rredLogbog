@@ -44,6 +44,7 @@ interface ScrollableGraphProps {
   showWeatherIcons?: boolean;
   /** Ikon-type: "cloud" for skydække, "rain" for nedbør */
   iconType?: "cloud" | "rain";
+  language?: "da" | "en";
 }
 
 export function ScrollableGraph({
@@ -60,6 +61,7 @@ export function ScrollableGraph({
   showAsBars = false,
   showWeatherIcons = false,
   iconType = "cloud",
+  language = "da",
 }: ScrollableGraphProps) {
   const arrowAnim = useRef(new Animated.Value(0)).current;
 
@@ -350,7 +352,7 @@ export function ScrollableGraph({
                   fontWeight="700"
                   textAnchor="middle"
                 >
-                  Nu
+                  {language === "da" ? "Nu" : "Now"}
                 </SvgText>
               </>
             )}

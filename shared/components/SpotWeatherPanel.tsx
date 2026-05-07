@@ -354,6 +354,14 @@ export function SpotWeatherPanel({
                   iconType="cloud"
                 />
               )}
+              {weatherData.uvIndexSeries && weatherData.uvIndexSeries.length > 0 && (
+                <ScrollableGraph
+                  series={weatherData.uvIndexSeries}
+                  label={t("uvIndex")}
+                  unit=""
+                  color="#F59E0B"
+                />
+              )}
               {weatherData.precipitationSeries && weatherData.precipitationSeries.length > 0 && (
                 <ScrollableGraph
                   series={weatherData.precipitationSeries}

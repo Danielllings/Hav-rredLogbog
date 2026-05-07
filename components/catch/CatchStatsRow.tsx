@@ -10,7 +10,7 @@ import {
   TextInput,
   StyleSheet,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Animated, { FadeInUp } from "react-native-reanimated";
 import { GlassCard } from "../statistics/GlassCard";
 import { APPLE } from "../../constants/appleTheme";
@@ -42,7 +42,7 @@ export function CatchStatsRow({
       <GlassCard style={styles.statCard}>
         <View style={styles.statHeader}>
           <View style={styles.iconCircle}>
-            <Ionicons name="resize" size={18} color={APPLE.accent} />
+            <MaterialCommunityIcons name="ruler" size={20} color={APPLE.accent} />
           </View>
           <Text style={styles.statLabel}>{t("lengthCm")}</Text>
         </View>
@@ -63,7 +63,7 @@ export function CatchStatsRow({
       <GlassCard style={styles.statCard}>
         <View style={styles.statHeader}>
           <View style={styles.iconCircle}>
-            <Ionicons name="scale" size={18} color={APPLE.accent} />
+            <MaterialCommunityIcons name="weight-kilogram" size={20} color={APPLE.accent} />
           </View>
           <Text style={styles.statLabel}>{t("weightKg")}</Text>
         </View>
@@ -106,7 +106,7 @@ export function CatchStatsDisplay({
       <GlassCard style={styles.statCard}>
         <View style={styles.displayHeader}>
           <View style={styles.iconCircleSmall}>
-            <Ionicons name="resize" size={16} color={APPLE.accent} />
+            <MaterialCommunityIcons name="ruler" size={18} color={APPLE.accent} />
           </View>
         </View>
         <Text style={styles.displayValue}>
@@ -120,7 +120,7 @@ export function CatchStatsDisplay({
       <GlassCard style={styles.statCard}>
         <View style={styles.displayHeader}>
           <View style={styles.iconCircleSmall}>
-            <Ionicons name="scale" size={16} color={APPLE.accent} />
+            <MaterialCommunityIcons name="weight-kilogram" size={18} color={APPLE.accent} />
           </View>
         </View>
         <Text style={styles.displayValue}>

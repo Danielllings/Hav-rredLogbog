@@ -24,6 +24,7 @@ import Animated, {
 import SunCalc from "suncalc";
 
 import { listTrips, statsTrips, listYears, type TripRow } from "../../lib/trips";
+import { listCatches, type CatchRow } from "../../lib/catches";
 import { listSpots, type SpotRow, getWindType, type CoastDirection } from "../../lib/spots";
 import { useLanguage } from "../../lib/i18n";
 import { APPLE, APPLE_TIMING } from "../../constants/appleTheme";
@@ -34,7 +35,18 @@ import {
   TrendChart,
   BarChart,
   AdvancedBarChart,
+  SeasonGoalsSection,
+  GoalEditorModal,
 } from "../../components/statistics";
+import {
+  listGoals,
+  createGoal,
+  updateGoalDoc,
+  deleteGoal as deleteGoalDoc,
+  computeGoalProgress,
+  isGoalCompleted,
+} from "../../lib/goals";
+import type { SeasonGoal, GoalType } from "../../types/goals";
 
 
 const { width } = Dimensions.get("window");
@@ -52,6 +64,7 @@ type WeatherSummary = {
   bestSunOffset: string | null;
   bestMoonPhase: string | null;
   bestWaterLevel: string | null;
+  bestWaterLevelTrend: string | null;
   bestAirTemp: string | null;
   bestWaterTemp: string | null;
   bestWindSpeed: string | null;
@@ -72,14 +85,19 @@ function pickBestBucket(
   if (entries.length === 0) return null;
 
   let best: { key: string; rate: number } | null = null;
+  let fallback: { key: string; fish: number } | null = null;
   for (const [key, { trips, fish }] of entries) {
+    // Track fallback (most fish regardless of minTrips)
+    if (!fallback || fish > fallback.fish) {
+      fallback = { key, fish };
+    }
     if (trips < minTrips) continue;
     const rate = fish / trips;
     if (!best || rate > best.rate) {
       best = { key, rate };
     }
   }
-  return best?.key ?? null;
+  return best?.key ?? (fallback?.fish ? fallback.key : null);
 }
 
 type SpotPerformance = {
@@ -92,6 +110,7 @@ type SpotPerformance = {
 type SpotAnalysis = {
   bestSpot: SpotPerformance | null;
   worstSpot: SpotPerformance | null;
+  topSpots: SpotPerformance[];
 };
 
 function analyzeSpotPerformance(
@@ -102,7 +121,6 @@ function analyzeSpotPerformance(
   const spotMap = new Map<string, SpotRow>();
   for (const sp of spots) spotMap.set(sp.id, sp);
 
-  // Kun tæl ture der har et spot tilknyttet
   for (const trip of trips) {
     const spotRow = trip.spot_id ? spotMap.get(trip.spot_id) : null;
     const spotName = spotRow?.name || trip.spot_name || null;
@@ -116,10 +134,7 @@ function analyzeSpotPerformance(
     spotStats[spotName].fish += trip.fish_count || 0;
   }
 
-  const entries = Object.entries(spotStats);
-
-  // Kræv mindst 1 tur på et spot for at inkludere det
-  const validSpots = entries
+  const validSpots = Object.entries(spotStats)
     .filter(([_, { trips }]) => trips >= 1)
     .map(([name, { trips, fish }]) => ({
       name,
@@ -129,17 +144,16 @@ function analyzeSpotPerformance(
     }));
 
   if (validSpots.length === 0) {
-    return { bestSpot: null, worstSpot: null };
+    return { bestSpot: null, worstSpot: null, topSpots: [] };
   }
 
-  // Sortér efter rate (fisk per tur)
   validSpots.sort((a, b) => b.rate - a.rate);
 
   const bestSpot = validSpots[0];
-  // Worst spot er kun relevant hvis der er mere end ét spot
   const worstSpot = validSpots.length > 1 ? validSpots[validSpots.length - 1] : null;
+  const topSpots = validSpots;
 
-  return { bestSpot, worstSpot };
+  return { bestSpot, worstSpot, topSpots };
 }
 
 function getTripLocation(trip: TripRow): { lat: number; lng: number } | null {
@@ -160,17 +174,17 @@ function getTripLocation(trip: TripRow): { lat: number; lng: number } | null {
   return null;
 }
 
-function getMoonPhaseLabel(date: Date, lat: number, lng: number): string {
+function getMoonPhaseLabel(date: Date, lat: number, lng: number, t: (k: any) => string): string {
   const moonIllum = SunCalc.getMoonIllumination(date);
   const phase = moonIllum.phase;
 
-  if (phase < 0.125 || phase >= 0.875) return "Nymane";
-  if (phase < 0.375) return "Tiltagende";
-  if (phase < 0.625) return "Fuldmane";
-  return "Aftagende";
+  if (phase < 0.125 || phase >= 0.875) return t("newMoon");
+  if (phase < 0.375) return t("waxing");
+  if (phase < 0.625) return t("fullMoon");
+  return t("waning");
 }
 
-function getSunOffsetLabel(date: Date, lat: number, lng: number): string | null {
+function getSunOffsetLabel(date: Date, lat: number, lng: number, t: (k: any) => string): string | null {
   try {
     const times = SunCalc.getTimes(date, lat, lng);
     const catchTs = date.getTime();
@@ -184,16 +198,24 @@ function getSunOffsetLabel(date: Date, lat: number, lng: number): string | null 
 
     const usesSunrise = Math.abs(diffSunrise) < Math.abs(diffSunset);
     const diff = usesSunrise ? diffSunrise : diffSunset;
-    const event = usesSunrise ? "solopgang" : "solnedgang";
+    const event = usesSunrise ? t("sunrise") : t("sunset");
 
     const hours = Math.round(diff / 60);
 
-    if (Math.abs(hours) < 1) return `Ved ${event}`;
-    if (hours < 0) return `${Math.abs(hours)}t før ${event}`;
-    return `${hours}t efter ${event}`;
+    if (Math.abs(hours) < 1) return `${t("at")} ${event}`;
+    if (hours < 0) return `${Math.abs(hours)}h ${t("before")} ${event}`;
+    return `${hours}h ${t("after")} ${event}`;
   } catch {
     return null;
   }
+}
+
+/** Extract avg from a stat that may be {avg,min,max} object or plain number */
+function statAvg(val: any): number | null {
+  if (val == null) return null;
+  if (typeof val === "number") return Number.isFinite(val) ? val : null;
+  if (typeof val === "object" && val.avg != null) return Number.isFinite(val.avg) ? val.avg : null;
+  return null;
 }
 
 function analyzeTripsWeather(
@@ -201,7 +223,7 @@ function analyzeTripsWeather(
   spots: SpotRow[],
   t: (k: any) => string
 ): WeatherSummary {
-  const MIN_TRIPS = 2;
+  const MIN_TRIPS = 1;
 
   const seasonStats: Record<string, SimpleBucket> = {};
   const spotStats: Record<string, SimpleBucket> = {};
@@ -219,6 +241,7 @@ function analyzeTripsWeather(
   const pressureTrendStats: Record<string, SimpleBucket> = {};
   const pressureStats: Record<string, SimpleBucket> = {};
   const humidityStats: Record<string, SimpleBucket> = {};
+  const waterLevelTrendStats: Record<string, SimpleBucket> = {};
 
   const spotMap = new Map<string, SpotRow>();
   for (const sp of spots) spotMap.set(sp.id, sp);
@@ -231,7 +254,9 @@ function analyzeTripsWeather(
       evaluation = meta?.evaluation || meta?.summary?.evaluation || (meta?.source ? meta : null);
     } catch {}
 
-    const fishCount = trip.fish_count || 0;
+    const fishCount = typeof trip.fish_events_json === "string"
+      ? (() => { try { const a = JSON.parse(trip.fish_events_json); return Array.isArray(a) ? a.length : trip.fish_count || 0; } catch { return trip.fish_count || 0; } })()
+      : (trip.fish_count || 0);
     if (fishCount === 0) continue;
 
     const spotRow = trip.spot_id ? spotMap.get(trip.spot_id) : null;
@@ -242,9 +267,9 @@ function analyzeTripsWeather(
     // Season
     const month = startDate.getMonth();
     const seasonKey =
-      month >= 2 && month <= 4 ? "Forår" :
-      month >= 5 && month <= 7 ? "Sommer" :
-      month >= 8 && month <= 10 ? "Efterår" : "Vinter";
+      month >= 2 && month <= 4 ? t("spring") :
+      month >= 5 && month <= 7 ? t("summer") :
+      month >= 8 && month <= 10 ? t("autumn") : t("winter");
     if (!seasonStats[seasonKey]) seasonStats[seasonKey] = { trips: 0, fish: 0 };
     seasonStats[seasonKey].trips += 1;
     seasonStats[seasonKey].fish += fishCount;
@@ -258,31 +283,78 @@ function analyzeTripsWeather(
 
     // Sun offset & Moon phase
     if (tripLocation) {
-      const sunOffset = getSunOffsetLabel(startDate, tripLocation.lat, tripLocation.lng);
+      const sunOffset = getSunOffsetLabel(startDate, tripLocation.lat, tripLocation.lng, t);
       if (sunOffset) {
         if (!sunOffsetStats[sunOffset]) sunOffsetStats[sunOffset] = { trips: 0, fish: 0 };
         sunOffsetStats[sunOffset].trips += 1;
         sunOffsetStats[sunOffset].fish += fishCount;
       }
 
-      const moonPhase = getMoonPhaseLabel(startDate, tripLocation.lat, tripLocation.lng);
+      const moonPhase = getMoonPhaseLabel(startDate, tripLocation.lat, tripLocation.lng, t);
       if (!moonPhaseStats[moonPhase]) moonPhaseStats[moonPhase] = { trips: 0, fish: 0 };
       moonPhaseStats[moonPhase].trips += 1;
       moonPhaseStats[moonPhase].fish += fishCount;
     }
 
-    // Water level
-    const waterLevel = evaluation?.waterLevelCM?.avg ?? evaluation?.waterLevelCm?.avg ?? null;
-    if (waterLevel != null && Number.isFinite(waterLevel)) {
-      const bucket = Math.floor(waterLevel / 10) * 10;
-      const waterLevelKey = `${bucket}-${bucket + 10} cm`;
-      if (!waterLevelStats[waterLevelKey]) waterLevelStats[waterLevelKey] = { trips: 0, fish: 0 };
-      waterLevelStats[waterLevelKey].trips += 1;
-      waterLevelStats[waterLevelKey].fish += fishCount;
+    // Water level — find præcis vandstand ved hvert fangst-tidspunkt fra serien
+    const wlSeries: { ts: number; v: number }[] = evaluation?.waterLevelSeries ?? evaluation?.waterLevelCmSeries ?? [];
+    let fishEventTimes: number[] = [];
+    if (trip.fish_events_json) {
+      try {
+        const parsed = JSON.parse(trip.fish_events_json);
+        if (Array.isArray(parsed)) {
+          fishEventTimes = parsed.map((e: any) => typeof e === "string" ? new Date(e).getTime() : (typeof e === "number" ? e : 0)).filter((t: number) => t > 0);
+        }
+      } catch {}
+    }
+
+    if (wlSeries.length >= 2 && fishEventTimes.length > 0) {
+      // For hver fangst, find nærmeste vandstands-datapunkt
+      for (const catchTs of fishEventTimes) {
+        let closest = wlSeries[0];
+        let closestDist = Math.abs(catchTs - closest.ts);
+        for (const pt of wlSeries) {
+          const dist = Math.abs(catchTs - pt.ts);
+          if (dist < closestDist) { closest = pt; closestDist = dist; }
+        }
+        const bucket = Math.round(closest.v / 5) * 5;
+        const bucketEnd = bucket + 5;
+        const waterLevelKey = `${bucket > 0 ? "+" : ""}${bucket} til ${bucketEnd > 0 ? "+" : ""}${bucketEnd} cm`;
+        if (!waterLevelStats[waterLevelKey]) waterLevelStats[waterLevelKey] = { trips: 0, fish: 0 };
+        waterLevelStats[waterLevelKey].trips += 1;
+        waterLevelStats[waterLevelKey].fish += 1;
+
+        // Trend ved fangst-tidspunktet: sammenlign med punkt 1 time før
+        const oneHourBefore = catchTs - 3600000;
+        let before = wlSeries[0];
+        let beforeDist = Math.abs(oneHourBefore - before.ts);
+        for (const pt of wlSeries) {
+          const dist = Math.abs(oneHourBefore - pt.ts);
+          if (dist < beforeDist) { before = pt; beforeDist = dist; }
+        }
+        const diff = closest.v - before.v;
+        const trendKey = diff > 2 ? `↑ ${t("rising")}` :
+          diff < -2 ? `↓ ${t("falling")}` :
+          `→ ${t("stable")}`;
+        if (!waterLevelTrendStats[trendKey]) waterLevelTrendStats[trendKey] = { trips: 0, fish: 0 };
+        waterLevelTrendStats[trendKey].trips += 1;
+        waterLevelTrendStats[trendKey].fish += 1;
+      }
+    } else {
+      // Fallback: brug gennemsnit hvis ingen serie/events
+      const waterLevel = statAvg(evaluation?.waterLevelCM) ?? statAvg(evaluation?.waterLevelCm);
+      if (waterLevel != null && Number.isFinite(waterLevel)) {
+        const bucket = Math.round(waterLevel / 5) * 5;
+        const bucketEnd = bucket + 5;
+        const waterLevelKey = `${bucket > 0 ? "+" : ""}${bucket} til ${bucketEnd > 0 ? "+" : ""}${bucketEnd} cm`;
+        if (!waterLevelStats[waterLevelKey]) waterLevelStats[waterLevelKey] = { trips: 0, fish: 0 };
+        waterLevelStats[waterLevelKey].trips += 1;
+        waterLevelStats[waterLevelKey].fish += fishCount;
+      }
     }
 
     // Air temp
-    const airTemp = evaluation?.airTempC?.avg ?? null;
+    const airTemp = statAvg(evaluation?.airTempC);
     if (airTemp != null && Number.isFinite(airTemp)) {
       const roundedTemp = Math.round(airTemp);
       const airTempKey = `${roundedTemp}C`;
@@ -292,7 +364,7 @@ function analyzeTripsWeather(
     }
 
     // Water temp
-    const waterTemp = evaluation?.waterTempC?.avg ?? evaluation?.seaTempC?.avg ?? null;
+    const waterTemp = statAvg(evaluation?.waterTempC) ?? statAvg(evaluation?.seaTempC);
     if (waterTemp != null && Number.isFinite(waterTemp)) {
       const roundedWaterTemp = Math.round(waterTemp);
       const waterTempKey = `${roundedWaterTemp}C`;
@@ -302,7 +374,7 @@ function analyzeTripsWeather(
     }
 
     // Wind speed
-    const windSpeed = evaluation?.windMS?.avg ?? null;
+    const windSpeed = statAvg(evaluation?.windMS);
     if (windSpeed != null && Number.isFinite(windSpeed)) {
       const roundedWind = Math.round(windSpeed);
       const windSpeedKey = `${roundedWind} m/s`;
@@ -312,23 +384,33 @@ function analyzeTripsWeather(
     }
 
     // Coast wind
-    const windDir = evaluation?.windDirDeg?.avg ?? evaluation?.windDeg?.avg ?? null;
+    const windDir = statAvg(evaluation?.windDirDeg) ?? statAvg(evaluation?.windDeg);
     const spotCoastDir = spotRow?.coastDirection as CoastDirection | null;
 
-    if (windDir != null && Number.isFinite(windDir) && spotCoastDir) {
+    // Brug coastWind fra evaluation (beregnet fra GPS-track) eller spot's kystretning
+    const coastWind = evaluation?.coastWind;
+    if (coastWind?.category && coastWind.category !== 'ukendt') {
+      const coastWindKey = coastWind.category === 'på-tværs-af-kysten' ? t("crossWind") :
+        coastWind.category === 'langs-kysten' ? t("alongCoast") :
+        t("angledWind");
+      if (!coastWindStats[coastWindKey]) coastWindStats[coastWindKey] = { trips: 0, fish: 0 };
+      coastWindStats[coastWindKey].trips += 1;
+      coastWindStats[coastWindKey].fish += fishCount;
+    } else if (windDir != null && Number.isFinite(windDir) && spotCoastDir) {
       const windType = getWindType(windDir, spotCoastDir);
-      const coastWindKey = windType === 'onshore' ? "Pålandsvind" :
-        windType === 'offshore' ? "Fralandsvind" : "Sidevind";
+      const coastWindKey = windType === 'onshore' ? t("onshoreWind") :
+        windType === 'offshore' ? t("offshoreWind") : t("sideWind");
       if (!coastWindStats[coastWindKey]) coastWindStats[coastWindKey] = { trips: 0, fish: 0 };
       coastWindStats[coastWindKey].trips += 1;
       coastWindStats[coastWindKey].fish += fishCount;
     }
 
     // Cloud cover
-    const cloudCover = evaluation?.cloudCoverPct?.avg ?? meta?.cloudCover ?? null;
+    const cloudCover = statAvg(evaluation?.cloudCoverPct) ?? statAvg(evaluation?.cloudCover) ?? statAvg(meta?.cloudCover);
     if (cloudCover != null && Number.isFinite(cloudCover)) {
-      const cloudKey = cloudCover < 25 ? "Klart" :
-        cloudCover < 75 ? "Delvist skyet" : "Overskyet";
+      const cloudKey = cloudCover < 20 ? t("clearSky") :
+        cloudCover < 50 ? t("partlyCloudy") :
+        cloudCover < 80 ? t("mostlyCloudy") : t("overcast");
       if (!cloudCoverStats[cloudKey]) cloudCoverStats[cloudKey] = { trips: 0, fish: 0 };
       cloudCoverStats[cloudKey].trips += 1;
       cloudCoverStats[cloudKey].fish += fishCount;
@@ -337,15 +419,15 @@ function analyzeTripsWeather(
     // Pressure trend
     const pressureTrend = evaluation?.pressureTrend ?? meta?.pressureTrend ?? null;
     if (pressureTrend) {
-      const trendKey = pressureTrend === 'rising' ? "Stigende" :
-        pressureTrend === 'falling' ? "Faldende" : "Stabilt";
+      const trendKey = pressureTrend === 'rising' ? t("rising") :
+        pressureTrend === 'falling' ? t("falling") : t("stable");
       if (!pressureTrendStats[trendKey]) pressureTrendStats[trendKey] = { trips: 0, fish: 0 };
       pressureTrendStats[trendKey].trips += 1;
       pressureTrendStats[trendKey].fish += fishCount;
     }
 
     // Pressure (hPa) - præcis værdi
-    const pressure = evaluation?.pressureHPa?.avg ?? evaluation?.pressure?.avg ?? meta?.pressure ?? null;
+    const pressure = statAvg(evaluation?.pressureHPa) ?? statAvg(evaluation?.pressure) ?? statAvg(meta?.pressure);
     if (pressure != null && Number.isFinite(pressure)) {
       const roundedPressure = Math.round(pressure);
       const pressureKey = `${roundedPressure} hPa`;
@@ -355,7 +437,7 @@ function analyzeTripsWeather(
     }
 
     // Humidity (%) - præcis værdi
-    const humidity = evaluation?.humidityPct?.avg ?? evaluation?.humidity?.avg ?? meta?.humidity ?? null;
+    const humidity = statAvg(evaluation?.humidityPct) ?? statAvg(evaluation?.humidity) ?? statAvg(meta?.humidity);
     if (humidity != null && Number.isFinite(humidity)) {
       const roundedHumidity = Math.round(humidity);
       const humidityKey = `${roundedHumidity}%`;
@@ -373,11 +455,12 @@ function analyzeTripsWeather(
 
     // Duration
     const durationHours = (trip.duration_sec || 0) / 3600;
+    const hAbbrev = t("hourShort");
     const durationLabel =
-      durationHours < 1 ? "<1t" :
-      durationHours < 2 ? "1-2t" :
-      durationHours < 3 ? "2-3t" :
-      durationHours < 4 ? "3-4t" : "4+t";
+      durationHours < 1 ? `<1${hAbbrev}` :
+      durationHours < 2 ? `1-2${hAbbrev}` :
+      durationHours < 3 ? `2-3${hAbbrev}` :
+      durationHours < 4 ? `3-4${hAbbrev}` : `4+${hAbbrev}`;
     if (!durationStats[durationLabel]) durationStats[durationLabel] = { trips: 0, fish: 0 };
     durationStats[durationLabel].trips += 1;
     durationStats[durationLabel].fish += fishCount;
@@ -401,12 +484,13 @@ function analyzeTripsWeather(
     bestHour: pickBestBucket(hourStats, MIN_TRIPS),
     bestSunOffset: pickBestBucket(sunOffsetStats, MIN_TRIPS),
     bestMoonPhase: pickBestBucket(moonPhaseStats, MIN_TRIPS),
-    bestWaterLevel: pickBestBucket(waterLevelStats, MIN_TRIPS),
+    bestWaterLevel: pickBestBucket(waterLevelStats, 1),
+    bestWaterLevelTrend: pickBestBucket(waterLevelTrendStats, 1),
     bestAirTemp: pickBestBucket(airTempStats, MIN_TRIPS),
     bestWaterTemp: pickBestBucket(waterTempStats, MIN_TRIPS),
     bestWindSpeed: pickBestBucket(windSpeedStats, MIN_TRIPS),
     bestCoastWind: pickBestBucket(coastWindStats, MIN_TRIPS),
-    bestCloudCover: pickBestBucket(cloudCoverStats, MIN_TRIPS),
+    bestCloudCover: pickBestBucket(cloudCoverStats, 1),
     bestPressureTrend: pickBestBucket(pressureTrendStats, MIN_TRIPS),
     bestPressure: pickBestBucket(pressureStats, MIN_TRIPS),
     bestHumidity: pickBestBucket(humidityStats, MIN_TRIPS),
@@ -481,6 +565,9 @@ export default function StatisticsScreen() {
   const [spots, setSpots] = useState<SpotRow[]>([]);
   const [activeTab, setActiveTab] = useState<"year" | "alltime">("year");
   const [selectedSeasonKey, setSelectedSeasonKey] = useState<string | null>(null);
+  const [catches, setCatches] = useState<CatchRow[]>([]);
+  const [goals, setGoals] = useState<SeasonGoal[]>([]);
+  const [showGoalEditor, setShowGoalEditor] = useState(false);
 
   const seasonOptions = useMemo(() => [
     { key: null, label: t("allSeasons") },
@@ -558,19 +645,43 @@ export default function StatisticsScreen() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [fetchedYears, fetchedTrips, fetchedSpots] = await Promise.all([
-        listYears(), listTrips(), listSpots(),
+      const [fetchedYears, fetchedTrips, fetchedSpots, fetchedCatches] = await Promise.all([
+        listYears(), listTrips(), listSpots(), listCatches(),
       ]);
       setYears(fetchedYears);
       setTrips(fetchedTrips);
       setSpots(fetchedSpots);
+      setCatches(fetchedCatches);
 
       const targetYear = fetchedYears.includes(year) ? year : fetchedYears[0] || new Date().getFullYear();
       setYear(targetYear);
 
-      const [yStats, aStats] = await Promise.all([statsTrips(targetYear), statsTrips()]);
+      const [yStats, aStats, fetchedGoals] = await Promise.all([
+        statsTrips(targetYear), statsTrips(), listGoals(targetYear),
+      ]);
       setYearStats(yStats);
       setAllStats(aStats);
+
+      // Compute goal progress
+      const updatedGoals = fetchedGoals.map((g) => {
+        const progress = computeGoalProgress(g, yStats, fetchedTrips, fetchedCatches, fetchedSpots);
+        const updated = { ...g, currentValue: progress };
+        // Mark completed if reached
+        if (isGoalCompleted(updated) && g.status === "active") {
+          updateGoalDoc(g.id, {
+            currentValue: progress,
+            status: "completed",
+            completedAt: new Date().toISOString(),
+          }).catch(() => {});
+          return { ...updated, status: "completed" as const, completedAt: new Date().toISOString() };
+        }
+        // Update cached progress
+        if (progress !== g.currentValue) {
+          updateGoalDoc(g.id, { currentValue: progress }).catch(() => {});
+        }
+        return updated;
+      });
+      setGoals(updatedGoals);
     } catch (e) {
       console.error("Kunne ikke indlæse statistik:", e);
     } finally {
@@ -584,6 +695,25 @@ export default function StatisticsScreen() {
     setYear(newYear);
     const yStats = await statsTrips(newYear);
     setYearStats(yStats);
+  };
+
+  const handleAddGoal = async (type: GoalType, targetValue: number) => {
+    try {
+      await createGoal({ type, targetValue, seasonYear: year });
+      setShowGoalEditor(false);
+      loadData();
+    } catch (e) {
+      console.error("Could not create goal:", e);
+    }
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    try {
+      await deleteGoalDoc(goalId);
+      setGoals((prev) => prev.filter((g) => g.id !== goalId));
+    } catch (e) {
+      console.error("Could not delete goal:", e);
+    }
   };
 
   const currentStats = activeTab === "year" ? yearStats : allStats;
@@ -611,7 +741,7 @@ export default function StatisticsScreen() {
         icon: "time" as const,
         label: t("hoursLabel"),
         value: Math.round((currentStats.total_sec || 0) / 3600),
-        suffix: "t",
+        suffix: t("hourShort"),
         color: APPLE.accent,
       },
       {
@@ -634,6 +764,13 @@ export default function StatisticsScreen() {
         suffix: "%",
         color: APPLE.accent,
       },
+      ...(currentStats.avg_length_cm != null ? [{
+        icon: "resize" as const,
+        label: t("avgCatchSize"),
+        value: currentStats.avg_length_cm,
+        suffix: "cm",
+        color: APPLE.accent,
+      }] : []),
     ];
   }, [currentStats, t]);
 
@@ -645,13 +782,14 @@ export default function StatisticsScreen() {
       { icon: "moon-outline", label: t("moonPhase"), value: currentWeather.bestMoonPhase },
       { icon: "leaf-outline", label: t("season"), value: currentWeather.bestSeason },
       { icon: "water-outline", label: t("waterLevel"), value: currentWeather.bestWaterLevel },
+      { icon: "trending-up-outline", label: t("waterLevelTrend"), value: currentWeather.bestWaterLevelTrend },
       { icon: "thermometer-outline", label: t("airTemp"), value: currentWeather.bestAirTemp },
       { icon: "flask-outline", label: t("waterTemp"), value: currentWeather.bestWaterTemp },
       { icon: "speedometer-outline", label: t("windSpeed"), value: currentWeather.bestWindSpeed },
       { icon: "flag-outline", label: t("coastWind"), value: currentWeather.bestCoastWind },
       { icon: "cloud-outline", label: t("cloudCover"), value: currentWeather.bestCloudCover },
-      { icon: "analytics-outline", label: "Tryktendens", value: currentWeather.bestPressureTrend },
-      { icon: "pulse-outline", label: "Lufttryk (hPa)", value: currentWeather.bestPressure },
+      { icon: "analytics-outline", label: t("pressureTrend"), value: currentWeather.bestPressureTrend },
+      { icon: "pulse-outline", label: t("pressure"), value: currentWeather.bestPressure },
       { icon: "cloudy-outline", label: t("humidity"), value: currentWeather.bestHumidity },
       { icon: "location-outline", label: t("bestSpot"), value: currentWeather.bestSpot },
       { icon: "timer-outline", label: t("tripDuration"), value: currentWeather.bestDuration },
@@ -739,6 +877,17 @@ export default function StatisticsScreen() {
             <QuickStatsGrid stats={quickStats} columns={3} />
           </Animated.View>
 
+          {/* Season Goals */}
+          {activeTab === "year" && (
+            <SeasonGoalsSection
+              goals={goals}
+              onAddGoal={() => setShowGoalEditor(true)}
+              onDeleteGoal={handleDeleteGoal}
+              year={year}
+              t={t}
+            />
+          )}
+
           {/* Spot Performance Section */}
           {(currentSpotAnalysis.bestSpot || currentSpotAnalysis.worstSpot) && (
             <View style={styles.section}>
@@ -797,6 +946,20 @@ export default function StatisticsScreen() {
                   </View>
                 )}
               </View>
+              {/* Plads 2-5 som kompakte piller */}
+              {currentSpotAnalysis.topSpots.length > 1 && (
+                <View style={styles.spotPillList}>
+                  {currentSpotAnalysis.topSpots.slice(1, 5).map((spot, i) => (
+                    <View key={spot.name} style={styles.spotPill}>
+                      <Text style={styles.spotPillRank}>{i + 2}</Text>
+                      <Text style={styles.spotPillName} numberOfLines={1}>{spot.name}</Text>
+                      <Text style={styles.spotPillStat}>
+                        {spot.rate.toFixed(1)} {t("fishPerTrip")}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           )}
 
@@ -837,6 +1000,16 @@ export default function StatisticsScreen() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t("fishingPattern")}</Text>
             </View>
+
+            {/* Reliability hint */}
+            {currentStats && (currentStats.catch_trips || 0) < 10 && patternItems.length > 0 && (
+              <View style={styles.patternHintBar}>
+                <Ionicons name="information-circle-outline" size={16} color={APPLE.accent} />
+                <Text style={styles.patternHintText}>
+                  {t("patternReliabilityHint").replace("{count}", String(currentStats.catch_trips || 0))}
+                </Text>
+              </View>
+            )}
 
             {/* Season filter */}
             <ScrollView
@@ -894,6 +1067,15 @@ export default function StatisticsScreen() {
       )}
 
       <View style={{ height: 100 }} />
+
+      <GoalEditorModal
+        visible={showGoalEditor}
+        onClose={() => setShowGoalEditor(false)}
+        onSave={handleAddGoal}
+        existingTypes={goals.map((g) => g.type)}
+        year={year}
+        t={t}
+      />
     </ScrollView>
   );
 }
@@ -996,6 +1178,22 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 12,
   },
+  patternHintBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: APPLE.accentMuted,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    gap: 8,
+  },
+  patternHintText: {
+    flex: 1,
+    fontSize: 13,
+    color: APPLE.textSecondary,
+    lineHeight: 18,
+  },
 
   // Legend
   legendRow: {
@@ -1085,6 +1283,39 @@ const styles = StyleSheet.create({
   spotPerformanceRateWorst: {
     color: "#EF4444",
     fontWeight: "600",
+  },
+
+  // Spot pills (plads 2-5)
+  spotPillList: {
+    marginTop: 10,
+    gap: 6,
+  },
+  spotPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: APPLE.cardSolid,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: APPLE.glassBorder,
+  },
+  spotPillRank: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: APPLE.textTertiary,
+    width: 20,
+  },
+  spotPillName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: APPLE.text,
+  },
+  spotPillStat: {
+    fontSize: 12,
+    color: APPLE.textSecondary,
+    marginLeft: 8,
   },
 
   // Filter chips

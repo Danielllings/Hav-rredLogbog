@@ -5,8 +5,9 @@ import {
   useSegments,
   useRootNavigationState,
 } from "expo-router";
+import { DarkTheme, ThemeProvider as NavThemeProvider } from "@react-navigation/native";
 import { useEffect, useState, useRef } from "react";
-import { View, StyleSheet, AppState, AppStateStatus } from "react-native";
+import { View, StyleSheet, AppState, AppStateStatus, Platform } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -35,6 +36,15 @@ function useProtectedRoute(user: User | null | undefined, authReady: boolean) {
 
     // Navigationen er ikke klar endnu -> vent
     if (!navState?.key) return;
+
+    // WEB PREVIEW: skip auth gate on web platform
+    if (Platform.OS === "web") {
+      const inAuthGroup = segments[0] === "(auth)";
+      if (inAuthGroup) {
+        router.replace("/(tabs)");
+      }
+      return;
+    }
 
     const inAuthGroup = segments[0] === "(auth)";
 
@@ -82,6 +92,14 @@ export default function RootLayout() {
 
     const init = async () => {
       try {
+        // WEB PREVIEW: skip heavy native init, go straight to app
+        if (Platform.OS === "web") {
+          setOnboardingComplete(true);
+          setUser(null);
+          setAuthReady(true);
+          return;
+        }
+
         await initDB();
 
         // Check if onboarding has been completed
@@ -95,6 +113,10 @@ export default function RootLayout() {
 
           if (u) {
             trySyncOfflineTrips();
+            // Refresh widget data on app launch
+            import("../lib/widgetData").then(({ updateWidgetWeatherData }) => {
+              updateWidgetWeatherData().catch(() => {});
+            }).catch(() => {});
           }
         });
 
@@ -156,22 +178,36 @@ export default function RootLayout() {
     );
   }
 
+  const navTheme = {
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      background: "#121212",
+      card: "#1E1E1E",
+      border: "#333333",
+      text: "#FFFFFF",
+    },
+  };
+
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: "slide_from_right",
-          }}
-          initialRouteName="(auth)"
-        >
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-        </Stack>
+        <NavThemeProvider value={navTheme}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: "slide_from_right",
+              contentStyle: { backgroundColor: "#121212" },
+            }}
+            initialRouteName="(auth)"
+          >
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+          </Stack>
 
-        {/* Splash screen mens vi finder ud af om brugeren er logget ind */}
-        {isLoading && <SplashScreen />}
+          {/* Splash screen mens vi finder ud af om brugeren er logget ind */}
+          {isLoading && <SplashScreen />}
+        </NavThemeProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

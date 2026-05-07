@@ -2,7 +2,7 @@
 
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../lib/i18n";
 import type { PersonalRecords } from "../types/records";
@@ -60,7 +60,7 @@ export default function PersonalRecordsSection({ records }: Props) {
             onPress={() => router.push(`/catch/${records.longestFish!.catch.id}`)}
           >
             <View style={styles.recordIconCircle}>
-              <Ionicons name="resize-outline" size={18} color={NERO.accent} />
+              <MaterialCommunityIcons name="ruler" size={20} color={NERO.accent} />
             </View>
             <Text style={styles.recordValue}>
               {records.longestFish.value}
@@ -80,7 +80,7 @@ export default function PersonalRecordsSection({ records }: Props) {
             onPress={() => router.push(`/catch/${records.heaviestFish!.catch.id}`)}
           >
             <View style={styles.recordIconCircle}>
-              <Ionicons name="barbell-outline" size={18} color={NERO.accent} />
+              <MaterialCommunityIcons name="weight-kilogram" size={20} color={NERO.accent} />
             </View>
             <Text style={styles.recordValue}>
               {records.heaviestFish.value}
@@ -119,7 +119,6 @@ export default function PersonalRecordsSection({ records }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 16,
     marginBottom: 16,
     backgroundColor: NERO.card,
     borderRadius: 20,

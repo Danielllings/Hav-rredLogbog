@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<title>Facebook Cover — Havørred Logbog</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #222;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .banner {
+    width: 2460px;
+    height: 936px;
+    background: linear-gradient(135deg, #0a0a0b 0%, #161618 40%, #1a1a1c 60%, #0e0e10 100%);
+    position: relative;
+    overflow: hidden;
+    border-radius: 4px;
+  }
+
+  /* Subtle background pattern */
+  .banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 800px 400px at 15% 50%, rgba(245,158,11,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 600px 300px at 85% 30%, rgba(245,158,11,0.04) 0%, transparent 70%);
+    z-index: 1;
+  }
+
+  /* Accent line at top */
+  .banner::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent 5%, #F59E0B 30%, #F59E0B 70%, transparent 95%);
+    z-index: 10;
+  }
+
+  /* Phone mockups */
+  .phone {
+    position: absolute;
+    z-index: 5;
+    border-radius: 28px;
+    overflow: hidden;
+    box-shadow:
+      0 25px 60px rgba(0,0,0,0.6),
+      0 8px 20px rgba(0,0,0,0.4),
+      inset 0 0 0 2px rgba(255,255,255,0.08);
+    background: #000;
+    transition: transform 0.3s;
+  }
+
+  .phone img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Phone positions — fan layout, right side */
+  .phone-1 {
+    width: 285px; height: 615px;
+    top: 210px; right: 930px;
+    transform: rotate(-12deg);
+    z-index: 3;
+    opacity: 0.7;
+  }
+
+  .phone-2 {
+    width: 300px; height: 648px;
+    top: 158px; right: 705px;
+    transform: rotate(-7deg);
+    z-index: 4;
+    opacity: 0.85;
+  }
+
+  .phone-3 {
+    width: 330px; height: 713px;
+    top: 112px; right: 450px;
+    transform: rotate(-2deg);
+    z-index: 6;
+  }
+
+  .phone-4 {
+    width: 330px; height: 713px;
+    top: 112px; right: 195px;
+    transform: rotate(3deg);
+    z-index: 5;
+  }
+
+  .phone-5 {
+    width: 300px; height: 648px;
+    top: 158px; right: -30px;
+    transform: rotate(8deg);
+    z-index: 4;
+    opacity: 0.85;
+  }
+
+  .phone-6 {
+    width: 285px; height: 615px;
+    top: 210px; right: -225px;
+    transform: rotate(13deg);
+    z-index: 3;
+    opacity: 0.7;
+  }
+
+  /* Glow behind center phones */
+  .phone-glow {
+    position: absolute;
+    width: 750px;
+    height: 750px;
+    top: 50%;
+    right: 420px;
+    transform: translateY(-50%);
+    background: radial-gradient(circle, rgba(245,158,11,0.10) 0%, transparent 70%);
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  /* Text content — left side */
+  .content {
+    position: absolute;
+    left: 120px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+    max-width: 780px;
+  }
+
+  .app-icon {
+    width: 96px;
+    height: 96px;
+    border-radius: 22px;
+    margin-bottom: 36px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    object-fit: cover;
+  }
+
+  .app-name {
+    font-size: 78px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -1px;
+    line-height: 1.1;
+    margin-bottom: 12px;
+  }
+
+  .app-name span {
+    color: #F59E0B;
+  }
+
+  .app-tagline {
+    font-size: 30px;
+    color: rgba(255,255,255,0.5);
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    margin-bottom: 48px;
+  }
+
+  .app-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(245,158,11,0.12);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 30px;
+    padding: 12px 28px;
+    font-size: 21px;
+    color: #F59E0B;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+
+  .app-badge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #F59E0B;
+    animation: pulse-dot 2s infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* Divider line */
+  .divider {
+    position: absolute;
+    left: 930px;
+    top: 15%;
+    bottom: 15%;
+    width: 1px;
+    background: linear-gradient(180deg, transparent, rgba(245,158,11,0.2) 30%, rgba(245,158,11,0.2) 70%, transparent);
+    z-index: 8;
+  }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <!-- Background glow -->
+  <div class="phone-glow"></div>
+
+  <!-- Divider between text and phones -->
+  <div class="divider"></div>
+
+  <!-- Left: branding -->
+  <div class="content">
+    <img class="app-icon" src="assets/icon-512.png" alt="Havørred Logbog">
+    <div class="app-name">Havørred<br><span>Logbog</span></div>
+    <div class="app-tagline">Din digitale fangstjournal</div>
+    <div class="app-badge">
+      <span class="dot"></span>
+      Tilgængelig på App Store
+    </div>
+  </div>
+
+  <!-- Right: phone screenshots in fan layout -->
+  <div class="phone phone-1">
+    <img src="assets/Statistik 3.png" alt="Fiskemønster">
+  </div>
+  <div class="phone phone-2">
+    <img src="assets/Tracking Log.png" alt="Tracking">
+  </div>
+  <div class="phone phone-3">
+    <img src="assets/Galleri.png" alt="Galleri">
+  </div>
+  <div class="phone phone-4">
+    <img src="assets/Statistik 1.png" alt="Statistik">
+  </div>
+  <div class="phone phone-5">
+    <img src="assets/Tracking Log 2.png" alt="Vejrdata">
+  </div>
+  <div class="phone phone-6">
+    <img src="assets/Statistik 2.png" alt="Spot-præstation">
+  </div>
+</div>
+
+</body>
+</html>

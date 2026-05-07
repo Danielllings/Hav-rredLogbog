@@ -12,6 +12,8 @@ import {
   Platform,
   StatusBar,
   ActivityIndicator,
+  Image,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Constants from "expo-constants";
@@ -35,7 +37,6 @@ import {
   type TrackedTrip,
 } from "../../../lib/trips";
 import { uploadCatchImageAsync } from "../../../lib/storage";
-import { ORTO_FORAAR_URL } from "../../../lib/maps";
 import { listSpots, type Spot } from "../../../lib/spots";
 import { useLanguage } from "../../../lib/i18n";
 
@@ -189,6 +190,7 @@ export default function CatchDetail() {
   const [pos, setPos] = useState<LatLng | null>(null);
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [baitPhotoUri, setBaitPhotoUri] = useState<string | null>(null);
 
   // Start altid i visning naar skaermen faar fokus
   useFocusEffect(
@@ -259,6 +261,7 @@ export default function CatchDetail() {
         setBait(data.bait ?? "");
         setNotes(data.notes ?? "");
         setPhotoUri(data.photo_uri ?? null);
+        setBaitPhotoUri(data.bait_photo_uri ?? null);
 
         if (typeof data.lat === "number" && typeof data.lng === "number") {
           setPos({ latitude: data.lat, longitude: data.lng });
@@ -376,12 +379,27 @@ export default function CatchDetail() {
       finalPhotoUrl = null;
     }
 
+    // Håndter agn-billede
+    let finalBaitPhotoUrl: string | null = row.bait_photo_uri ?? null;
+    if (baitPhotoUri) {
+      if (baitPhotoUri.startsWith("file://")) {
+        try {
+          finalBaitPhotoUrl = await uploadCatchImageAsync(baitPhotoUri, `${id}_bait`);
+        } catch (e) {}
+      } else {
+        finalBaitPhotoUrl = baitPhotoUri;
+      }
+    } else {
+      finalBaitPhotoUrl = null;
+    }
+
     await updateCatch(id, {
       date: iso,
       time_of_day: null,
       length_cm: toNum(len),
       weight_kg: toNum(kg),
       bait,
+      bait_photo_uri: finalBaitPhotoUrl,
       notes,
       lat: pos?.latitude ?? null,
       lng: pos?.longitude ?? null,
@@ -407,6 +425,51 @@ export default function CatchDetail() {
     if (!res.canceled && res.assets?.length) {
       setPhotoUri(res.assets[0].uri);
     }
+  }
+
+  function pickBaitPhoto() {
+    Alert.alert(t("baitPhoto"), undefined, [
+      {
+        text: t("baitPhotoFromCamera"),
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== "granted") {
+            setPermissionMessage(t("appNeedsPhotoAccess"));
+            setPermissionModalVisible(true);
+            return;
+          }
+          const res = await ImagePicker.launchCameraAsync({
+            quality: 0.8,
+            allowsEditing: true,
+            aspect: [1, 1],
+          });
+          if (!res.canceled && res.assets?.length) {
+            setBaitPhotoUri(res.assets[0].uri);
+          }
+        },
+      },
+      {
+        text: t("baitPhotoFromGallery"),
+        onPress: async () => {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== "granted") {
+            setPermissionMessage(t("appNeedsPhotoAccess"));
+            setPermissionModalVisible(true);
+            return;
+          }
+          const res = await ImagePicker.launchImageLibraryAsync({
+            quality: 0.8,
+            allowsEditing: true,
+            aspect: [1, 1],
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          });
+          if (!res.canceled && res.assets?.length) {
+            setBaitPhotoUri(res.assets[0].uri);
+          }
+        },
+      },
+      { text: t("cancel"), style: "cancel" },
+    ]);
   }
 
   async function onSelectTrip(tripId: string | null) {
@@ -708,6 +771,16 @@ export default function CatchDetail() {
                     <Text style={styles.detailLabel}>{t("baitFly")}</Text>
                     <Text style={styles.detailValue}>{row.bait || "-"}</Text>
                   </View>
+                  {row.bait_photo_uri ? (
+                    <View style={styles.baitPhotoViewRow}>
+                      <Ionicons name="camera-outline" size={16} color={APPLE.accent} />
+                      <Text style={styles.detailLabel}>{t("baitPhoto")}</Text>
+                      <Image
+                        source={{ uri: row.bait_photo_uri }}
+                        style={styles.baitPhotoThumb}
+                      />
+                    </View>
+                  ) : null}
                   <View style={styles.detailItem}>
                     <Ionicons name="calendar-outline" size={16} color={APPLE.textSecondary} />
                     <Text style={styles.detailLabel}>{t("registered")}</Text>
@@ -727,77 +800,116 @@ export default function CatchDetail() {
                     {t("noWeatherData")}
                   </Text>
                 ) : (
-                  <View style={{ gap: 6 }}>
+                  <View style={{ gap: 8 }}>
                     {evaluation.note && (
                       <Text style={styles.noteText}>
                         {t("note")}: {evaluation.note}
                       </Text>
                     )}
 
-                    {evaluation.airTempC && (
-                      <StatLine
-                        label={t("airTempLabel")}
-                        stat={evaluation.airTempC}
-                        fmt={(v) => `${v.toFixed(1)} C`}
-                      />
-                    )}
+                    {/* Weather Stats Grid */}
+                    <View style={styles.weatherGrid}>
+                      {evaluation.airTempC && (
+                        <View style={styles.weatherStatCard}>
+                          <Text style={styles.weatherStatValue}>{evaluation.airTempC.avg.toFixed(1)}°</Text>
+                          <Text style={styles.weatherStatLabel}>{t("airTemp")}</Text>
+                        </View>
+                      )}
+                      {evaluation.windMS && (
+                        <View style={styles.weatherStatCard}>
+                          <Text style={styles.weatherStatValue}>{evaluation.windMS.avg.toFixed(1)} m/s</Text>
+                          <Text style={styles.weatherStatLabel}>{t("windSpeed")}</Text>
+                          {evaluation.windDirDeg && Number.isFinite(evaluation.windDirDeg.avg) && (
+                            <View style={styles.windDirRow}>
+                              <Ionicons
+                                name="arrow-up"
+                                size={16}
+                                color={APPLE.accent}
+                                style={{ transform: [{ rotate: `${((evaluation.windDirDeg.avg ?? 0) + 180) % 360}deg` }] }}
+                              />
+                              <Text style={styles.windDirLabel}>
+                                {degToCompass(evaluation.windDirDeg.avg)} ({Math.round(evaluation.windDirDeg.avg)}°)
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                      {evaluation.waterTempC && (
+                        <View style={styles.weatherStatCard}>
+                          <Text style={styles.weatherStatValue}>{evaluation.waterTempC.avg.toFixed(1)}°</Text>
+                          <Text style={styles.weatherStatLabel}>{t("waterTemp")}</Text>
+                        </View>
+                      )}
+                      {evaluation.waterLevelCM && (
+                        <View style={styles.weatherStatCard}>
+                          <Text style={styles.weatherStatValue}>{evaluation.waterLevelCM.avg.toFixed(0)} cm</Text>
+                          <Text style={styles.weatherStatLabel}>{t("waterLevel")}</Text>
+                        </View>
+                      )}
+                      {evaluation.pressureHPa && (
+                        <View style={styles.weatherStatCard}>
+                          <Text style={styles.weatherStatValue}>{evaluation.pressureHPa.avg.toFixed(0)} hPa</Text>
+                          <Text style={styles.weatherStatLabel}>{t("pressure")}</Text>
+                        </View>
+                      )}
+                      {evaluation.humidityPct && (
+                        <View style={styles.weatherStatCard}>
+                          <Text style={styles.weatherStatValue}>{evaluation.humidityPct.avg.toFixed(0)}%</Text>
+                          <Text style={styles.weatherStatLabel}>{t("humidity")}</Text>
+                        </View>
+                      )}
+                    </View>
 
-                    {evaluation.windMS && (
-                      <StatLine
-                        label={t("windLabel")}
-                        stat={evaluation.windMS}
-                        fmt={(v) => `${v.toFixed(1)} m/s`}
-                        direction={evaluation.windDirDeg?.avg}
-                      />
-                    )}
+                    {/* Grafer */}
+                    <>
+                      {evaluation.airTempSeries?.length > 0 && (
+                        <StatGraph
+                          series={evaluation.airTempSeries}
+                          label={t("airTemp")}
+                          unit="°C"
+                        />
+                      )}
 
-                    {evaluation.waterTempC && (
-                      <StatLine
-                        label={t("seaTempLabel")}
-                        stat={evaluation.waterTempC}
-                        fmt={(v) => `${v.toFixed(1)} C`}
-                      />
-                    )}
+                      {evaluation.windSpeedSeries?.length > 0 && (
+                        <StatGraph
+                          series={evaluation.windSpeedSeries}
+                          label={t("windSpeed")}
+                          unit="m/s"
+                        />
+                      )}
 
-                    {evaluation.waterLevelCM && (
-                      <StatLine
-                        label={t("waterLevelLabel")}
-                        stat={evaluation.waterLevelCM}
-                        fmt={(v) => `${v.toFixed(0)} cm`}
-                      />
-                    )}
+                      {evaluation.waterTempSeries?.length > 0 && (
+                        <StatGraph
+                          series={evaluation.waterTempSeries}
+                          label={t("waterTemp")}
+                          unit="°C"
+                        />
+                      )}
 
-                    {evaluation.airTempSeries?.length > 0 && (
-                      <StatGraph
-                        series={evaluation.airTempSeries}
-                        label={t("airTemp")}
-                        unit=" C"
-                      />
-                    )}
+                      {evaluation.waterLevelSeries?.length > 0 && (
+                        <StatGraph
+                          series={evaluation.waterLevelSeries}
+                          label={t("waterLevel")}
+                          unit="cm"
+                        />
+                      )}
 
-                    {evaluation.windSpeedSeries?.length > 0 && (
-                      <StatGraph
-                        series={evaluation.windSpeedSeries}
-                        label={t("windSpeed")}
-                        unit="m/s"
-                      />
-                    )}
+                      {evaluation.pressureSeries?.length > 0 && (
+                        <StatGraph
+                          series={evaluation.pressureSeries}
+                          label={t("pressure")}
+                          unit="hPa"
+                        />
+                      )}
 
-                    {evaluation.waterTempSeries?.length > 0 && (
-                      <StatGraph
-                        series={evaluation.waterTempSeries}
-                        label={t("waterTemp")}
-                        unit=" C"
-                      />
-                    )}
-
-                    {evaluation.waterLevelSeries?.length > 0 && (
-                      <StatGraph
-                        series={evaluation.waterLevelSeries}
-                        label={t("waterLevel")}
-                        unit="cm"
-                      />
-                    )}
+                      {evaluation.humiditySeries?.length > 0 && (
+                        <StatGraph
+                          series={evaluation.humiditySeries}
+                          label={t("humidity")}
+                          unit="%"
+                        />
+                      )}
+                    </>
 
                     <View style={styles.sourceSection}>
                       <View style={styles.sourceHeader}>
@@ -855,13 +967,8 @@ export default function CatchDetail() {
                       customMapStyle={MAP_STYLE}
                       userInterfaceStyle={MAP_UI_STYLE}
                       provider={MAP_PROVIDER}
-                      mapType={MAP_TYPE}
+                      mapType="satellite"
                     >
-                      <UrlTile
-                        urlTemplate={ORTO_FORAAR_URL}
-                        maximumZ={21}
-                        tileSize={256}
-                      />
                       <Marker coordinate={pos} title="Fangststed" />
                     </MapView>
                   </View>
@@ -944,6 +1051,38 @@ export default function CatchDetail() {
               icon="fish"
               delay={300}
             />
+
+            {/* AGN-FOTO */}
+            <Animated.View entering={FadeInUp.delay(350).duration(400).springify()}>
+              <GlassCard style={styles.baitPhotoCard}>
+                <Text style={styles.sectionLabel}>{t("baitPhoto")}</Text>
+                {baitPhotoUri ? (
+                  <View style={styles.baitPhotoPreview}>
+                    <Image source={{ uri: baitPhotoUri }} style={styles.baitPhotoImage} />
+                    <View style={styles.baitPhotoActions}>
+                      <Pressable style={styles.baitPhotoBtn} onPress={pickBaitPhoto}>
+                        <Ionicons name="camera-outline" size={16} color={APPLE.accent} />
+                        <Text style={styles.baitPhotoBtnText}>{t("changeBaitPhoto")}</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.baitPhotoBtn, styles.baitPhotoRemoveBtn]}
+                        onPress={() => setBaitPhotoUri(null)}
+                      >
+                        <Ionicons name="close-circle-outline" size={16} color="#FF3B30" />
+                        <Text style={[styles.baitPhotoBtnText, { color: "#FF3B30" }]}>
+                          {t("removeBaitPhoto")}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable style={styles.baitPhotoPlaceholder} onPress={pickBaitPhoto}>
+                    <Ionicons name="camera-outline" size={24} color={APPLE.accent} />
+                    <Text style={styles.baitPhotoPlaceholderText}>{t("addBaitPhoto")}</Text>
+                  </Pressable>
+                )}
+              </GlassCard>
+            </Animated.View>
 
             {/* TRIP LINK */}
             <Animated.View entering={FadeInUp.delay(400).duration(400).springify()}>
@@ -1115,7 +1254,7 @@ function StatLine({
   );
 }
 
-// StatGraph Component
+// StatGraph Component (matches trip/[id].tsx layout)
 function StatGraph({
   series,
   label,
@@ -1151,8 +1290,8 @@ function StatGraph({
     .padStart(2, "0");
 
   const HEIGHT = 100;
-  const PADDING_X = 12;
-  const PADDING_Y = 14;
+  const PADDING_X = 16;
+  const PADDING_Y = 16;
   const GRAPH_H = HEIGHT - PADDING_Y * 2;
 
   const graphWidth = Math.max(layoutWidth - PADDING_X * 2, 0);
@@ -1235,7 +1374,7 @@ function StatGraph({
             <Text style={styles.sparklineRange}>{displayTime}</Text>
           ) : (
             <Text style={styles.sparklineRange}>
-              {min.toFixed(1)} - {max.toFixed(1)}
+              {min.toFixed(1)} – {max.toFixed(1)}
             </Text>
           )}
         </View>
@@ -1255,8 +1394,8 @@ function StatGraph({
           <Svg width={layoutWidth} height={HEIGHT}>
             <Defs>
               <LinearGradient id={`grad-${label}`} x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={APPLE.accent} stopOpacity="0.25" />
-                <Stop offset="1" stopColor={APPLE.accent} stopOpacity="0.02" />
+                <Stop offset="0" stopColor="#F59E0B" stopOpacity="0.20" />
+                <Stop offset="1" stopColor="#F59E0B" stopOpacity="0.02" />
               </LinearGradient>
             </Defs>
 
@@ -1264,8 +1403,8 @@ function StatGraph({
             <Path
               d={linePath}
               fill="none"
-              stroke={APPLE.accent}
-              strokeWidth="2.5"
+              stroke="#F59E0B"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -1274,22 +1413,22 @@ function StatGraph({
               <>
                 <Path
                   d={`M ${activePoint.x},0 L ${activePoint.x},${HEIGHT}`}
-                  stroke={APPLE.accent}
+                  stroke="#F59E0B"
                   strokeWidth="1.5"
-                  opacity={0.8}
+                  opacity={0.6}
                 />
                 <Circle
                   cx={activePoint.x}
                   cy={activePoint.y}
-                  r="8"
-                  fill={APPLE.accent}
-                  opacity={0.3}
+                  r="10"
+                  fill="#F59E0B"
+                  opacity={0.2}
                 />
                 <Circle
                   cx={activePoint.x}
                   cy={activePoint.y}
                   r="5"
-                  fill={APPLE.accent}
+                  fill="#F59E0B"
                 />
               </>
             )}
@@ -1299,15 +1438,15 @@ function StatGraph({
                 <Circle
                   cx={lastPoint.x}
                   cy={lastPoint.y}
-                  r="6"
-                  fill={APPLE.accent}
-                  opacity={0.3}
+                  r="8"
+                  fill="#F59E0B"
+                  opacity={0.2}
                 />
                 <Circle
                   cx={lastPoint.x}
                   cy={lastPoint.y}
                   r="4"
-                  fill={APPLE.accent}
+                  fill="#F59E0B"
                 />
               </>
             )}
@@ -1385,9 +1524,115 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
 
+  // Bait photo (view mode)
+  baitPhotoViewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  baitPhotoThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    marginLeft: "auto",
+    backgroundColor: APPLE.glass,
+  },
+
+  // Bait photo (edit mode)
+  baitPhotoCard: {
+    marginBottom: 12,
+  },
+  baitPhotoPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  baitPhotoImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: APPLE.glass,
+  },
+  baitPhotoActions: {
+    flex: 1,
+    gap: 8,
+  },
+  baitPhotoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: APPLE.accentMuted,
+    alignSelf: "flex-start",
+  },
+  baitPhotoRemoveBtn: {
+    backgroundColor: "rgba(255, 59, 48, 0.12)",
+  },
+  baitPhotoBtnText: {
+    color: APPLE.accent,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  baitPhotoPlaceholder: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: APPLE.glass,
+    borderRadius: 14,
+    height: 56,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: APPLE.glassBorder,
+    borderStyle: "dashed",
+  },
+  baitPhotoPlaceholderText: {
+    color: APPLE.accent,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
   // Weather Card
   weatherCard: {
     marginBottom: 12,
+  },
+  weatherGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 8,
+  },
+  weatherStatCard: {
+    flex: 1,
+    minWidth: "45%",
+    backgroundColor: "#1E1E21",
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+    gap: 8,
+  },
+  weatherStatValue: {
+    fontSize: 28,
+    fontWeight: "200",
+    color: "#FFFFFF",
+    fontVariant: ["tabular-nums"],
+  },
+  weatherStatLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#606068",
+    textTransform: "uppercase",
+  },
+  windDirRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
+  windDirLabel: {
+    fontSize: 12,
+    color: "#606068",
   },
   sectionTitle: {
     fontSize: 14,
@@ -1802,50 +2047,52 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
 
-  // Sparkline Graph
+  // Sparkline Graph (matches trip/[id].tsx)
   sparklineContainer: {
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 20,
+    marginBottom: 12,
   },
   sparklineHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   sparklineLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
-    color: APPLE.text,
+    color: "#FFFFFF",
   },
   sparklineValueRow: {
     alignItems: "flex-end",
   },
   sparklineValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: APPLE.accent,
+    fontSize: 24,
+    fontWeight: "200",
+    color: "#F59E0B",
+    fontVariant: ["tabular-nums"],
   },
   sparklineRange: {
-    fontSize: 11,
-    color: APPLE.textSecondary,
-    marginTop: 2,
+    fontSize: 12,
+    color: "#606068",
+    marginTop: 4,
   },
   sparklineGraph: {
     height: 100,
     borderRadius: 16,
-    backgroundColor: APPLE.accentMuted,
+    backgroundColor: "#1E1E21",
     overflow: "hidden",
   },
   sparklineTimeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 6,
+    marginTop: 10,
     paddingHorizontal: 4,
   },
   sparklineTime: {
-    fontSize: 11,
-    color: APPLE.textSecondary,
+    fontSize: 12,
+    color: "#606068",
+    fontVariant: ["tabular-nums"],
   },
 
   // Source Section

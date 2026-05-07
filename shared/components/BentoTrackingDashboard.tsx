@@ -7,12 +7,10 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  Animated,
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import MapView, { Polyline, Marker, UrlTile, Region } from "react-native-maps";
-import { ORTO_FORAAR_URL } from "../../lib/maps";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -55,25 +53,9 @@ interface Props {
   manualTempCount: number;
   lastManualTemp?: number;
   t: (key: any) => string;
+  language?: "da" | "en";
 }
 
-// Recording pulse - subtle, professional
-function RecordingDot() {
-  const opacity = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1, duration: 1000, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
-
-  return <Animated.View style={[styles.recordDot, { opacity }]} />;
-}
 
 export function BentoTrackingDashboard({
   elapsedSec,
@@ -90,6 +72,8 @@ export function BentoTrackingDashboard({
   onStopTrip,
   manualTempCount,
   lastManualTemp,
+  t,
+  language = "da",
 }: Props) {
   // Format time
   const hours = Math.floor(elapsedSec / 3600);
@@ -102,60 +86,42 @@ export function BentoTrackingDashboard({
 
   const distKm = (distanceM / 1000).toFixed(2);
 
+  const mapRef = useRef<MapView>(null);
+
+  // Lock map to user's latest position
+  useEffect(() => {
+    if (points.length > 0 && mapRef.current) {
+      const last = points[points.length - 1];
+      mapRef.current.animateToRegion(
+        {
+          latitude: last.latitude,
+          longitude: last.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        300
+      );
+    }
+  }, [points.length]);
+
   return (
-    <View style={styles.container}>
-      {/* Status Bar */}
-      <View style={styles.statusBar}>
-        <View style={styles.statusLeft}>
-          <RecordingDot />
-          <Text style={styles.statusText}>Optager</Text>
-        </View>
-        <Text style={styles.spotText} numberOfLines={1}>
-          {spotName || "Fisketur"}
-        </Text>
-      </View>
-
-      {/* Timer - Hero element */}
-      <View style={styles.timerSection}>
-        <Text style={styles.timer}>{timeStr}</Text>
-      </View>
-
-      {/* Stats Row */}
-      <View style={styles.statsRow}>
-        <View style={styles.stat}>
-          <Text style={styles.statValue}>{distKm}</Text>
-          <Text style={styles.statLabel}>km</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.stat}>
-          <Text style={styles.statValue}>{catchCount}</Text>
-          <Text style={styles.statLabel}>fangst</Text>
-        </View>
-        {manualTempCount > 0 && (
-          <>
-            <View style={styles.statDivider} />
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{lastManualTemp}°</Text>
-              <Text style={styles.statLabel}>vand</Text>
-            </View>
-          </>
-        )}
-      </View>
-
-      {/* Map */}
-      <View style={styles.mapContainer}>
+    <>
+      {/* Map - standalone card, locked to position */}
+      <View style={styles.mapCard}>
         <MapView
+          ref={mapRef}
           style={styles.map}
           region={region}
           onRegionChangeComplete={onRegionChange}
           provider={mapProvider}
-          mapType="none"
+          mapType="satellite"
           rotateEnabled={false}
           pitchEnabled={false}
-          scrollEnabled={true}
-          zoomEnabled={true}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          followsUserLocation={true}
+          showsUserLocation={false}
         >
-          <UrlTile urlTemplate={ORTO_FORAAR_URL} maximumZ={21} tileSize={256} />
           {points.length > 0 && (
             <>
               <Polyline
@@ -174,32 +140,64 @@ export function BentoTrackingDashboard({
             </>
           )}
         </MapView>
+        {spotName ? (
+          <View style={styles.mapSpotBadge}>
+            <Text style={styles.mapSpotText} numberOfLines={1}>{spotName}</Text>
+          </View>
+        ) : null}
       </View>
 
-      {/* Actions */}
-      <View style={styles.actions}>
-        {/* Primary: Register catch */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={onMarkCatch}
-        >
-          <Ionicons name="add" size={24} color={COLORS.bg} style={styles.buttonIcon} />
-          <Text style={styles.primaryButtonText}>Fangst</Text>
-        </Pressable>
+      {/* Timer + Stats + Actions card */}
+      <View style={styles.container}>
+        {/* Timer - Hero element */}
+        <View style={styles.timerSection}>
+          <Text style={styles.timer}>{timeStr}</Text>
+        </View>
 
-        {/* Secondary buttons */}
-        <View style={styles.secondaryButtons}>
+        {/* Stats Row */}
+        <View style={styles.statsRow}>
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{distKm}</Text>
+            <Text style={styles.statLabel}>km</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{catchCount}</Text>
+            <Text style={styles.statLabel}>{language === "da" ? "fangst" : "catch"}</Text>
+          </View>
+          {manualTempCount > 0 && (
+            <>
+              <View style={styles.statDivider} />
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>{lastManualTemp}°</Text>
+                <Text style={styles.statLabel}>{language === "da" ? "vand" : "water"}</Text>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Actions - Stacked full-width buttons */}
+        <View style={styles.actions}>
           <Pressable
             style={({ pressed }) => [
-              styles.secondaryButton,
+              styles.catchButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={onMarkCatch}
+          >
+            <Ionicons name="fish" size={20} color="#FFF" style={styles.buttonIcon} />
+            <Text style={styles.catchButtonText}>{t("catchBtn")}</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.tempButton,
               pressed && styles.buttonPressed,
             ]}
             onPress={onMeasureTemp}
           >
-            <Ionicons name="thermometer-outline" size={20} color={COLORS.textSecondary} />
+            <Ionicons name="thermometer-outline" size={20} color="#FFF" />
+            <Text style={styles.tempButtonText}>{t("waterTempBtn")}</Text>
           </Pressable>
 
           <Pressable
@@ -214,47 +212,42 @@ export function BentoTrackingDashboard({
           </Pressable>
         </View>
       </View>
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  mapCard: {
+    height: 220,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: COLORS.elevated,
+    marginBottom: 12,
+    position: "relative",
+  },
+  mapSpotBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    backgroundColor: "rgba(22, 22, 24, 0.85)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  mapSpotText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.text,
+    maxWidth: 200,
+  },
   container: {
     backgroundColor: COLORS.card,
     borderRadius: 24,
     paddingTop: 20,
     paddingBottom: 16,
     paddingHorizontal: 20,
-  },
-
-  // Status bar
-  statusBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 24,
-  },
-  statusLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  recordDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.danger,
-    marginRight: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: COLORS.textSecondary,
-  },
-  spotText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.text,
-    maxWidth: 160,
   },
 
   // Timer
@@ -303,13 +296,6 @@ const styles = StyleSheet.create({
   },
 
   // Map
-  mapContainer: {
-    height: 180,
-    borderRadius: 16,
-    overflow: "hidden",
-    backgroundColor: COLORS.elevated,
-    marginBottom: 20,
-  },
   map: {
     flex: 1,
   },
@@ -330,60 +316,57 @@ const styles = StyleSheet.create({
     borderColor: COLORS.text,
   },
 
-  // Actions
+  // Actions - stacked layout
   actions: {
-    flexDirection: "row",
-    alignItems: "center",
+    gap: 10,
   },
-  primaryButton: {
-    flex: 1,
+  catchButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.accent,
-    height: 56,
-    borderRadius: 16,
-    marginRight: 12,
+    backgroundColor: "#15803D",
+    height: 52,
+    borderRadius: 14,
   },
   buttonIcon: {
     marginRight: 8,
   },
-  primaryButtonText: {
+  catchButtonText: {
     fontSize: 17,
-    fontWeight: "600",
-    color: COLORS.bg,
+    fontWeight: "700",
+    color: "#FFF",
   },
-  secondaryButtons: {
+  tempButton: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  secondaryButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: COLORS.elevated,
-    alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
+    gap: 8,
+    backgroundColor: "#1D4ED8",
+    height: 52,
+    borderRadius: 14,
+  },
+  tempButtonText: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#FFF",
   },
   stopButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    height: 56,
-    paddingHorizontal: 20,
-    borderRadius: 16,
+    height: 48,
+    borderRadius: 14,
     backgroundColor: COLORS.dangerMuted,
   },
   stopIcon: {
-    width: 14,
-    height: 14,
+    width: 12,
+    height: 12,
     borderRadius: 3,
     backgroundColor: COLORS.danger,
     marginRight: 8,
   },
   stopButtonText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
     color: COLORS.danger,
   },

@@ -2,7 +2,7 @@
 
 > **CLAUDE:** Husk at opdatere denne fil løbende når du laver ændringer i kodebasen - nye filer, ændret struktur, nye konventioner, osv.
 
-React Native / Expo fiskeri-app til havørredfiskere. Tracker ture med GPS, logger fangster, viser vejr/havdata fra DMI.
+React Native / Expo fiskeri-app til havørredfiskere. Tracker ture med GPS, logger fangster, viser vejr/havdata fra Open-Meteo (DMI HARMONIE 2km model).
 
 ## Stack
 
@@ -14,7 +14,7 @@ React Native / Expo fiskeri-app til havørredfiskere. Tracker ture med GPS, logg
 | Storage | Firebase Storage (billeder) |
 | Kort | react-native-maps |
 | Animation | react-native-reanimated ~4.1.1 + react-native-worklets 0.5.1 |
-| Vejr | DMI API via Cloud Functions |
+| Vejr | Open-Meteo API (DMI HARMONIE model) |
 | Sprog | TypeScript |
 
 > **Note:** Reanimated 4.x KRÆVER `react-native-worklets` som peer dependency. Expo SDK 54 forventer version 0.5.1. Se overrides i package.json for semver fix.
@@ -40,10 +40,11 @@ lib/                    # Forretningslogik
 ├── catches.ts          # Fangst CRUD
 ├── trips.ts            # Tur CRUD + statistik
 ├── spots.ts            # Spots CRUD
-├── dmi.ts              # DMI orchestration
-├── dmiClimate.ts       # DMI Climate API (luft-temp, vind)
-├── dmiOcean.ts         # DMI Ocean API (vandtemp, vandstand)
-├── dmiGridData.ts      # DMI EDR grid data (strøm, salinitet)
+├── dmi.ts              # Vejr orchestration (Open-Meteo + DMI)
+├── openMeteoGrid.ts    # Open-Meteo grid fetch til overlays
+├── dmiClimate.ts       # DMI Climate API (historiske observationer)
+├── dmiOcean.ts         # DMI Ocean API (historiske observationer)
+├── dmiGridData.ts      # DMI EDR grid data (salinitet)
 ├── firebase.ts         # Firebase init
 ├── offlineTrips.ts     # Offline-kø til ture
 ├── fredningsbaelter.ts # Fredningszoner GeoJSON
@@ -121,30 +122,44 @@ const APPLE = {
 };
 ```
 
-## DMI API Integration
+## Vejr API Integration
 
-Tre API'er via Cloud Functions proxy:
+### Open-Meteo (primær - prognoser + overlays)
 
-- **Climate** (`dmiClimate.ts`): Lufttemp, vind, barometertryk (hPa), luftfugtighed (%) - timebaseret fra 30+ kyststationer
-- **Ocean** (`dmiOcean.ts`): Vandtemp, vandstand - 80+ havnestationer i `OCEAN_STATIONS_DK`
-- **EDR** (`dmiGridData.ts`): Havstrøm, salinitet, bølger - grid data
+Gratis, ingen API key, ~200-400ms responstid. Bruger DMI's eget HARMONIE-model (2km opløsning) via `models=dmi_seamless`.
 
-**Fiskemønster-tracking** (`dmi.ts` → `DmiEvaluation`):
-- Præcis barometertryk (hPa) og luftfugtighed (%) gemmes per tracked tur
-- Bruges til mønsteranalyse i statistik-siden
+**Spot-vejr** (`dmi.ts` → `getSpotForecastEdr()`):
+- 2 parallelle requests: Weather API + Marine API (~250ms total)
+- Weather: temperatur, vind, vindstød, fugtighed, tryk, skydække, nedbør, dugpunkt, sigtbarhed
+- Marine: bølgehøjde, bølgeperiode, bølgeretning, vandtemperatur, vandstand, havstrøm
 
-**Vigtig logik:**
-```typescript
-// DMI Climate bruger hele timer - timestamps skal rundes
-function floorToHour(ms: number): number {
-  const d = new Date(ms);
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
-}
+**Kort-overlays** (`lib/openMeteoGrid.ts`):
+- Genererer 18×18 grid af punkter over danske farvande
+- Kalder Open-Meteo med komma-separerede koordinater (max ~1000 punkter)
+- Returnerer CoverageJSON-kompatibelt format til Leaflet-velocity
+- **Havstrøm**: `fetchCurrentGrid()` → u/v komponenter fra velocity+direction
+- **Bølger**: `fetchWaveGrid()` → pseudo u/v fra højde+retning
+- **Vind**: `fetchWindGrid()` → u/v fra speed+direction
+- **Vandstand**: `fetchWaterLevelGrid()` → heatmap punkter
 
-// DMI har ~1-2 timers forsinkelse
-const effectiveStartMs = Math.min(startMs, nowMs - 2 * 60 * 60 * 1000);
+**Open-Meteo endpoints:**
 ```
+Weather: https://api.open-meteo.com/v1/forecast
+Marine:  https://marine-api.open-meteo.com/v1/marine
+```
+
+**Tur-evaluering** (`dmi.ts` → `evaluateTripWithDmi()`):
+- 2 parallelle Open-Meteo kald med `start_date`/`end_date` for turens tidspunkt (~250ms)
+- Bruger DMI HARMONIE 2km model (via `models=dmi_seamless`) for ture <90 dage
+- Bruger archive API (`archive-api.open-meteo.com`) for ture >90 dage
+- Beregner Stat (avg/min/max) + tidsserier for: luft-temp, vind, vindretning, tryk, fugtighed, vandtemp, vandstand
+- `computeCoastWindInfo()` beregner kyst-/vindrelation fra GPS-track (ren matematik, ingen API)
+
+### DMI (kun brugt til)
+
+- **Salinitet** (`SalinityHeatmapOverlay.tsx`): Direkte DMI EDR (Open-Meteo har ikke salinitet)
+- **Stationsmarkører** (`spot-weather.tsx`): `OCEAN_STATIONS_DK` til kort-pins
+- **dmiClimate.ts / dmiOcean.ts**: Beholdt men ikke længere kaldt af tur-evaluering
 
 ## Firebase Struktur
 
@@ -162,7 +177,8 @@ const effectiveStartMs = Math.min(startMs, nowMs - 2 * 60 * 60 * 1000);
   ├── profileSummary      # Brugerens fangstmønster
   └── lastAlertSent       # Rate limiting
 
-/catches/{userId}/{catchId}.jpg  # Billeder i Storage
+/catches/{userId}/{catchId}.jpg       # Fangst-billeder i Storage
+/catches/{userId}/{catchId}_bait.jpg  # Agn-billeder i Storage (valgfrit)
 ```
 
 ## Push Notifikationer (Smart Vejr-Alerts)

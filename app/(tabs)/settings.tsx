@@ -74,6 +74,16 @@ import {
   buildSpotSummary,
   withTimeout,
 } from "../../lib/patternAnalysis";
+import { generateReportHtml, type ReportChoice } from "../../lib/pdfReport";
+import { listGoals, computeGoalProgress, isGoalCompleted, updateGoalDoc } from "../../lib/goals";
+import { listCatches } from "../../lib/catches";
+import {
+  getWidgetConfig,
+  saveWidgetConfig,
+  clearWidgetConfig,
+  updateWidgetWeatherData,
+} from "../../lib/widgetData";
+import type { WidgetConfig } from "../../types/widget";
 
 // Demo konto email
 const DEMO_EMAIL = "demo@havorredlogbog.dk";
@@ -103,8 +113,6 @@ const THEME = {
 // Selve settings-skærmen
 // ============================================================================
 
-type ReportChoice = "year" | "all" | "both";
-
 export default function SettingsScreen() {
   const router = useRouter();
   const [userEmail, setUserEmail] = useState(auth.currentUser?.email);
@@ -123,9 +131,22 @@ export default function SettingsScreen() {
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [creditsModalVisible, setCreditsModalVisible] = useState(false);
 
+  // Widget
+  const [widgetConfig, setWidgetConfig] = useState<WidgetConfig | null>(null);
+  const [widgetSpotPickerVisible, setWidgetSpotPickerVisible] = useState(false);
+  const [widgetSpots, setWidgetSpots] = useState<any[]>([]);
+
+  // Support
+  const [supportModalVisible, setSupportModalVisible] = useState(false);
+  const [supportCategory, setSupportCategory] = useState<string | null>(null);
+  const [supportMessage, setSupportMessage] = useState("");
+  const [supportSending, setSupportSending] = useState(false);
+  const [supportCategoryPickerVisible, setSupportCategoryPickerVisible] = useState(false);
+  const [supportSent, setSupportSent] = useState(false);
+
   // Credits - testere og medvirkende
   const TESTERS = [
-    { name: "Sergio JB", role: "Beta Tester" },
+    { name: "Sergio JB", role: "Pre-release Tester" },
   ];
 
   const { language, setLanguage, t } = useLanguage();
@@ -133,11 +154,75 @@ export default function SettingsScreen() {
 
   const thisYear = new Date().getFullYear();
 
+  const SUPPORT_CATEGORIES = [
+    { key: "general", da: "Generel support", en: "General support" },
+    { key: "bug", da: "Fejlrapport", en: "Bug report" },
+    { key: "feature", da: "Feature-forslag", en: "Feature request" },
+    { key: "app", da: "Spørgsmål om appen", en: "Question about the app" },
+    { key: "privacy", da: "Privatlivsspørgsmål", en: "Privacy question" },
+    { key: "other", da: "Andet", en: "Other" },
+  ];
+
+  const getSupportCategoryLabel = (key: string) => {
+    const cat = SUPPORT_CATEGORIES.find((c) => c.key === key);
+    return cat ? (language === "da" ? cat.da : cat.en) : "";
+  };
+
+  async function sendSupport() {
+    if (!supportCategory || !supportMessage.trim()) {
+      Alert.alert(t("supportMissingFields"), t("supportMissingFieldsDesc"));
+      return;
+    }
+
+    setSupportSending(true);
+    try {
+      const categoryLabel = getSupportCategoryLabel(supportCategory);
+      const message = [
+        supportMessage.trim(),
+        "",
+        "---",
+        "Sendt fra app",
+        `Bruger: ${userEmail || "N/A"}`,
+        `Kategori: ${categoryLabel}`,
+      ].join("\n");
+
+      const res = await fetch("https://havorredlogbog.dk/send-contact.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: userEmail || "App-bruger",
+          email: userEmail || "noreply@havorredlogbog.dk",
+          subject: `[App] ${categoryLabel}`,
+          message,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      setSupportCategory(null);
+      setSupportMessage("");
+      setSupportSent(true);
+    } catch (e: any) {
+      console.error("Support send error:", e);
+      Alert.alert(
+        t("supportErrorTitle"),
+        `${t("supportErrorDesc")}\n\n(${e?.message || String(e)})`
+      );
+    } finally {
+      setSupportSending(false);
+    }
+  }
+
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setUserEmail(user?.email);
     });
     return unsubscribe;
+  }, []);
+
+  // Load widget config on mount
+  useEffect(() => {
+    getWidgetConfig().then(setWidgetConfig).catch(() => {});
   }, []);
 
   const handleSignOut = async () => {
@@ -272,826 +357,43 @@ export default function SettingsScreen() {
     if (reportLoading) return;
     setReportLoading(true);
 
-    // PDF oversættelser
-    const pdfText = language === "da" ? {
-      fishingReport: "Fiskerapport",
-      seaTroutLog: "Havørred Logbog",
-      generated: "Genereret",
-      generatedBy: "Genereret af Havørred Logbog",
-      statistics: "Statistik",
-      allTimeStatistics: "All-Time Statistik",
-      currentYear: "Indeværende år",
-      total: "Samlet",
-      totalTrips: "Ture i alt",
-      catchTrips: "Fangstture",
-      blankTrips: "Nulture",
-      fishCaught: "Fisk fanget",
-      kmFished: "Km fisket",
-      hoursFished: "Timer fisket",
-      catchRate: "Fangstrate",
-      fishPerHour: "Fisk pr. time",
-      multiCatchRate: "Multi-fangst rate",
-      spots: "Spots",
-      visitedSpots: "Besøgte spots",
-      mostVisited: "Mest besøgt",
-      bestSpot: "Bedste spot",
-      trips: "ture",
-      fish: "fisk",
-      fishPerTrip: "fisk/tur",
-      fishingPattern: "Fiskemønster",
-      youCatchMostUnder: "Du fanger flest fisk under disse forhold",
-      catchDistribution: "Fordeling af fangster",
-      noPatternYet: "Ingen fiskemønstre endnu - fang flere fisk for at se mønstre.",
-      noSummaryYet: "Ingen samlet opsummering endnu.",
-      allTime: "All-Time",
-    } : {
-      fishingReport: "Fishing Report",
-      seaTroutLog: "Sea Trout Log",
-      generated: "Generated",
-      generatedBy: "Generated by Sea Trout Log",
-      statistics: "Statistics",
-      allTimeStatistics: "All-Time Statistics",
-      currentYear: "Current year",
-      total: "Total",
-      totalTrips: "Total trips",
-      catchTrips: "Catch trips",
-      blankTrips: "Blank trips",
-      fishCaught: "Fish caught",
-      kmFished: "Km fished",
-      hoursFished: "Hours fished",
-      catchRate: "Catch rate",
-      fishPerHour: "Fish per hour",
-      multiCatchRate: "Multi-catch rate",
-      spots: "Spots",
-      visitedSpots: "Visited spots",
-      mostVisited: "Most visited",
-      bestSpot: "Best spot",
-      trips: "trips",
-      fish: "fish",
-      fishPerTrip: "fish/trip",
-      fishingPattern: "Fishing Pattern",
-      youCatchMostUnder: "You catch most fish under these conditions",
-      catchDistribution: "Catch distribution",
-      noPatternYet: "No fishing patterns yet - catch more fish to see patterns.",
-      noSummaryYet: "No summary available yet.",
-      allTime: "All-Time",
-    };
-
-    // Oversættelse af gruppe-titler og labels fra patternAnalysis
-    const groupTitleMap: Record<string, string> = language === "en" ? {
-      "Årstid": "Season",
-      "Tid på dagen": "Time of day",
-      "Vandstand": "Water level",
-      "Havtemperatur": "Sea temperature",
-      "Lufttemperatur": "Air temperature",
-      "Vindstyrke": "Wind strength",
-      "Vindretning": "Wind direction",
-      "Vind ift. kyst": "Wind vs. coast",
-      "Turlængde": "Trip duration",
-      "Bevægelse": "Movement",
-      "Spots med flest fisk": "Top spots",
-    } : {};
-
-    const labelMap: Record<string, string> = language === "en" ? {
-      // Seasons
-      "Foråret": "Spring",
-      "Sommeren": "Summer",
-      "Efteråret": "Autumn",
-      "Vinteren": "Winter",
-      // Time of day
-      "Morgenen": "Morning",
-      "Formiddagen": "Late morning",
-      "Eftermiddagen": "Afternoon",
-      "Aftenen": "Evening",
-      "Natten": "Night",
-      // Water level
-      "Lavvande": "Low tide",
-      "Højvande": "High tide",
-      "Middel vandstand": "Medium tide",
-      "ukendt": "Unknown",
-      // Wind strength
-      "svag vind": "Light wind",
-      "mild vind": "Mild wind",
-      "frisk vind": "Fresh wind",
-      "hård vind": "Strong wind",
-      // Wind vs coast
-      "fralandsvind": "Offshore wind",
-      "pålandsvind": "Onshore wind",
-      "sidevind": "Side wind",
-      // Wind directions
-      "Nord": "North",
-      "Nordøst": "Northeast",
-      "Øst": "East",
-      "Sydøst": "Southeast",
-      "Syd": "South",
-      "Sydvest": "Southwest",
-      "Vest": "West",
-      "Nordvest": "Northwest",
-      // Duration
-      "<2 timer": "<2 hours",
-      "2-4 timer": "2-4 hours",
-      "4-6 timer": "4-6 hours",
-      "6+ timer": "6+ hours",
-      // Movement
-      "Stillestående/let bevægelse": "Stationary/light movement",
-      "Affiskning af vand": "Covering water",
-      "Roligt tempo": "Slow pace",
-    } : {};
-
-    const translateGroupTitle = (title: string) => groupTitleMap[title] || title;
-    const translateLabel = (label: string) => labelMap[label] || label;
-
-    // Oversæt fulde linjer fra fiskemønsteret
-    const translatePatternLine = (line: string): string => {
-      if (language === "da") return line;
-
-      // Spot: X
-      if (line.startsWith("Spot: ")) {
-        return "Spot: " + line.substring(6);
-      }
-
-      // Simple replacements
-      const lineMap: Record<string, string> = {
-        "Lavvande": "Low tide",
-        "Højvande": "High tide",
-        "Middel vandstand": "Medium tide",
-        "Svag vindstyrke": "Light wind",
-        "Mild vindstyrke": "Mild wind",
-        "Frisk vindstyrke": "Fresh wind",
-        "Hård vindstyrke": "Strong wind",
-        "Ved fralandsvind": "With offshore wind",
-        "Ved pålandsvind": "With onshore wind",
-        "Ved sidevind": "With side wind",
-        "Flest fisk ved affiskning af vand": "Most fish when covering water",
-        "Flest fisk ved stillestående/rolig placering": "Most fish when stationary",
-      };
-
-      if (lineMap[line]) return lineMap[line];
-
-      // Vindretning: X
-      if (line.startsWith("Vindretning: ")) {
-        const dir = line.substring(13);
-        return "Wind direction: " + (labelMap[dir] || dir);
-      }
-
-      // Om morgenen/eftermiddagen/etc.
-      if (line.startsWith("Om ")) {
-        const rest = line.substring(3);
-        const todMap: Record<string, string> = {
-          "morgenen": "in the morning",
-          "formiddagen": "in late morning",
-          "eftermiddagen": "in the afternoon",
-          "aftenen": "in the evening",
-          "natten": "at night",
-          "foråret": "in spring",
-          "sommeren": "in summer",
-          "efteråret": "in autumn",
-          "vinteren": "in winter",
-        };
-        if (todMap[rest]) return todMap[rest].charAt(0).toUpperCase() + todMap[rest].slice(1);
-      }
-
-      // Havtemperatur: X
-      if (line.startsWith("Havtemperatur: ")) {
-        return "Sea temperature: " + line.substring(15);
-      }
-
-      // Lufttemperatur: X
-      if (line.startsWith("Lufttemperatur: ")) {
-        return "Air temperature: " + line.substring(16);
-      }
-
-      // Typisk X min før/efter solopgang/solnedgang
-      const sunMatch = line.match(/^Typisk (\d+) min (før|efter) (solopgang|solnedgang)$/);
-      if (sunMatch) {
-        const [, mins, dir, event] = sunMatch;
-        const dirEn = dir === "før" ? "before" : "after";
-        const eventEn = event === "solopgang" ? "sunrise" : "sunset";
-        return `Typically ${mins} min ${dirEn} ${eventEn}`;
-      }
-
-      // Turlængde: X giver flest fisk
-      const durMatch = line.match(/^Turlængde: (.+) giver flest fisk$/);
-      if (durMatch) {
-        const dur = translateLabel(durMatch[1]);
-        return `Trip duration: ${dur} yields most fish`;
-      }
-
-      // Flest fisk ved X
-      if (line.startsWith("Flest fisk ved ")) {
-        const rest = line.substring(15);
-        return "Most fish with " + (labelMap[rest] || rest);
-      }
-
-      // Prognose: kig efter X for bedste match
-      const progMatch = line.match(/^Prognose: kig efter (.+) for bedste match$/);
-      if (progMatch) {
-        const hints = progMatch[1].split(", ").map(h => translateLabel(h)).join(", ");
-        return `Forecast: look for ${hints} for best match`;
-      }
-
-      // Vind ift. kyst: X
-      if (line.startsWith("Vind ift. kyst: ")) {
-        const wind = line.substring(16);
-        return "Wind vs. coast: " + (labelMap[wind] || wind);
-      }
-
-      return line;
-    };
-
     try {
       const year = new Date().getFullYear();
 
-      const yearStats: any = await withTimeout(
-        statsTrips(year),
-        15000,
-        "statsTrips(year)"
-      );
-      const allStats: any = await withTimeout(
-        statsTrips(),
-        15000,
-        "statsTrips(all)"
-      );
+      const yearStats: any = await withTimeout(statsTrips(year), 15000, "statsTrips(year)");
+      const allStats: any = await withTimeout(statsTrips(), 15000, "statsTrips(all)");
+      const allTripsArr: any[] = await withTimeout(listTrips(1000, 0), 20000, "listTrips");
+      const yearTripsArr = allTripsArr.filter((trip) => {
+        if (!trip.start_ts) return false;
+        return new Date(trip.start_ts).getFullYear() === year;
+      });
+      const allSpots: any[] = await withTimeout(listSpots(), 15000, "listSpots");
 
-      const allTripsArr: any[] = await withTimeout(
-        listTrips(1000, 0),
-        20000,
-        "listTrips"
-      );
-      const yearTripsArr = allTripsArr.filter((t) => {
-        if (!t.start_ts) return false;
-        const d = new Date(t.start_ts);
-        return d.getFullYear() === year;
+      // Fetch goals for the current year
+      let yearGoals = await listGoals(year).catch(() => []);
+      if (yearGoals.length > 0) {
+        const allCatches = await listCatches().catch(() => []);
+        yearGoals = yearGoals.map((g) => {
+          const progress = computeGoalProgress(g, yearStats, allTripsArr, allCatches, allSpots);
+          return { ...g, currentValue: progress };
+        });
+      }
+
+      const html = generateReportHtml({
+        choice,
+        yearStats,
+        allStats,
+        yearTrips: yearTripsArr,
+        allTrips: allTripsArr,
+        spots: allSpots,
+        goals: yearGoals,
+        language,
+        t,
+        year,
       });
 
-      const allSpots: any[] = await withTimeout(
-        listSpots(),
-        15000,
-        "listSpots"
-      );
-
-      const dateStr = new Date().toLocaleDateString(language === "da" ? "da-DK" : "en-US");
-
-      const safe = (v: any, fallback = "0") =>
-        v === null || v === undefined ? fallback : String(v);
-
-      // ÅR
-      const yearTrips = safe(yearStats?.trips, "0");
-      const yearFish = safe(yearStats?.total_fish, "0");
-      const yearKm = ((yearStats?.total_m ?? 0) / 1000).toFixed(1);
-      const yearHours = ((yearStats?.total_sec ?? 0) / 3600).toFixed(1);
-      const yearNullTrips = safe(yearStats?.null_trips, "0");
-      const yearCatchTrips = safe(yearStats?.catch_trips, "0");
-      const yearFangstrate = safe(yearStats?.fangstrate ?? "0", "0");
-      const yearFishPerHour = safe(yearStats?.fish_per_hour ?? "0", "0");
-      const yearMulti =
-        yearStats?.multi_fish_rate != null
-          ? `${yearStats.multi_fish_rate}%`
-          : "0%";
-
-      // ALL TIME
-      const allTrips = safe(allStats?.trips, "0");
-      const allFish = safe(allStats?.total_fish, "0");
-      const allKm = ((allStats?.total_m ?? 0) / 1000).toFixed(1);
-      const allHours = ((allStats?.total_sec ?? 0) / 3600).toFixed(1);
-      const allNullTrips = safe(allStats?.null_trips, "0");
-      const allCatchTrips = safe(allStats?.catch_trips, "0");
-      const allFangstrate = safe(allStats?.fangstrate ?? "0", "0");
-      const allFishPerHour = safe(allStats?.fish_per_hour ?? "0", "0");
-      const allMulti =
-        allStats?.multi_fish_rate != null
-          ? `${allStats.multi_fish_rate}%`
-          : "0%";
-
-      const yearPatternReport =
-        yearTripsArr.length > 0 ? buildWeatherSummary(yearTripsArr, allSpots) : null;
-      const allTimePatternReport =
-        allTripsArr.length > 0 ? buildWeatherSummary(allTripsArr, allSpots) : null;
-
-      const yearSpotSummary = buildSpotSummary(yearTripsArr, allSpots);
-      const allSpotSummary = buildSpotSummary(allTripsArr, allSpots);
-
-      const renderPatternLines = (lines: string[], hasGroups: boolean) => {
-        if (!lines.length) {
-          const msg = hasGroups
-            ? pdfText.noSummaryYet
-            : pdfText.noPatternYet;
-          return `<div class="pattern-empty">${msg}</div>`;
-        }
-        return `<ul>${lines.map((line) => `<li>${translatePatternLine(line)}</li>`).join("")}</ul>`;
-      };
-
-      const renderPatternGroups = (groups: PatternGroup[]) => {
-        if (!groups.length) return "";
-        return `
-          <div class="pattern-detail-title">${pdfText.catchDistribution}</div>
-          <div class="pattern-grid">
-            ${groups
-              .map((group) => {
-                const rows = group.items
-                  .map(
-                    (item) =>
-                      `<div class="pattern-row"><span class="pattern-row-label">${translateLabel(item.label)}</span><span class="pattern-row-value">${item.fish} ${pdfText.fish} (${item.share}%)</span></div>`
-                  )
-                  .join("");
-                return `
-                  <div class="pattern-group">
-                    <div class="pattern-group-title">${translateGroupTitle(group.title)}</div>
-                    ${rows}
-                  </div>
-                `;
-              })
-              .join("")}
-          </div>
-        `;
-      };
-
-      let sectionsHtml = "";
-
-      // ÅRSSEKTION
-      try {
-        if (choice === "year" || choice === "both") {
-          sectionsHtml += `
-          <section class="section">
-            <div class="section-header">
-              <h2>${pdfText.statistics} ${year}</h2>
-              <span class="badge">${pdfText.currentYear}</span>
-            </div>
-
-            <div class="stats-grid">
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.totalTrips}</div>
-                <div class="stat-value">${yearTrips}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.catchTrips}</div>
-                <div class="stat-value highlight">${yearCatchTrips}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.blankTrips}</div>
-                <div class="stat-value">${yearNullTrips}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.fishCaught}</div>
-                <div class="stat-value highlight">${yearFish}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.kmFished}</div>
-                <div class="stat-value">${yearKm}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.hoursFished}</div>
-                <div class="stat-value">${yearHours}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.catchRate}</div>
-                <div class="stat-value">${yearFangstrate}%</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.fishPerHour}</div>
-                <div class="stat-value">${yearFishPerHour}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.multiCatchRate}</div>
-                <div class="stat-value">${yearMulti}</div>
-              </div>
-            </div>
-        `;
-
-          if (yearSpotSummary) {
-            sectionsHtml += `
-            <div class="info-box">
-              <div class="info-box-title">${pdfText.spots} (${year})</div>
-              <ul>
-                <li><strong>${pdfText.visitedSpots}:</strong> ${yearSpotSummary.totalSpots}</li>
-                <li><strong>${pdfText.mostVisited}:</strong> ${yearSpotSummary.mostVisited.name} (${yearSpotSummary.mostVisited.trips} ${pdfText.trips}, ${yearSpotSummary.mostVisited.fish} ${pdfText.fish})</li>
-                <li><strong>${pdfText.bestSpot}:</strong> ${yearSpotSummary.bestCatch.name} (${yearSpotSummary.bestCatch.fish} ${pdfText.fish} / ${yearSpotSummary.bestCatch.trips} ${pdfText.trips} = ${yearSpotSummary.bestCatch.avg.toFixed(1)} ${pdfText.fishPerTrip})</li>
-              </ul>
-            </div>
-          `;
-          }
-
-          if (yearPatternReport) {
-            sectionsHtml += `
-            <div class="pattern-summary">
-              <div class="pattern-summary-title">${pdfText.fishingPattern} (${year})</div>
-              <div class="pattern-summary-subtitle">${pdfText.youCatchMostUnder}:</div>
-              ${renderPatternLines(
-                yearPatternReport.lines,
-                yearPatternReport.groups.length > 0
-              )}
-              ${renderPatternGroups(yearPatternReport.groups)}
-            </div>
-          `;
-          }
-
-          sectionsHtml += `</section>`;
-        }
-      } catch (e) {
-        // console.log("Fejl i år-sektion til PDF:", e);
-      }
-
-      // ALL-TIME SEKTION
-      try {
-        if (choice === "all" || choice === "both") {
-          sectionsHtml += `
-          <section class="section">
-            <div class="section-header">
-              <h2>${pdfText.allTimeStatistics}</h2>
-              <span class="badge">${pdfText.total}</span>
-            </div>
-
-            <div class="stats-grid">
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.totalTrips}</div>
-                <div class="stat-value">${allTrips}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.catchTrips}</div>
-                <div class="stat-value highlight">${allCatchTrips}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.blankTrips}</div>
-                <div class="stat-value">${allNullTrips}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.fishCaught}</div>
-                <div class="stat-value highlight">${allFish}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.kmFished}</div>
-                <div class="stat-value">${allKm}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.hoursFished}</div>
-                <div class="stat-value">${allHours}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.catchRate}</div>
-                <div class="stat-value">${allFangstrate}%</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.fishPerHour}</div>
-                <div class="stat-value">${allFishPerHour}</div>
-              </div>
-              <div class="stat-cell">
-                <div class="stat-label">${pdfText.multiCatchRate}</div>
-                <div class="stat-value">${allMulti}</div>
-              </div>
-            </div>
-        `;
-
-          if (allSpotSummary) {
-            sectionsHtml += `
-            <div class="info-box">
-              <div class="info-box-title">${pdfText.spots} (${pdfText.allTime})</div>
-              <ul>
-                <li><strong>${pdfText.visitedSpots}:</strong> ${allSpotSummary.totalSpots}</li>
-                <li><strong>${pdfText.mostVisited}:</strong> ${allSpotSummary.mostVisited.name} (${allSpotSummary.mostVisited.trips} ${pdfText.trips}, ${allSpotSummary.mostVisited.fish} ${pdfText.fish})</li>
-                <li><strong>${pdfText.bestSpot}:</strong> ${allSpotSummary.bestCatch.name} (${allSpotSummary.bestCatch.fish} ${pdfText.fish} / ${allSpotSummary.bestCatch.trips} ${pdfText.trips} = ${allSpotSummary.bestCatch.avg.toFixed(1)} ${pdfText.fishPerTrip})</li>
-              </ul>
-            </div>
-          `;
-          }
-
-          if (allTimePatternReport) {
-            sectionsHtml += `
-            <div class="pattern-summary">
-              <div class="pattern-summary-title">${pdfText.fishingPattern} (${pdfText.allTime})</div>
-              <div class="pattern-summary-subtitle">${pdfText.youCatchMostUnder}:</div>
-              ${renderPatternLines(
-                allTimePatternReport.lines,
-                allTimePatternReport.groups.length > 0
-              )}
-              ${renderPatternGroups(allTimePatternReport.groups)}
-            </div>
-          `;
-          }
-
-          sectionsHtml += `</section>`;
-        }
-      } catch (e) {
-        // console.log("Fejl i all-time sektion til PDF:", e);
-      }
-
-      // PDF – blækvenlig, professionel og ren
-      const html = `
-        <!DOCTYPE html>
-        <html lang="da">
-        <head>
-          <meta charset="utf-8" />
-          <title>Havørred Logbog - Fiskerapport</title>
-          <style>
-            @page {
-              margin: 15mm 12mm;
-              size: A4;
-            }
-            * {
-              box-sizing: border-box;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            body {
-              margin: 0;
-              padding: 0;
-              font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-              background: #fff;
-              color: #1a1a1a;
-              font-size: 11px;
-              line-height: 1.5;
-            }
-            .page {
-              max-width: 100%;
-            }
-
-            /* Header */
-            .report-header {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-end;
-              padding-bottom: 12px;
-              margin-bottom: 20px;
-              border-bottom: 2px solid #1a1a1a;
-            }
-            .report-header-left h1 {
-              margin: 0;
-              font-size: 22px;
-              font-weight: 700;
-              letter-spacing: -0.02em;
-              color: #1a1a1a;
-            }
-            .report-header-left .subtitle {
-              font-size: 11px;
-              color: #666;
-              margin-top: 2px;
-              text-transform: uppercase;
-              letter-spacing: 0.1em;
-            }
-            .report-header-right {
-              text-align: right;
-              font-size: 10px;
-              color: #666;
-            }
-            .report-header-right .date {
-              font-weight: 600;
-              color: #1a1a1a;
-            }
-
-            /* Section */
-            .section {
-              margin-bottom: 24px;
-              page-break-inside: avoid;
-              break-inside: avoid;
-            }
-            .section:not(:first-of-type) {
-              page-break-before: always;
-            }
-            .section-header {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              margin-bottom: 12px;
-              padding-bottom: 6px;
-              border-bottom: 1px solid #ddd;
-            }
-            .section-header h2 {
-              margin: 0;
-              font-size: 14px;
-              font-weight: 700;
-              text-transform: uppercase;
-              letter-spacing: 0.05em;
-              color: #1a1a1a;
-            }
-            .section-header .badge {
-              font-size: 9px;
-              padding: 2px 8px;
-              border: 1px solid #1a1a1a;
-              border-radius: 3px;
-              text-transform: uppercase;
-              letter-spacing: 0.08em;
-            }
-
-            /* Stats Table */
-            .stats-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 16px;
-            }
-            .stats-table th,
-            .stats-table td {
-              padding: 8px 12px;
-              text-align: left;
-              border: 1px solid #ddd;
-            }
-            .stats-table th {
-              background: #f5f5f5;
-              font-size: 9px;
-              text-transform: uppercase;
-              letter-spacing: 0.08em;
-              font-weight: 600;
-              color: #666;
-            }
-            .stats-table td {
-              font-size: 13px;
-              font-weight: 700;
-              font-variant-numeric: tabular-nums;
-            }
-            .stats-table tr:nth-child(even) td {
-              background: #fafafa;
-            }
-
-            /* Stats Grid - kompakt alternativ */
-            .stats-grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 1px;
-              background: #ddd;
-              border: 1px solid #ddd;
-              margin-bottom: 16px;
-              page-break-inside: avoid;
-              break-inside: avoid;
-            }
-            .stat-cell {
-              background: #fff;
-              padding: 10px 12px;
-            }
-            .stat-cell:nth-child(even) {
-              background: #fafafa;
-            }
-            .stat-label {
-              font-size: 9px;
-              text-transform: uppercase;
-              letter-spacing: 0.06em;
-              color: #666;
-              margin-bottom: 2px;
-            }
-            .stat-value {
-              font-size: 16px;
-              font-weight: 700;
-              color: #1a1a1a;
-              font-variant-numeric: tabular-nums;
-            }
-            .stat-value.highlight {
-              color: #0066cc;
-            }
-
-            /* Info Box */
-            .info-box {
-              border: 1px solid #ddd;
-              padding: 12px 14px;
-              margin-bottom: 12px;
-              page-break-inside: avoid;
-              break-inside: avoid;
-            }
-            .info-box-title {
-              font-size: 11px;
-              font-weight: 700;
-              text-transform: uppercase;
-              letter-spacing: 0.05em;
-              margin-bottom: 8px;
-              padding-bottom: 6px;
-              border-bottom: 1px dashed #ddd;
-            }
-            .info-box ul {
-              margin: 0;
-              padding-left: 16px;
-              font-size: 11px;
-              line-height: 1.6;
-            }
-            .info-box li {
-              margin-bottom: 3px;
-            }
-            .info-box li strong {
-              font-weight: 600;
-            }
-
-            /* Pattern Section */
-            .pattern-summary {
-              border: 1px solid #ddd;
-              padding: 12px 14px;
-              margin-bottom: 12px;
-              background: #fafafa;
-              page-break-inside: avoid;
-              break-inside: avoid;
-            }
-            .pattern-summary-title {
-              font-size: 11px;
-              font-weight: 700;
-              margin-bottom: 6px;
-            }
-            .pattern-summary-subtitle {
-              font-size: 10px;
-              color: #666;
-              margin-bottom: 8px;
-            }
-            .pattern-summary ul {
-              margin: 0;
-              padding-left: 16px;
-              font-size: 11px;
-            }
-            .pattern-summary li {
-              margin-bottom: 2px;
-            }
-            .pattern-empty {
-              font-size: 10px;
-              color: #888;
-              font-style: italic;
-            }
-
-            /* Pattern Grid */
-            .pattern-detail-title {
-              font-size: 10px;
-              text-transform: uppercase;
-              letter-spacing: 0.08em;
-              color: #666;
-              margin: 14px 0 8px 0;
-              font-weight: 600;
-            }
-            .pattern-grid {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 12px;
-            }
-            .pattern-group {
-              border: 1px solid #ddd;
-              padding: 10px 12px;
-              break-inside: avoid;
-            }
-            .pattern-group-title {
-              font-size: 10px;
-              font-weight: 700;
-              text-transform: uppercase;
-              letter-spacing: 0.04em;
-              margin-bottom: 8px;
-              padding-bottom: 4px;
-              border-bottom: 1px solid #eee;
-            }
-            .pattern-row {
-              display: flex;
-              justify-content: space-between;
-              font-size: 10px;
-              padding: 3px 0;
-              border-bottom: 1px dotted #eee;
-            }
-            .pattern-row:last-child {
-              border-bottom: none;
-            }
-            .pattern-row-label {
-              color: #333;
-            }
-            .pattern-row-value {
-              color: #666;
-              font-variant-numeric: tabular-nums;
-            }
-
-            /* Footer */
-            .report-footer {
-              margin-top: 30px;
-              padding-top: 12px;
-              border-top: 1px solid #ddd;
-              font-size: 9px;
-              color: #888;
-              text-align: center;
-            }
-
-            @media print {
-              body {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              .section { break-inside: avoid; }
-              .pattern-group { break-inside: avoid; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="page">
-            <div class="report-header">
-              <div class="report-header-left">
-                <h1>${pdfText.fishingReport}</h1>
-                <div class="subtitle">${pdfText.seaTroutLog}</div>
-              </div>
-              <div class="report-header-right">
-                <div>${pdfText.generated}</div>
-                <div class="date">${dateStr}</div>
-              </div>
-            </div>
-
-            ${sectionsHtml}
-
-            <div class="report-footer">
-              ${pdfText.generatedBy} · ${dateStr}
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-
       const { uri } = await withTimeout(
-        Print.printToFileAsync({
-          html,
-          base64: false,
-        }),
+        Print.printToFileAsync({ html, base64: false }),
         20000,
         "printToFileAsync"
       );
@@ -1100,25 +402,19 @@ export default function SettingsScreen() {
       if (canShare) {
         await Sharing.shareAsync(uri, {
           mimeType: "application/pdf",
-          dialogTitle: "Del eller gem din statistikrapport",
+          dialogTitle: language === "da" ? "Del eller gem din rapport" : "Share or save your report",
         });
       } else {
-        Alert.alert(
-          "PDF genereret",
-          "PDF-rapporten er lavet, men deling er ikke understøttet på denne enhed.\n\nSti:\n" +
-            uri
-        );
+        Alert.alert("PDF", `PDF generated at:\n${uri}`);
       }
     } catch (err: any) {
-      console.error("Fejl ved PDF-generering:", err);
-      Alert.alert(
-        "Fejl",
-        err?.message ?? "Kunne ikke generere statistikrapporten."
-      );
+      console.error("PDF generation error:", err);
+      Alert.alert("Error", err?.message ?? "Could not generate the report.");
     } finally {
       setReportLoading(false);
     }
   };
+
 
   const handleDownloadReport = () => {
     if (reportLoading) return;
@@ -1216,7 +512,7 @@ export default function SettingsScreen() {
               </View>
               <Text style={[styles.label, { flex: 1 }]}>{t("version")}</Text>
               <View style={styles.versionBadge}>
-                <Text style={styles.versionText}>v1.0.0</Text>
+                <Text style={styles.versionText}>v1.0.1</Text>
               </View>
             </View>
             <View style={styles.cardDivider} />
@@ -1277,6 +573,133 @@ export default function SettingsScreen() {
               <View style={styles.languageBadge}>
                 {language === "da" ? <DenmarkFlag size={20} /> : <UKFlag size={20} />}
                 <Text style={styles.languageCode}>{language.toUpperCase()}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Widget */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t("widgetSettings")}</Text>
+          <View style={styles.card}>
+            <Pressable
+              onPress={async () => {
+                const spots = await listSpots();
+                setWidgetSpots(spots);
+                setWidgetSpotPickerVisible(true);
+              }}
+              style={({ pressed }) => [
+                styles.row,
+                { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
+              ]}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="apps" size={18} color={THEME.textSec} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>{t("chooseFavoriteSpot")}</Text>
+                <Text style={styles.value}>
+                  {widgetConfig ? widgetConfig.favoriteSpotName : t("noFavoriteSpot")}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
+            </Pressable>
+            {widgetConfig && (
+              <Pressable
+                onPress={async () => {
+                  await clearWidgetConfig();
+                  setWidgetConfig(null);
+                }}
+                style={({ pressed }) => [
+                  styles.row,
+                  { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
+                ]}
+              >
+                <View style={styles.iconContainer}>
+                  <Ionicons name="close-circle-outline" size={18} color={THEME.textSec} />
+                </View>
+                <Text style={[styles.label, { color: THEME.textSec }]}>{t("widgetRemove")}</Text>
+              </Pressable>
+            )}
+          </View>
+          <Text style={{ fontSize: 12, color: THEME.textTertiary, marginTop: 6, marginLeft: 4 }}>
+            {t("widgetDescription")}
+          </Text>
+        </View>
+
+        {/* Widget spot picker modal */}
+        <Modal visible={widgetSpotPickerVisible} transparent animationType="slide" onRequestClose={() => setWidgetSpotPickerVisible(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalBox}>
+              <Text style={styles.modalTitle}>{t("chooseFavoriteSpot")}</Text>
+              <ScrollView style={{ maxHeight: 400, marginBottom: 12 }}>
+                {widgetSpots.map((spot: any) => (
+                  <Pressable
+                    key={spot.id}
+                    style={({ pressed }) => [
+                      styles.row,
+                      {
+                        backgroundColor: pressed ? "rgba(255,255,255,0.05)" : "transparent",
+                        borderRadius: 12,
+                      },
+                    ]}
+                    onPress={async () => {
+                      const config: WidgetConfig = {
+                        favoriteSpotId: spot.id,
+                        favoriteSpotName: spot.name,
+                        favoriteSpotLat: spot.lat,
+                        favoriteSpotLng: spot.lng,
+                        updatedAt: new Date().toISOString(),
+                      };
+                      await saveWidgetConfig(config);
+                      setWidgetConfig(config);
+                      setWidgetSpotPickerVisible(false);
+                      updateWidgetWeatherData().catch(() => {});
+                    }}
+                  >
+                    <View style={styles.iconContainer}>
+                      <Ionicons name="location" size={18} color={THEME.accent} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>{spot.name}</Text>
+                    </View>
+                    {widgetConfig?.favoriteSpotId === spot.id && (
+                      <Ionicons name="checkmark-circle" size={20} color={THEME.accent} />
+                    )}
+                  </Pressable>
+                ))}
+                {widgetSpots.length === 0 && (
+                  <Text style={styles.modalText}>{t("noSpots")}</Text>
+                )}
+              </ScrollView>
+              <Pressable
+                style={[styles.actionBtn, { marginTop: 4 }]}
+                onPress={() => setWidgetSpotPickerVisible(false)}
+              >
+                <Text style={styles.actionBtnText}>{t("close")}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Support */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t("supportTitle")}</Text>
+          <View style={styles.card}>
+            <Pressable
+              onPress={() => setSupportModalVisible(true)}
+              style={({ pressed }) => [
+                styles.row,
+                { backgroundColor: pressed ? "rgba(255,255,255,0.03)" : "transparent" },
+              ]}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="chatbubble-ellipses" size={18} color={THEME.textSec} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>{t("supportContact")}</Text>
+                <Text style={styles.value}>{t("supportDesc")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={THEME.textSec} />
             </Pressable>
@@ -1449,7 +872,7 @@ export default function SettingsScreen() {
                     Modtagere/databehandlere:
                     {"\n"}• Google/Firebase (Authentication, Firestore, Cloud Messaging).
                     {"\n"}• Google Maps/Place tiles til kortvisning.
-                    {"\n"}• DMI (vejrdata baseret på turens position).
+                    {"\n"}• Open-Meteo (vejrdata baseret på turens position, DMI HARMONIE-model).
                     {"\n"}• Expo/Google for push-notifikationer og app-opdateringer (EAS/OTA).
                     {"\n"}Ingen annonceringsnetværk bruges.
                   </Text>
@@ -1513,7 +936,7 @@ export default function SettingsScreen() {
                     Recipients/Data Processors:
                     {"\n"}• Google/Firebase (Authentication, Firestore, Cloud Messaging).
                     {"\n"}• Google Maps/Place tiles for map display.
-                    {"\n"}• DMI (weather data based on trip position).
+                    {"\n"}• Open-Meteo (weather data based on trip position, DMI HARMONIE model).
                     {"\n"}• Expo/Google for push notifications and app updates (EAS/OTA).
                     {"\n"}No advertising networks are used.
                   </Text>
@@ -1676,58 +1099,102 @@ export default function SettingsScreen() {
       <Modal
         transparent
         visible={reportModalVisible}
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setReportModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>{t("downloadStats")}</Text>
-            <Text style={styles.modalText}>
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setReportModalVisible(false)}
+        >
+          <Pressable
+            style={[styles.modalBox, { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 24 }]}
+            onPress={() => {}}
+          >
+            {/* Drag indicator */}
+            <View style={styles.dragIndicator} />
+
+            {/* Header */}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <Ionicons name="document-text" size={22} color={THEME.accent} />
+              <Text style={styles.modalTitle}>{t("downloadStats")}</Text>
+            </View>
+            <Text style={[styles.modalText, { marginBottom: 16 }]}>
               {t("downloadStatsDesc")}
             </Text>
 
+            {/* This Year */}
             <Pressable
               style={({ pressed }) => [
-                styles.choiceBtn,
-                pressed ? { opacity: 0.9 } : null,
+                styles.reportCard,
+                pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
               ]}
               onPress={() => handleReportChoice("year")}
             >
-              <Text style={styles.choiceBtnText}>
-                {thisYear} – {t("currentYear")}
-              </Text>
+              <View style={[styles.reportCardIcon, { backgroundColor: "#F59E0B25" }]}>
+                <Ionicons name="calendar-outline" size={20} color={THEME.accent} />
+              </View>
+              <View style={styles.reportCardContent}>
+                <Text style={styles.reportCardTitle}>{thisYear}</Text>
+                <Text style={styles.reportCardSubtitle}>{t("currentYear")}</Text>
+              </View>
+              <View style={styles.reportCardChevron}>
+                <Ionicons name="chevron-forward" size={18} color={THEME.textTertiary} />
+              </View>
             </Pressable>
 
+            {/* All Time */}
             <Pressable
               style={({ pressed }) => [
-                styles.choiceBtn,
-                pressed ? { opacity: 0.9 } : null,
+                styles.reportCard,
+                pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
               ]}
               onPress={() => handleReportChoice("all")}
             >
-              <Text style={styles.choiceBtnText}>{t("allTime")}</Text>
+              <View style={[styles.reportCardIcon, { backgroundColor: "#22C55E25" }]}>
+                <Ionicons name="trending-up-outline" size={20} color={THEME.success} />
+              </View>
+              <View style={styles.reportCardContent}>
+                <Text style={styles.reportCardTitle}>{t("allTime")}</Text>
+                <Text style={styles.reportCardSubtitle}>{language === "da" ? "Hele din historik" : "Complete history"}</Text>
+              </View>
+              <View style={styles.reportCardChevron}>
+                <Ionicons name="chevron-forward" size={18} color={THEME.textTertiary} />
+              </View>
             </Pressable>
 
+            {/* Both – Recommended */}
             <Pressable
               style={({ pressed }) => [
-                styles.choiceBtn,
-                pressed ? { opacity: 0.9 } : null,
+                styles.reportCard,
+                styles.reportCardRecommended,
+                pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
               ]}
               onPress={() => handleReportChoice("both")}
             >
-              <Text style={styles.choiceBtnText}>
-                {thisYear} + {t("allTime")}
-              </Text>
+              <View style={styles.reportBadge}>
+                <Text style={styles.reportBadgeText}>★</Text>
+              </View>
+              <View style={[styles.reportCardIcon, { backgroundColor: "#3B82F625" }]}>
+                <Ionicons name="document-text-outline" size={20} color="#3B82F6" />
+              </View>
+              <View style={styles.reportCardContent}>
+                <Text style={styles.reportCardTitle}>{thisYear} + {t("allTime")}</Text>
+                <Text style={styles.reportCardSubtitle}>{language === "da" ? "Anbefalet – komplet rapport" : "Recommended – complete report"}</Text>
+              </View>
+              <View style={styles.reportCardChevron}>
+                <Ionicons name="chevron-forward" size={18} color={THEME.textTertiary} />
+              </View>
             </Pressable>
 
+            {/* Cancel */}
             <Pressable
-              style={styles.modalCancel}
+              style={[styles.modalCancel, { marginTop: 12 }]}
               onPress={() => setReportModalVisible(false)}
             >
               <Text style={styles.modalCancelText}>{t("close")}</Text>
             </Pressable>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* Sprog-valg modal */}
@@ -1909,14 +1376,21 @@ export default function SettingsScreen() {
               <Text style={styles.creditsDevName}>Daniel Lings</Text>
             </View>
 
+            {/* Credits Description */}
+            <Text style={styles.creditsDesc}>
+              {language === "da"
+                ? "Kreditlisten er lavet for at udtrykke taknemmelighed for testere, yderst hjælpsom feedback og app-promovering."
+                : "The credits list expresses gratitude for testers, invaluable feedback, and app promotion."}
+            </Text>
+
             {/* Testers Section */}
             <View style={styles.creditsSection}>
               <View style={styles.creditsSectionHeader}>
                 <Ionicons name="heart" size={16} color={THEME.accent} />
                 <Text style={styles.creditsSectionTitle}>
                   {language === "da"
-                    ? "Tak til de hjælpende medvirkende"
-                    : "Thanks to the helpful contributors"}
+                    ? "Tak til de hidtil hjælpende brugere!"
+                    : "Thanks to the helpful users so far!"}
                 </Text>
               </View>
 
@@ -1930,9 +1404,7 @@ export default function SettingsScreen() {
                     ]}
                   >
                     <View style={styles.testerAvatar}>
-                      <Text style={styles.testerAvatarText}>
-                        {tester.name.charAt(0).toUpperCase()}
-                      </Text>
+                      <Ionicons name="person" size={20} color={THEME.accent} />
                     </View>
                     <View style={styles.testerInfo}>
                       <Text style={styles.testerName}>{tester.name}</Text>
@@ -1956,6 +1428,142 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Support Modal */}
+      <Modal
+        transparent
+        visible={supportModalVisible}
+        animationType="slide"
+        onRequestClose={() => setSupportModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalBox, { maxHeight: "85%" }]}>
+            {supportSent ? (
+              /* ---- Success view ---- */
+              <View style={styles.supportSuccessWrap}>
+                <View style={styles.supportSuccessIcon}>
+                  <Ionicons name="checkmark" size={32} color={THEME.accent} />
+                </View>
+                <Text style={styles.supportSuccessTitle}>{t("supportSentTitle")}</Text>
+                <Text style={styles.supportSuccessText}>{t("supportSentDesc")}</Text>
+                <Pressable
+                  style={styles.supportSuccessBtn}
+                  onPress={() => {
+                    setSupportSent(false);
+                    setSupportModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.supportSuccessBtnText}>{t("ok")}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              /* ---- Form view ---- */
+              <>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <Text style={styles.modalTitle}>{t("supportTitle")}</Text>
+                  <Text style={[styles.modalText, { marginBottom: 20 }]}>
+                    {t("supportModalDesc")}
+                  </Text>
+
+                  {/* Category picker */}
+                  <Text style={styles.supportFieldLabel}>{t("supportCategoryLabel")}</Text>
+                  <Pressable
+                    style={styles.supportPickerBtn}
+                    onPress={() => setSupportCategoryPickerVisible(!supportCategoryPickerVisible)}
+                  >
+                    <Text style={[
+                      styles.supportPickerText,
+                      !supportCategory && { color: THEME.textTertiary },
+                    ]}>
+                      {supportCategory
+                        ? getSupportCategoryLabel(supportCategory)
+                        : t("supportChooseCategory")}
+                    </Text>
+                    <Ionicons
+                      name={supportCategoryPickerVisible ? "chevron-up" : "chevron-down"}
+                      size={18}
+                      color={THEME.textSec}
+                    />
+                  </Pressable>
+
+                  {supportCategoryPickerVisible && (
+                    <View style={styles.supportCategoryList}>
+                      {SUPPORT_CATEGORIES.map((cat) => (
+                        <Pressable
+                          key={cat.key}
+                          style={({ pressed }) => [
+                            styles.supportCategoryRow,
+                            pressed && { backgroundColor: "rgba(255,255,255,0.06)" },
+                            supportCategory === cat.key && { backgroundColor: THEME.accentMuted },
+                          ]}
+                          onPress={() => {
+                            setSupportCategory(cat.key);
+                            setSupportCategoryPickerVisible(false);
+                          }}
+                        >
+                          <Text style={[
+                            styles.supportCategoryRowText,
+                            supportCategory === cat.key && { color: THEME.accent },
+                          ]}>
+                            {language === "da" ? cat.da : cat.en}
+                          </Text>
+                          {supportCategory === cat.key && (
+                            <Ionicons name="checkmark" size={20} color={THEME.accent} />
+                          )}
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Message */}
+                  <Text style={[styles.supportFieldLabel, { marginTop: 16 }]}>
+                    {t("supportMessageLabel")}
+                  </Text>
+                  <TextInput
+                    style={styles.supportTextArea}
+                    value={supportMessage}
+                    onChangeText={setSupportMessage}
+                    placeholder={t("supportMessagePlaceholder")}
+                    placeholderTextColor={THEME.textTertiary}
+                    multiline
+                    numberOfLines={5}
+                    textAlignVertical="top"
+                  />
+                </ScrollView>
+
+                {/* Buttons */}
+                <View style={styles.supportBtnRow}>
+                  <Pressable
+                    style={styles.supportCancelBtn}
+                    onPress={() => {
+                      setSupportModalVisible(false);
+                      setSupportCategory(null);
+                      setSupportMessage("");
+                    }}
+                  >
+                    <Text style={styles.supportCancelText}>{t("cancel")}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.supportSendBtn,
+                      (!supportCategory || !supportMessage.trim()) && { opacity: 0.4 },
+                    ]}
+                    onPress={sendSupport}
+                    disabled={supportSending}
+                  >
+                    {supportSending ? (
+                      <ActivityIndicator size="small" color={THEME.primaryText} />
+                    ) : (
+                      <Text style={styles.supportSendText}>{t("supportSend")}</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -2302,6 +1910,62 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
   },
+  dragIndicator: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: THEME.textTertiary,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  reportCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: THEME.elevated,
+    borderWidth: 1,
+    borderColor: THEME.cardBorder,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 8,
+  },
+  reportCardRecommended: {
+    borderColor: THEME.accentBorder,
+    borderWidth: 1.5,
+  },
+  reportCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportCardContent: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  reportCardTitle: {
+    color: THEME.text,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  reportCardSubtitle: {
+    color: THEME.textSec,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  reportCardChevron: {
+    justifyContent: "center",
+  },
+  reportBadge: {
+    position: "absolute",
+    top: 8,
+    right: 12,
+  },
+  reportBadgeText: {
+    color: THEME.accent,
+    fontSize: 14,
+    fontWeight: "700",
+  },
   confirmInput: {
     marginTop: 10,
     marginBottom: 14,
@@ -2443,6 +2107,14 @@ const styles = StyleSheet.create({
     fontWeight: "300",
     color: THEME.text,
   },
+  creditsDesc: {
+    fontSize: 13,
+    color: THEME.textSec,
+    textAlign: "center",
+    lineHeight: 19,
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
   creditsSection: {
     width: "100%",
     marginBottom: 24,
@@ -2512,5 +2184,131 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: THEME.textSec,
+  },
+
+  // Support Modal Styles
+  supportFieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: THEME.textSec,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  supportPickerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: THEME.inputBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: THEME.cardBorder,
+    padding: 14,
+  },
+  supportPickerText: {
+    fontSize: 15,
+    color: THEME.text,
+  },
+  supportTextArea: {
+    backgroundColor: THEME.inputBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: THEME.cardBorder,
+    padding: 14,
+    fontSize: 15,
+    color: THEME.text,
+    minHeight: 120,
+  },
+  supportSuccessWrap: {
+    alignItems: "center",
+    paddingVertical: 24,
+  },
+  supportSuccessIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: THEME.accentMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  supportSuccessTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: THEME.text,
+    marginBottom: 8,
+  },
+  supportSuccessText: {
+    fontSize: 14,
+    color: THEME.textSec,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+    paddingHorizontal: 12,
+  },
+  supportSuccessBtn: {
+    width: "100%",
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: THEME.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  supportSuccessBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: THEME.primaryText,
+  },
+  supportBtnRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 20,
+  },
+  supportCancelBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: THEME.elevated,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  supportCancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: THEME.textSec,
+  },
+  supportSendBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: THEME.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  supportSendText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: THEME.primaryText,
+  },
+  supportCategoryList: {
+    backgroundColor: THEME.elevated,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: THEME.cardBorder,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  supportCategoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.06)",
+  },
+  supportCategoryRowText: {
+    fontSize: 15,
+    color: THEME.text,
   },
 });

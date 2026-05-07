@@ -32,7 +32,6 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { getTrip, TripRow } from "../../../lib/trips";
 import { useLanguage } from "../../../lib/i18n";
 import { useTheme } from "../../../lib/theme";
-import { ORTO_FORAAR_URL } from "../../../lib/maps";
 
 const { width, height } = Dimensions.get("window");
 
@@ -543,19 +542,13 @@ export default function TripReplayScreen() {
         style={StyleSheet.absoluteFillObject}
         provider={mapProvider}
         initialRegion={initialRegion}
-        mapType="none"
+        mapType="satellite"
         showsUserLocation={false}
         showsCompass={false}
         showsScale={false}
         rotateEnabled={false}
         pitchEnabled={false}
       >
-        {/* Orto map tiles - always on */}
-        <UrlTile
-          urlTemplate={ORTO_FORAAR_URL}
-          maximumZ={21}
-          tileSize={256}
-        />
 
         {/* Remaining path (faded) */}
         {remainingPath.length > 1 && (

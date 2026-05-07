@@ -33,7 +33,7 @@ const TEXT = {
       "Din position (GPS) under fiskture for at tracke dine ture",
       "Billeder du tager af dine fangster",
       "Fangstdata (art, vægt, længde, lokation)",
-      "Vejrdata fra DMI knyttet til dine ture",
+      "Vejrdata fra Open-Meteo knyttet til dine ture",
     ],
     privacyStorage:
       "Dine data gemmes sikkert i Firebase og synkroniseres på tværs af dine enheder. Vi deler ikke dine data med tredjepart.",
@@ -49,7 +49,7 @@ const TEXT = {
 
     slide2Title: "Track dine ture",
     slide2Text:
-      "Start GPS-tracking når du fisker. Se din rute, distance og få automatisk vejrdata fra DMI knyttet til turen.",
+      "Start GPS-tracking når du fisker. Se din rute, distance og få automatisk vejrdata fra Open-Meteo (DMI's HARMONIE-model) knyttet til turen.",
 
     slide3Title: "Log dine fangster",
     slide3Text:
@@ -73,7 +73,7 @@ const TEXT = {
       "Your location (GPS) during fishing trips to track your routes",
       "Photos you take of your catches",
       "Catch data (species, weight, length, location)",
-      "Weather data from DMI linked to your trips",
+      "Weather data from Open-Meteo linked to your trips",
     ],
     privacyStorage:
       "Your data is securely stored in Firebase and synced across your devices. We do not share your data with third parties.",
@@ -89,7 +89,7 @@ const TEXT = {
 
     slide2Title: "Track your trips",
     slide2Text:
-      "Start GPS tracking when fishing. View your route, distance and get automatic weather data from DMI linked to your trip.",
+      "Start GPS tracking when fishing. View your route, distance and get automatic weather data from Open-Meteo (DMI HARMONIE model) linked to your trip.",
 
     slide3Title: "Log your catches",
     slide3Text:

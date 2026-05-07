@@ -18,6 +18,8 @@ export type SaveTripPayload = {
   meta_json: string | null;
   needs_dmi?: boolean;
   catch_marks_ms?: number[];
+  catch_lengths?: { ts: number; length_cm: number }[];
+  catch_conditions?: { ts: number; condition: { color?: string; seaLice?: string; released?: boolean } }[];
   spot_id?: string | null;
   spot_name?: string | null;
   spot_lat?: number | null;

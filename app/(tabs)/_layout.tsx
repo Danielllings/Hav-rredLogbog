@@ -40,6 +40,7 @@ export default function TabsLayout() {
       <StatusBar barStyle="light-content" backgroundColor={BASE.bg} />
 
       <Tabs
+        sceneContainerStyle={{ backgroundColor: BASE.bg }}
         screenOptions={({ route }) => {
           const isSpotWeather = route.name === "spot-weather";
 
@@ -143,7 +144,7 @@ function CustomBar({ state, navigation }: any) {
         style={{ flex: 1, alignItems: "center" }}
       >
         <MaterialCommunityIcons
-          name={isFocused("catches") ? "image-multiple" : "image-multiple-outline"}
+          name={isFocused("catches") ? "trophy" : "trophy-outline"}
           size={22}
           color={isFocused("catches") ? theme.primary : BASE.textSec}
         />
@@ -166,7 +167,7 @@ function CustomBar({ state, navigation }: any) {
         style={{ flex: 1, alignItems: "center" }}
       >
         <MaterialCommunityIcons
-          name={isFocused("new-catch") ? "fish" : "fish"}
+          name={isFocused("new-catch") ? "clipboard-plus" : "clipboard-plus-outline"}
           size={22}
           color={isFocused("new-catch") ? theme.primary : BASE.textSec}
         />
@@ -204,7 +205,7 @@ function CustomBar({ state, navigation }: any) {
         }}
       >
         <MaterialCommunityIcons
-          name="compass"
+          name="crosshairs-gps"
           size={26}
           color={BASE.midBtnIcon}
         />
@@ -216,7 +217,7 @@ function CustomBar({ state, navigation }: any) {
         style={{ flex: 1, alignItems: "center" }}
       >
         <MaterialCommunityIcons
-          name={isFocused("spot-weather") ? "weather-partly-cloudy" : "weather-partly-cloudy"}
+          name={isFocused("spot-weather") ? "map-marker-radius" : "map-marker-radius-outline"}
           size={22}
           color={isFocused("spot-weather") ? theme.primary : BASE.textSec}
         />
@@ -239,7 +240,7 @@ function CustomBar({ state, navigation }: any) {
         style={{ flex: 1, alignItems: "center" }}
       >
         <MaterialCommunityIcons
-          name={isFocused("statistics") ? "chart-bar" : "chart-bar"}
+          name={isFocused("statistics") ? "chart-box" : "chart-box-outline"}
           size={22}
           color={isFocused("statistics") ? theme.primary : BASE.textSec}
         />

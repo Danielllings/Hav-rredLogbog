@@ -1,9 +1,12 @@
 // lib/firestore.ts
 import { collection, type CollectionReference, type DocumentData } from "firebase/firestore";
+import { Platform } from "react-native";
 import { auth, db } from "./firebase";
 
 /** Aktuel bruger-ID (kræver at brugeren er logget ind) */
 export function getUserId(): string {
+  // Web preview: return mock UID so screens can render without auth
+  if (Platform.OS === "web") return "web-preview-user";
   const user = auth.currentUser;
   if (!user) throw new Error("Bruger er ikke logget ind. Kan ikke tilgå database.");
   return user.uid;

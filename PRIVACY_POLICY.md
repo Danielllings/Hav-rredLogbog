@@ -1,6 +1,6 @@
 # Privatlivspolitik for Havørred Logbog
 
-**Sidst opdateret:** 10. februar 2026
+**Sidst opdateret:** 25. april 2026
 
 ## Introduktion
 
@@ -10,6 +10,7 @@ Denne privatlivspolitik beskriver, hvordan Havørred Logbog ("appen", "vi", "os"
 
 Havørred Logbog
 Kontakt: daniellings@gmail.com
+Hjemmeside: [havorredlogbog.dk](https://havorredlogbog.dk)
 
 ## Hvilke data indsamler vi?
 
@@ -27,8 +28,12 @@ Kontakt: daniellings@gmail.com
 - **Turdata** - rute, varighed, lokationer
 
 ### Vejrdata
-- Vi henter vejrdata fra DMI (Danmarks Meteorologiske Institut) baseret på din position
+- Vi henter vejrdata fra Open-Meteo (baseret på DMI's HARMONIE-model) ud fra din position
 - Disse data gemmes sammen med dine fangster og ture
+
+### Supporthenvendelser
+- Når du bruger support-formularen i appen, sendes din **e-mailadresse** (fra din login-konto) og din **besked** til vores support-system via havorredlogbog.dk
+- Disse data bruges udelukkende til at besvare din henvendelse
 
 ## Hvordan bruger vi dine data?
 
@@ -37,6 +42,7 @@ Vi bruger dine data til at:
 - Vise vejrforhold på fangst-tidspunktet
 - Vise dine ture på kort
 - Synkronisere dine data på tværs af enheder
+- Besvare supporthenvendelser
 
 ## Datadeling
 
@@ -45,7 +51,7 @@ Vi bruger dine data til at:
 Vi bruger følgende tjenester til at drifte appen:
 - **Firebase (Google)** - database, brugerlogin og billedlagring
 - **Google Maps** - kortvisning
-- **DMI API** - vejrdata
+- **Open-Meteo API** - vejrdata (DMI HARMONIE-model)
 
 Disse tjenester har deres egne privatlivspolitikker.
 
@@ -63,7 +69,15 @@ Du har ret til at:
 - **Slette** din konto og alle data
 - **Eksportere** dine data
 
-Kontakt os på daniellings@gmail.com for at udøve disse rettigheder.
+Kontakt os på daniellings@gmail.com eller besøg [havorredlogbog.dk](https://havorredlogbog.dk) for at udøve disse rettigheder.
+
+## Kontosletning
+
+Du kan til enhver tid slette din konto og alle tilknyttede data:
+- **Via appen** - gå til Indstillinger og tryk på "Slet konto"
+- **Via hjemmesiden** - besøg [havorredlogbog.dk](https://havorredlogbog.dk) for at anmode om kontosletning
+
+Når du sletter din konto, fjernes alle dine personlige oplysninger, fangster, ture, spots og billeder permanent. Denne handling kan ikke fortrydes.
 
 ## Datasikkerhed
 
@@ -84,16 +98,23 @@ Vi kan opdatere denne politik. Væsentlige ændringer vil blive meddelt i appen.
 
 Spørgsmål om denne privatlivspolitik kan sendes til:
 **E-mail:** daniellings@gmail.com
+**Hjemmeside:** [havorredlogbog.dk](https://havorredlogbog.dk)
 
 ---
 
 # Privacy Policy for Havørred Logbog (English)
 
-**Last updated:** February 10, 2026
+**Last updated:** April 25, 2026
 
 ## Introduction
 
 This privacy policy describes how Havørred Logbog ("the app", "we", "us") collects, uses, and protects your personal information.
+
+## Data Controller
+
+Havørred Logbog
+Contact: daniellings@gmail.com
+Website: [havorredlogbog.dk](https://havorredlogbog.dk)
 
 ## What data do we collect?
 
@@ -111,8 +132,12 @@ This privacy policy describes how Havørred Logbog ("the app", "we", "us") colle
 - **Trip data** - route, duration, locations
 
 ### Weather Data
-- We fetch weather data from DMI (Danish Meteorological Institute) based on your position
+- We fetch weather data from Open-Meteo (based on DMI's HARMONIE model) based on your position
 - This data is stored with your catches and trips
+
+### Support Requests
+- When you use the support form in the app, your **email address** (from your login account) and your **message** are sent to our support system via havorredlogbog.dk
+- This data is used solely to respond to your inquiry
 
 ## How do we use your data?
 
@@ -121,6 +146,7 @@ We use your data to:
 - Show weather conditions at the time of catch
 - Display your trips on maps
 - Synchronize your data across devices
+- Respond to support requests
 
 ## Data Sharing
 
@@ -129,7 +155,7 @@ We use your data to:
 We use the following services to operate the app:
 - **Firebase (Google)** - database, user login, and image storage
 - **Google Maps** - map display
-- **DMI API** - weather data
+- **Open-Meteo API** - weather data (DMI HARMONIE model)
 
 These services have their own privacy policies.
 
@@ -147,7 +173,15 @@ You have the right to:
 - **Delete** your account and all data
 - **Export** your data
 
-Contact us at daniellings@gmail.com to exercise these rights.
+Contact us at daniellings@gmail.com or visit [havorredlogbog.dk](https://havorredlogbog.dk) to exercise these rights.
+
+## Account Deletion
+
+You can delete your account and all associated data at any time:
+- **Via the app** - go to Settings and tap "Delete account"
+- **Via the website** - visit [havorredlogbog.dk](https://havorredlogbog.dk) to request account deletion
+
+When you delete your account, all your personal information, catches, trips, spots, and photos will be permanently removed. This action cannot be undone.
 
 ## Data Security
 
@@ -168,3 +202,4 @@ We may update this policy. Significant changes will be communicated in the app.
 
 Questions about this privacy policy can be sent to:
 **Email:** daniellings@gmail.com
+**Website:** [havorredlogbog.dk](https://havorredlogbog.dk)

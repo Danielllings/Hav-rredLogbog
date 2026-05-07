@@ -25,11 +25,14 @@ const firebaseMessagingSenderId = readKey(["FIREBASE_MESSAGING_SENDER_ID", "EXPO
 const firebaseAppIdIos = readKey(["FIREBASE_APP_ID_IOS", "FIREBASE_APP_ID", "EXPO_PUBLIC_FIREBASE_APP_ID"]);
 const firebaseAppIdAndroid = readKey(["FIREBASE_APP_ID_ANDROID", "FIREBASE_APP_ID", "EXPO_PUBLIC_FIREBASE_APP_ID"]);
 
-// DMI/Backend URLs
+// DMI/Backend URLs (Cloud Function proxies - fallback)
 const dmiClimateUrl = readKey(["DMI_CLIMATE_URL", "EXPO_PUBLIC_DMI_CLIMATE_URL"]);
 const dmiEdrUrl = readKey(["DMI_EDR_URL", "EXPO_PUBLIC_DMI_EDR_URL"]);
 const dmiOceanUrl = readKey(["DMI_OCEAN_URL", "EXPO_PUBLIC_DMI_OCEAN_URL"]);
 const stacUrl = readKey(["STAC_URL", "EXPO_PUBLIC_STAC_URL"]);
+
+// NOTE: DMI API keys no longer needed (removed Dec 2, 2025)
+// Direct calls go to opendataapi.dmi.dk without authentication
 
 const missingFirebaseEnvVars = [
   ["FIREBASE_API_KEY", firebaseApiKey],
@@ -55,9 +58,10 @@ const config: ExpoConfig = {
 
   scheme: "havoerredlogbog",
 
-  version: "1.0.0",
+  version: "1.1.0",
   orientation: "portrait",
-  userInterfaceStyle: "light",
+  userInterfaceStyle: "dark",
+  backgroundColor: "#121212",
 
   // GLOBALT APP-IKON (bruges på iOS, Android og web som udgangspunkt)
   icon: "./assets/icon.png",
@@ -66,7 +70,7 @@ const config: ExpoConfig = {
   splash: {
     image: "./assets/splash.png",
     resizeMode: "contain",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#121212",
   },
 
   // NOTIFIKATIONERS UDSEENDE
@@ -76,6 +80,11 @@ const config: ExpoConfig = {
     color: "#121212",
     androidMode: "default",
     androidCollapsedTitle: "Logbog",
+  },
+
+  locales: {
+    da: "./locales/da.json",
+    en: "./locales/en.json",
   },
 
   assetBundlePatterns: ["**/*"],
@@ -124,6 +133,12 @@ const config: ExpoConfig = {
         "Appen bruger din position i baggrunden mens en tur er aktiv.",
       NSLocationAlwaysUsageDescription:
          "Appen bruger din position i baggrunden mens en tur er aktiv.",
+      NSPhotoLibraryUsageDescription:
+        "Appen bruger adgang til dit fotobibliotek, så du kan vælge billeder af dine fangster og vedhæfte dem til din logbog. For eksempel kan du tilføje et billede af en havørred du har fanget.",
+      NSCameraUsageDescription:
+        "Appen bruger kameraet, så du kan tage billeder af dine fangster direkte og vedhæfte dem til din logbog.",
+      NSMicrophoneUsageDescription:
+        "Appen kan bruge mikrofonen i forbindelse med kameraet ved videooptagelse.",
       UIBackgroundModes: ["location"],
       ITSAppUsesNonExemptEncryption: false,
     },
@@ -161,7 +176,23 @@ const config: ExpoConfig = {
     favicon: "./assets/favicon.png",
   },
 
-  plugins: ["expo-router", "expo-notifications"],
+  plugins: [
+    "expo-router",
+    "expo-notifications",
+    [
+      "expo-system-ui",
+      { backgroundColor: "#121212" },
+    ],
+    [
+      "expo-image-picker",
+      {
+        photosPermission: "Appen bruger adgang til dit fotobibliotek, så du kan vælge billeder af dine fangster og vedhæfte dem til din logbog. For eksempel kan du tilføje et billede af en havørred du har fanget.",
+        cameraPermission: "Appen bruger kameraet, så du kan tage billeder af dine fangster direkte og vedhæfte dem til din logbog.",
+        microphonePermission: "Appen kan bruge mikrofonen i forbindelse med kameraet ved videooptagelse.",
+      },
+    ],
+    "./plugins/withDisableExtraTranslationLint",
+  ],
 };
 
 export default config;

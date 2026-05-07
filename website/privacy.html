@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="da" data-lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privatlivspolitik — Havørred Logbog</title>
+  <meta name="theme-color" content="#0D0D0F">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-body">
+  <!-- Nav -->
+  <nav class="nav scrolled" id="nav">
+    <div class="container nav-inner">
+      <a href="/" class="nav-brand">
+        <img src="assets/icon.png" alt="Havørred Logbog" class="nav-icon">
+        <span>Havørred Logbog</span>
+      </a>
+      <div class="nav-links">
+        <button class="lang-toggle" id="langToggle" aria-label="Skift sprog">
+          <span class="lang-flag" id="langFlag">🇩🇰</span>
+          <span class="lang-label" id="langLabel">DA</span>
+        </button>
+        <a href="/#download" class="nav-cta" data-da="Download" data-en="Download">Download</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="page-content">
+    <div class="container">
+      <a href="/" class="back-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        <span data-da="Tilbage" data-en="Back">Tilbage</span>
+      </a>
+
+      <div class="page-card">
+        <div class="page-header">
+          <div class="page-icon-wrap">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h1 data-da="Privatlivspolitik" data-en="Privacy Policy">Privatlivspolitik</h1>
+          <p class="page-date" data-da="Sidst opdateret: 5. maj 2026 · Version 1.0.0" data-en="Last updated: May 5, 2026 · Version 1.0.0">Sidst opdateret: 5. maj 2026 · Version 1.0.0</p>
+        </div>
+
+        <!-- DA content -->
+        <div class="lang-content" data-show-lang="da">
+          <section class="policy-section">
+            <h2>1. Introduktion</h2>
+            <p>Denne privatlivspolitik beskriver, hvordan Havørred Logbog ("appen", "vi", "os") indsamler, bruger og beskytter dine personlige oplysninger. Appen er en fiskerilogbog til havørredfiskere, der tracker ture med GPS, logger fangster og viser vejr- og havdata.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>2. Dataansvarlig</h2>
+            <div class="info-card">
+              <p><strong>Havørred Logbog</strong></p>
+              <p>Kontakt: <a href="mailto:daniellings@gmail.com">daniellings@gmail.com</a></p>
+              <p>Support: <a href="mailto:support@havorredlogbog.dk">support@havorredlogbog.dk</a></p>
+              <p>Hjemmeside: havorredlogbog.dk</p>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>3. Hvilke data indsamler vi</h2>
+            <div class="data-grid">
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div>
+                  <strong>Kontooplysninger</strong>
+                  <p>E-mailadresse bruges til login og kontogendannelse via Firebase Authentication. Adgangskode håndteres af Firebase Auth (vi har ikke adgang til din adgangskode i klartekst).</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                </div>
+                <div>
+                  <strong>Lokationsdata</strong>
+                  <p>GPS-positioner optages KUN under aktive fisketure, og kun når du selv starter tracking. Baggrundslokation bruges kun mens en tur er aktiv. GPS-koordinater optages ca. hvert par sekunder under aktive ture.</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </div>
+                <div>
+                  <strong>Brugerindhold</strong>
+                  <p>Fotos (fangstfotos + agn-billeder), fangstdata (vægt, længde, tidspunkt, agn/flue, noter, GPS-koordinat), turdata (GPS-rute, varighed, distance, antal fisk, hændelser) og spots (navn, koordinater, kystretning, noter).</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                </div>
+                <div>
+                  <strong>Vejrdata</strong>
+                  <p>Hentes automatisk fra Open-Meteo API (DMI HARMONIE 2km model) ud fra din position. Data inkluderer: temperatur, vind, vindstød, fugtighed, tryk, skydække, nedbør, bølger, vandtemperatur, vandstand, havstrøm og salinitet.</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </div>
+                <div>
+                  <strong>Push-notifikationer</strong>
+                  <p>Enheds push-token (Expo) gemmes for at sende smarte vejr-alerts. Enhedsoplysninger (platform, enheds-ID, enhedsnavn) og fangstprofil-data bruges til at matche vejrforhold mod dine historiske fangster.</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <div>
+                  <strong>Supporthenvendelser</strong>
+                  <p>Når du bruger support-formularen, sendes din e-mailadresse og din besked til vores support-system. Disse data bruges udelukkende til at besvare din henvendelse.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>4. Enhedstilladelser</h2>
+            <p>Alle tilladelser er valgfrie. Appen fungerer uden dem, men visse funktioner kræver de relevante tilladelser.</p>
+            <ul class="policy-list">
+              <li><strong>Lokation (forgrund + baggrund)</strong> — Vise din position på kortet og tracke fisketur. Baggrund kun under aktiv tur.</li>
+              <li><strong>Kamera</strong> — Tag billeder af fangster direkte fra appen</li>
+              <li><strong>Fotobibliotek</strong> — Vælg eksisterende billeder af fangster</li>
+              <li><strong>Mikrofon</strong> — Valgfrit, kun ved videooptagelse med kamera (iOS)</li>
+              <li><strong>Push-notifikationer</strong> — Modtag smarte vejr-alerts baseret på fangstmønster</li>
+            </ul>
+          </section>
+
+          <section class="policy-section">
+            <h2>5. Hvordan bruger vi data</h2>
+            <ul class="policy-list">
+              <li>Logge og vise dine fangster og fisketure</li>
+              <li>Vise vejrforhold på fangsttidspunktet</li>
+              <li>Vise dine ture på kort</li>
+              <li>Synkronisere dine data på tværs af enheder</li>
+              <li>Analysere dit fiskemønster for at sende relevante vejr-alerts</li>
+              <li>Generere statistik og personlige rekorder</li>
+              <li>Besvare supporthenvendelser</li>
+            </ul>
+          </section>
+
+          <section class="policy-section">
+            <h2>6. Tredjepartstjenester</h2>
+            <div class="info-card info-card-success">
+              <p><strong>Vi sælger eller deler ALDRIG dine data med tredjepart.</strong></p>
+            </div>
+            <p>Vi bruger følgende tjenester til at drifte appen:</p>
+            <ul class="policy-list">
+              <li><strong>Firebase Authentication (Google)</strong> — Brugerlogin</li>
+              <li><strong>Firebase Firestore (Google)</strong> — Database for brugerdata</li>
+              <li><strong>Firebase Storage (Google)</strong> — Billedlagring</li>
+              <li><strong>Firebase Cloud Functions (Google)</strong> — Vejr-proxy og alerts</li>
+              <li><strong>Google Maps</strong> — Kortvisning</li>
+              <li><strong>Open-Meteo API</strong> — Vejrdata (DMI HARMONIE-model)</li>
+              <li><strong>DMI API</strong> — Salinitet og stationsdata</li>
+              <li><strong>Expo Push Service</strong> — Push-notifikationer</li>
+            </ul>
+            <p>Alle disse tjenester har deres egne privatlivspolitikker. Firebase-data opbevares i EU (europe-west1).</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>7. Dataopbevaring</h2>
+            <p>Dine data gemmes sikkert i Firebase (Google Cloud) i EU (europe-west1). Data opbevares så længe du har en aktiv konto. Du kan til enhver tid slette din konto og alle tilhørende data.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>8. Datasikkerhed</h2>
+            <ul class="policy-list">
+              <li>Krypteret forbindelse (HTTPS/TLS) for al datatrafik</li>
+              <li>Sikker autentificering via Firebase Auth</li>
+              <li>Adgangskontrol til database (bruger kan kun tilgå egne data)</li>
+              <li>Adgangskoder håndteres af Firebase — vi har ikke adgang til dem i klartekst</li>
+            </ul>
+          </section>
+
+          <section class="policy-section">
+            <h2>9. Analyse og sporing</h2>
+            <div class="info-card info-card-success">
+              <p><strong>Vi bruger INGEN analytics-, sporing- eller crash-rapporteringsværktøjer.</strong> Der er ingen Sentry, Crashlytics, Mixpanel, PostHog eller lignende tjenester integreret i appen.</p>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>10. Dine rettigheder (GDPR)</h2>
+            <p>Du har ret til at:</p>
+            <ul class="policy-list">
+              <li>Få adgang til dine data</li>
+              <li>Rette forkerte oplysninger</li>
+              <li>Slette din konto og alle data</li>
+              <li>Eksportere dine data (PDF-rapport tilgængelig i appen)</li>
+              <li>Trække samtykke tilbage for specifikke tilladelser via enhedens indstillinger</li>
+            </ul>
+          </section>
+
+          <section class="policy-section">
+            <h2>11. Kontosletning</h2>
+            <p>Du kan slette din konto via appen (Indstillinger → "Slet konto") eller via <a href="delete-account.html">hjemmesiden</a>. Når du sletter din konto, fjernes alle dine personlige oplysninger permanent:</p>
+            <ul class="policy-list">
+              <li>Fangster og tilhørende billeder</li>
+              <li>Ture og GPS-ruter</li>
+              <li>Gemte spots</li>
+              <li>Push-tokens og alert-historik</li>
+              <li>Fangstprofil og vejr-alert indstillinger</li>
+            </ul>
+            <div class="info-card">
+              <p><strong>Denne handling kan ikke fortrydes.</strong></p>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>12. Børn</h2>
+            <p>Appen er ikke rettet mod børn under 13 år. Vi indsamler ikke bevidst data fra børn.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>13. Ændringer</h2>
+            <p>Vi kan opdatere denne politik. Væsentlige ændringer vil blive meddelt i appen.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>14. Hjemmesiden (havorredlogbog.dk)</h2>
+            <p>Hjemmesiden er en informationsside for appen og indsamler kun data i følgende tilfælde:</p>
+            <ul class="policy-list">
+              <li><strong>Kontaktformular</strong> — Når du indsender en besked via kontaktformularen, indsamler vi din e-mailadresse og besked udelukkende for at besvare din henvendelse.</li>
+              <li><strong>Google Fonts</strong> — Hjemmesiden indlæser skrifttyper fra Google Fonts, hvilket kan medføre at din IP-adresse sendes til Google.</li>
+            </ul>
+            <p>Hjemmesiden bruger ingen cookies, analytics eller sporingsteknologier.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>15. Kontakt</h2>
+            <div class="info-card">
+              <p>Har du spørgsmål om dine data?</p>
+              <p>E-mail: <a href="mailto:daniellings@gmail.com">daniellings@gmail.com</a></p>
+              <p>Support: <a href="mailto:support@havorredlogbog.dk">support@havorredlogbog.dk</a></p>
+            </div>
+          </section>
+        </div>
+
+        <!-- EN content -->
+        <div class="lang-content" data-show-lang="en" style="display:none;">
+          <section class="policy-section">
+            <h2>1. Introduction</h2>
+            <p>This privacy policy describes how Havørred Logbog ("the app", "we", "us") collects, uses and protects your personal information. The app is a fishing log for sea trout anglers that tracks trips with GPS, logs catches and displays weather and sea data.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>2. Data Controller</h2>
+            <div class="info-card">
+              <p><strong>Havørred Logbog (Sea Trout Log)</strong></p>
+              <p>Contact: <a href="mailto:daniellings@gmail.com">daniellings@gmail.com</a></p>
+              <p>Support: <a href="mailto:support@havorredlogbog.dk">support@havorredlogbog.dk</a></p>
+              <p>Website: havorredlogbog.dk</p>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>3. What data do we collect</h2>
+            <div class="data-grid">
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div>
+                  <strong>Account information</strong>
+                  <p>Email address used for login and account recovery via Firebase Authentication. Password is handled by Firebase Auth (we do not have access to your password in plain text).</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                </div>
+                <div>
+                  <strong>Location data</strong>
+                  <p>GPS positions are recorded ONLY during active fishing trips, and only when you manually start tracking. Background location is only used while a trip is active. GPS coordinates are recorded approximately every few seconds during active trips.</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </div>
+                <div>
+                  <strong>User content</strong>
+                  <p>Photos (catch photos + bait images), catch data (weight, length, time, bait/fly, notes, GPS coordinate), trip data (GPS route, duration, distance, fish count, events) and spots (name, coordinates, coast direction, notes).</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                </div>
+                <div>
+                  <strong>Weather data</strong>
+                  <p>Fetched automatically from Open-Meteo API (DMI HARMONIE 2km model) based on your position. Data includes: temperature, wind, gusts, humidity, pressure, cloud cover, precipitation, waves, water temperature, water level, sea current and salinity.</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </div>
+                <div>
+                  <strong>Push notifications</strong>
+                  <p>Device push token (Expo) is stored to send smart weather alerts. Device information (platform, device ID, device name) and catch profile data are used to match weather conditions against your historical catches.</p>
+                </div>
+              </div>
+              <div class="data-item">
+                <div class="data-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <div>
+                  <strong>Support enquiries</strong>
+                  <p>When you use the support form, your email address and message are sent to our support system. This data is used solely to respond to your enquiry.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>4. Device permissions</h2>
+            <p>All permissions are optional. The app works without them, but certain features require the relevant permissions.</p>
+            <ul class="policy-list">
+              <li><strong>Location (foreground + background)</strong> — Show your position on the map and track fishing trips. Background only during active trips.</li>
+              <li><strong>Camera</strong> — Take photos of catches directly from the app</li>
+              <li><strong>Photo library</strong> — Select existing photos of catches</li>
+              <li><strong>Microphone</strong> — Optional, only for video recording with camera (iOS)</li>
+              <li><strong>Push notifications</strong> — Receive smart weather alerts based on catch patterns</li>
+            </ul>
+          </section>
+
+          <section class="policy-section">
+            <h2>5. How we use data</h2>
+            <ul class="policy-list">
+              <li>Log and display your catches and fishing trips</li>
+              <li>Show weather conditions at the time of catch</li>
+              <li>Display your trips on maps</li>
+              <li>Sync your data across devices</li>
+              <li>Analyze your fishing patterns to send relevant weather alerts</li>
+              <li>Generate statistics and personal records</li>
+              <li>Respond to support enquiries</li>
+            </ul>
+          </section>
+
+          <section class="policy-section">
+            <h2>6. Third-party services</h2>
+            <div class="info-card info-card-success">
+              <p><strong>We NEVER sell or share your data with third parties.</strong></p>
+            </div>
+            <p>We use the following services to operate the app:</p>
+            <ul class="policy-list">
+              <li><strong>Firebase Authentication (Google)</strong> — User login</li>
+              <li><strong>Firebase Firestore (Google)</strong> — User data database</li>
+              <li><strong>Firebase Storage (Google)</strong> — Image storage</li>
+              <li><strong>Firebase Cloud Functions (Google)</strong> — Weather proxy and alerts</li>
+              <li><strong>Google Maps</strong> — Map display</li>
+              <li><strong>Open-Meteo API</strong> — Weather data (DMI HARMONIE model)</li>
+              <li><strong>DMI API</strong> — Salinity and station data</li>
+              <li><strong>Expo Push Service</strong> — Push notifications</li>
+            </ul>
+            <p>All these services have their own privacy policies. Firebase data is stored in the EU (europe-west1).</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>7. Data storage</h2>
+            <p>Your data is stored securely in Firebase (Google Cloud) in the EU (europe-west1). Data is retained as long as you have an active account. You can delete your account and all associated data at any time.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>8. Data security</h2>
+            <ul class="policy-list">
+              <li>Encrypted connection (HTTPS/TLS) for all data traffic</li>
+              <li>Secure authentication via Firebase Auth</li>
+              <li>Database access control (users can only access their own data)</li>
+              <li>Passwords are handled by Firebase — we do not have access to them in plain text</li>
+            </ul>
+          </section>
+
+          <section class="policy-section">
+            <h2>9. Analytics and tracking</h2>
+            <div class="info-card info-card-success">
+              <p><strong>We use NO analytics, tracking or crash reporting tools.</strong> There is no Sentry, Crashlytics, Mixpanel, PostHog or similar services integrated in the app.</p>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>10. Your rights (GDPR)</h2>
+            <p>You have the right to:</p>
+            <ul class="policy-list">
+              <li>Access your data</li>
+              <li>Correct inaccurate information</li>
+              <li>Delete your account and all data</li>
+              <li>Export your data (PDF report available in the app)</li>
+              <li>Withdraw consent for specific permissions via device settings</li>
+            </ul>
+          </section>
+
+          <section class="policy-section">
+            <h2>11. Account deletion</h2>
+            <p>You can delete your account via the app (Settings → "Delete account") or via the <a href="delete-account.html">website</a>. When you delete your account, all your personal data is permanently removed:</p>
+            <ul class="policy-list">
+              <li>Catches and associated photos</li>
+              <li>Trips and GPS routes</li>
+              <li>Saved spots</li>
+              <li>Push tokens and alert history</li>
+              <li>Catch profile and weather alert settings</li>
+            </ul>
+            <div class="info-card">
+              <p><strong>This action cannot be undone.</strong></p>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>12. Children</h2>
+            <p>This app is not directed at children under 13 years of age. We do not knowingly collect data from children.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>13. Changes</h2>
+            <p>We may update this policy. Significant changes will be communicated in the app.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>14. Website (havorredlogbog.dk)</h2>
+            <p>The website is an information page for the app and only collects data in the following cases:</p>
+            <ul class="policy-list">
+              <li><strong>Contact form</strong> — When you submit a message via the contact form, we collect your email address and message solely to respond to your enquiry.</li>
+              <li><strong>Google Fonts</strong> — The website loads fonts from Google Fonts, which may cause your IP address to be sent to Google.</li>
+            </ul>
+            <p>The website does not use cookies, analytics or tracking technologies.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2>15. Contact</h2>
+            <div class="info-card">
+              <p>Questions about your data?</p>
+              <p>Email: <a href="mailto:daniellings@gmail.com">daniellings@gmail.com</a></p>
+              <p>Support: <a href="mailto:support@havorredlogbog.dk">support@havorredlogbog.dk</a></p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="assets/icon.png" alt="" class="footer-icon">
+        <span>Havørred Logbog</span>
+      </div>
+      <nav class="footer-links">
+        <a href="privacy.html" data-da="Privatlivspolitik" data-en="Privacy Policy">Privatlivspolitik</a>
+        <a href="delete-account.html" data-da="Slet konto" data-en="Delete Account">Slet konto</a>
+        <a href="contact.html" data-da="Kontakt" data-en="Contact">Kontakt</a>
+      </nav>
+      <p class="footer-copy">&copy; 2026 Havørred Logbog</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

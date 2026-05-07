@@ -15,6 +15,7 @@ import Animated, {
   interpolate,
 } from "react-native-reanimated";
 import { APPLE } from "../../constants/appleTheme";
+import { useLanguage } from "../../lib/i18n";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -31,6 +32,7 @@ export function CatchRateHero({
   totalTrips,
   size = 200,
 }: CatchRateHeroProps) {
+  const { t } = useLanguage();
   const strokeWidth = 12;
   const radius = (size - strokeWidth * 2) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -101,19 +103,19 @@ export function CatchRateHero({
           <Text style={styles.rateValue}>{Math.round(rate)}</Text>
           <Text style={styles.ratePercent}>%</Text>
         </View>
-        <Text style={styles.rateLabel}>Fangstrate</Text>
+        <Text style={styles.rateLabel}>{t("catchRate")}</Text>
       </View>
 
       {/* Stats under ringen */}
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{totalFish}</Text>
-          <Text style={styles.statLabel}>fisk</Text>
+          <Text style={styles.statLabel}>{t("fish")}</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{totalTrips}</Text>
-          <Text style={styles.statLabel}>ture</Text>
+          <Text style={styles.statLabel}>{t("trips")}</Text>
         </View>
       </View>
     </View>

@@ -1,0 +1,9 @@
+{
+  "NSLocationWhenInUseUsageDescription": "The app uses your location to track your fishing trips and show the route.",
+  "NSLocationAlwaysAndWhenInUseUsageDescription": "The app uses your location in the background while a trip is active.",
+  "NSLocationAlwaysUsageDescription": "The app uses your location in the background while a trip is active.",
+  "NSPhotoLibraryUsageDescription": "The app uses access to your photo library so you can select pictures of your catches and attach them to your logbook. For example, you can add a picture of a sea trout you have caught.",
+  "NSCameraUsageDescription": "The app uses the camera so you can take pictures of your catches directly and attach them to your logbook.",
+  "NSMicrophoneUsageDescription": "The app may use the microphone in connection with the camera for video recording.",
+  "CFBundleDisplayName": "Logbog"
+}

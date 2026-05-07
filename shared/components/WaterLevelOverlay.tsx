@@ -5,9 +5,9 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { StyleSheet, View, Text, Pressable, ActivityIndicator } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import Constants from "expo-constants";
 import { ForecastSlider, getForecastValue } from "./ForecastSlider";
 import { useTheme } from "../../lib/theme";
+import { fetchWaterLevelGrid } from "../../lib/openMeteoGrid";
 
 interface Props {
   visible: boolean;
@@ -15,10 +15,10 @@ interface Props {
   initialLat?: number;
   initialLng?: number;
   initialZoom?: number;
+  language?: "da" | "en";
 }
 
-const extra = (Constants.expoConfig?.extra as any) || {};
-const DMI_EDR_BASE_URL = (extra.dmiEdrUrl as string | undefined)?.replace(/\/$/, "") || "";
+// Open-Meteo grid fetch (erstatter DMI EDR proxy)
 
 // Convert CoverageJSON water level data to heatmap points
 function coverageJsonToHeatmapData(coverageJson: any): { points: [number, number, number][]; min: number; max: number } | null {
@@ -57,7 +57,8 @@ function coverageJsonToHeatmapData(coverageJson: any): { points: [number, number
     if (xAxis.length === 0 || yAxis.length === 0) return null;
 
     // Try different parameter names for water level (DMI uses sea-mean-deviation)
-    const levelData = ranges["sea-mean-deviation"]?.values ||
+    const levelData = ranges["sea_level_height_msl"]?.values ||
+                      ranges["sea-mean-deviation"]?.values ||
                       ranges["82-0.0-1"]?.values ||
                       ranges["sea-surface-height"]?.values ||
                       ranges["ssh"]?.values ||
@@ -103,6 +104,7 @@ export function WaterLevelOverlay({
   initialLat = 55.5,
   initialLng = 11.0,
   initialZoom = 6,
+  language = "da",
 }: Props) {
   const { theme } = useTheme();
   const webViewRef = useRef<WebView>(null);
@@ -113,121 +115,64 @@ export function WaterLevelOverlay({
 
   const accentColor = theme.primary;
 
-  // Fetch water level data from DMI EDR API
-  const fetchWaterLevelData = useCallback(async (hourIndex: number) => {
-    if (!DMI_EDR_BASE_URL) {
-      setError("DMI API ikke konfigureret");
-      setLoading(false);
-      return;
-    }
+  const L = language === "da" ? {
+    loadingWebview: "Indlæser vandstand...",
+    waterLevel: "vandstand",
+    lowTide: "lavvande",
+    normal: "normal",
+    highTide: "højvande",
+    noData: "ingen data",
+    noWaterLevelData: "Ingen vandstandsdata",
+    noWaterLevelDataAvailable: "Ingen vandstandsdata tilgængelig",
+    errorFetching: "Fejl ved hentning af data",
+    fetchingData: "Henter vandstandsdata...",
+    tryAgain: "Prøv igen",
+    close: "Luk",
+  } : {
+    loadingWebview: "Loading water level...",
+    waterLevel: "water level",
+    lowTide: "low tide",
+    normal: "normal",
+    highTide: "high tide",
+    noData: "no data",
+    noWaterLevelData: "No water level data",
+    noWaterLevelDataAvailable: "No water level data available",
+    errorFetching: "Error fetching data",
+    fetchingData: "Fetching water level data...",
+    tryAgain: "Try again",
+    close: "Close",
+  };
 
+  // Fetch water level data from Open-Meteo Marine (~400ms)
+  const fetchWaterLevelData = useCallback(async (hourIndex: number) => {
+    const datetime = hourIndex > 0 ? getForecastValue("hourly", hourIndex, 168) : undefined;
     try {
       setLoading(true);
       setError(null);
 
-      const datetime = getForecastValue("hourly", hourIndex) || new Date().toISOString();
-      const bbox = "7.5,54.0,16.0,58.5";
+      const grid = await fetchWaterLevelGrid(
+        { minLat: 54.0, maxLat: 58.5, minLng: 7.5, maxLng: 16.0 },
+        18,
+        datetime
+      );
 
-      console.log(`Fetching water level for datetime: ${datetime}`);
-
-      let allPoints: [number, number, number][] = [];
-      let globalMin = Infinity;
-      let globalMax = -Infinity;
-
-      // Try CoverageJSON cube endpoint first (dkss_nsbs only has water level)
-      const cubeCollections = ["dkss_nsbs"];
-      for (const collection of cubeCollections) {
-        const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=sea-mean-deviation&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-        const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
-
-        console.log(`Water level cube query for ${collection}:`, query);
-
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-          const response = await fetch(proxyUrl, { signal: controller.signal });
-          clearTimeout(timeoutId);
-
-          console.log(`${collection} cube response status:`, response.status);
-
-          if (response.ok) {
-            const json = await response.json();
-            console.log(`Water level ${collection} cube ranges:`, json.ranges ? Object.keys(json.ranges) : 'no ranges');
-            const converted = coverageJsonToHeatmapData(json);
-            console.log(`Water level ${collection} cube converted:`, converted ? `${converted.points.length} points` : 'null');
-            if (converted && converted.points.length > 0) {
-              allPoints = allPoints.concat(converted.points);
-              globalMin = Math.min(globalMin, converted.min);
-              globalMax = Math.max(globalMax, converted.max);
-            }
-          } else {
-            const text = await response.text();
-            console.warn(`${collection} cube error response:`, text.substring(0, 300));
-          }
-        } catch (e) {
-          console.warn(`Failed to fetch ${collection} cube:`, e);
+      if (grid) {
+        const converted = coverageJsonToHeatmapData(grid);
+        if (converted && converted.points.length > 0) {
+          setHeatmapData(converted);
+        } else {
+          setError(L.noWaterLevelDataAvailable);
         }
-      }
-
-      // Fallback: Try GeoJSON area endpoint if cube didn't work
-      if (allPoints.length === 0) {
-        console.log("Cube endpoint returned no data, trying area endpoint...");
-        const areaQuery = `/collections/dkss_nsbs/area?coords=POLYGON((7.5 54.0, 16.0 54.0, 16.0 58.5, 7.5 58.5, 7.5 54.0))&parameter-name=sea-mean-deviation&datetime=${datetime}/${datetime}&f=GeoJSON`;
-        const areaProxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(areaQuery)}`;
-
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-          const response = await fetch(areaProxyUrl, { signal: controller.signal });
-          clearTimeout(timeoutId);
-
-          console.log(`Area endpoint response status:`, response.status);
-
-          if (response.ok) {
-            const geoJson = await response.json();
-            console.log(`Area endpoint features:`, geoJson.features?.length || 0);
-
-            // Convert GeoJSON to heatmap points
-            if (geoJson.features && Array.isArray(geoJson.features)) {
-              for (const feature of geoJson.features) {
-                const coords = feature.geometry?.coordinates;
-                const props = feature.properties || {};
-                const level = props["sea-mean-deviation"] ?? props["82-0.0-1"];
-
-                if (coords && typeof level === "number" && !isNaN(level)) {
-                  const lng = coords[0];
-                  const lat = coords[1];
-                  allPoints.push([lat, lng, level]);
-                  globalMin = Math.min(globalMin, level);
-                  globalMax = Math.max(globalMax, level);
-                }
-              }
-              console.log(`Converted ${allPoints.length} points from GeoJSON, range: ${globalMin.toFixed(2)}-${globalMax.toFixed(2)} m`);
-            }
-          } else {
-            const text = await response.text();
-            console.warn(`Area endpoint error:`, text.substring(0, 300));
-          }
-        } catch (e) {
-          console.warn(`Failed to fetch area endpoint:`, e);
-        }
-      }
-
-      if (allPoints.length > 0) {
-        console.log(`Got ${allPoints.length} water level points, range: ${globalMin.toFixed(2)}-${globalMax.toFixed(2)} m`);
-        setHeatmapData({ points: allPoints, min: globalMin, max: globalMax });
       } else {
-        setError("Ingen vandstandsdata fra DMI");
+        setError(L.noWaterLevelDataAvailable);
       }
     } catch (e) {
-      setError("Fejl ved hentning af data");
+      setError(L.errorFetching);
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [L.noWaterLevelDataAvailable, L.errorFetching]);
 
   // Fetch data when visible or forecast hour changes (with debounce)
   useEffect(() => {
@@ -278,7 +223,7 @@ export function WaterLevelOverlay({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Vandstand</title>
+  <title>${L.waterLevel}</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -432,7 +377,7 @@ export function WaterLevelOverlay({
   <div id="map"></div>
   <div id="loading" class="loading-overlay">
     <div class="spinner"></div>
-    <div>Indlæser vandstand...</div>
+    <div>${L.loadingWebview}</div>
   </div>
 
   <!-- Center crosshair -->
@@ -446,7 +391,7 @@ export function WaterLevelOverlay({
   <div id="center-level" class="center-level">
     <span id="level-value" class="center-level-value">--</span>
     <span class="center-level-unit">cm</span>
-    <div id="level-label" class="center-level-label">vandstand</div>
+    <div id="level-label" class="center-level-label">${L.waterLevel}</div>
   </div>
 
   <div class="level-legend">
@@ -520,15 +465,15 @@ export function WaterLevelOverlay({
         const prefix = levelCm >= 0 ? '+' : '';
         levelValueEl.textContent = prefix + levelCm;
         if (levelCm < -20) {
-          levelLabelEl.textContent = 'lavvande';
+          levelLabelEl.textContent = '${L.lowTide}';
         } else if (levelCm < 20) {
-          levelLabelEl.textContent = 'normal';
+          levelLabelEl.textContent = '${L.normal}';
         } else {
-          levelLabelEl.textContent = 'højvande';
+          levelLabelEl.textContent = '${L.highTide}';
         }
       } else {
         levelValueEl.textContent = '--';
-        levelLabelEl.textContent = 'ingen data';
+        levelLabelEl.textContent = '${L.noData}';
       }
     }
 
@@ -540,7 +485,7 @@ export function WaterLevelOverlay({
       currentData = data;
 
       if (!data || !data.points || data.points.length === 0) {
-        loadingEl.innerHTML = '<div style="color:#ff6b6b;">Ingen vandstandsdata</div>';
+        loadingEl.innerHTML = '<div style="color:#ff6b6b;">${L.noWaterLevelData}</div>';
         loadingEl.style.display = 'block';
         return;
       }
@@ -631,7 +576,7 @@ export function WaterLevelOverlay({
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={accentColor} />
-          <Text style={styles.loadingText}>Henter vandstandsdata...</Text>
+          <Text style={styles.loadingText}>{L.fetchingData}</Text>
         </View>
       )}
 
@@ -641,10 +586,10 @@ export function WaterLevelOverlay({
           <Text style={styles.errorText}>{error}</Text>
           <View style={styles.errorButtons}>
             <Pressable style={styles.retryButton} onPress={() => fetchWaterLevelData(forecastHourIndex)}>
-              <Text style={styles.retryButtonText}>Prøv igen</Text>
+              <Text style={styles.retryButtonText}>{L.tryAgain}</Text>
             </Pressable>
             <Pressable style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeButtonText}>Luk</Text>
+              <Text style={styles.closeButtonText}>{L.close}</Text>
             </Pressable>
           </View>
         </View>
@@ -655,6 +600,8 @@ export function WaterLevelOverlay({
         value={forecastHourIndex}
         onValueChange={setForecastHourIndex}
         color={accentColor}
+        language={language}
+        maxHours={168}
       />
     </View>
   );

@@ -18,11 +18,13 @@ import { listSpots } from "./spots";
 // Re-export pure utility functions from tripUtils (for testing)
 export {
   getFishEventsCount,
+  getFishLengths,
+  parseFishEvents,
   distanceMeters,
   getEndPositionFromPath,
 } from "./tripUtils";
 
-import { getFishEventsCount, distanceMeters, getEndPositionFromPath } from "./tripUtils";
+import { getFishEventsCount, getFishLengths, parseFishEvents, distanceMeters, getEndPositionFromPath } from "./tripUtils";
 
 export type TripRow = {
   id: string; // Firestore ID
@@ -150,12 +152,18 @@ export async function saveTrip(input: {
 
   // Fangst-tidsstempler i millisekunder (Date.now())
   catch_marks_ms?: number[];
+  // Fangst-længder med timestamps
+  catch_lengths?: { ts: number; length_cm: number }[];
+  // Fangst-tilstand (condition) med timestamps
+  catch_conditions?: { ts: number; condition: { color?: string; seaLice?: string; released?: boolean } }[];
 }) {
   const userId = getUserId();
   const created_at = new Date().toISOString();
 
   const {
     catch_marks_ms,
+    catch_lengths,
+    catch_conditions,
     spot_id,
     spot_name,
     spot_lat,
@@ -166,13 +174,36 @@ export async function saveTrip(input: {
   let fish_events_json: string | null = null;
 
   if (Array.isArray(catch_marks_ms) && catch_marks_ms.length > 0) {
-    // Sortér og konverter til ISO-tidsstempler
+    // Sortér og konverter til objekter med tidsstempel + valgfri længde
     const sorted = catch_marks_ms
       .filter((ms) => typeof ms === "number" && Number.isFinite(ms))
       .sort((a, b) => a - b);
 
-    const isoEvents = sorted.map((ms) => new Date(ms).toISOString());
-    fish_events_json = JSON.stringify(isoEvents);
+    const lengthMap = new Map<number, number>();
+    if (catch_lengths) {
+      for (const cl of catch_lengths) {
+        lengthMap.set(cl.ts, cl.length_cm);
+      }
+    }
+    const conditionMap = new Map<number, any>();
+    if (catch_conditions) {
+      for (const cc of catch_conditions) {
+        conditionMap.set(cc.ts, cc.condition);
+      }
+    }
+
+    const events = sorted.map((ms) => {
+      const length = lengthMap.get(ms);
+      const cond = conditionMap.get(ms);
+      if (length != null || cond) {
+        const ev: any = { ts: new Date(ms).toISOString() };
+        if (length != null) ev.length_cm = length;
+        if (cond) ev.condition = cond;
+        return ev;
+      }
+      return new Date(ms).toISOString();
+    });
+    fish_events_json = JSON.stringify(events);
   }
 
   // Forsøg automatisk at koble turen til nærmeste spot ud fra slutpositionen,
@@ -308,6 +339,7 @@ export type TripStats = {
   fangstrate: number; // %
   fish_per_hour: number;
   multi_fish_rate: number; // % af fangstture med mindst 2 fisk
+  avg_length_cm: number | null; // gennemsnitslængde fra fish events
 };
 
 /** Aggregerede statistikdata */
@@ -347,6 +379,12 @@ export async function statsTrips(year?: number): Promise<TripStats> {
       ? Math.round((multiFishTrips / catch_trips) * 100)
       : 0;
 
+  // Gennemsnitslængde fra fish_events_json
+  const allLengths = trips.flatMap((t) => getFishLengths(t.fish_events_json));
+  const avg_length_cm = allLengths.length > 0
+    ? Math.round((allLengths.reduce((s, l) => s + l, 0) / allLengths.length) * 10) / 10
+    : null;
+
   return {
     trips: trips.length,
     catch_trips,
@@ -357,6 +395,7 @@ export async function statsTrips(year?: number): Promise<TripStats> {
     fangstrate,
     fish_per_hour: Number(fish_per_hour.toFixed(2)),
     multi_fish_rate,
+    avg_length_cm,
   };
 }
 

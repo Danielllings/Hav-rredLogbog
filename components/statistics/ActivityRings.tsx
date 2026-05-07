@@ -28,9 +28,10 @@ interface RingData {
 }
 
 interface ActivityRingsProps {
-  catchRate: number;        // Fangstrate %
-  fishPerHour: number;      // Fisk per time (normaliseret til 0-100)
-  successRate: number;      // Multi-fisk rate %
+  catchRate: number;
+  fishPerHour: number;
+  successRate: number;
+  language?: "da" | "en";
   size?: number;
   strokeWidth?: number;
   showLabels?: boolean;
@@ -114,6 +115,7 @@ export function ActivityRings({
   size = 200,
   strokeWidth = 14,
   showLabels = true,
+  language = "da",
 }: ActivityRingsProps) {
   const gap = 6; // Mellemrum mellem ringe
 
@@ -126,21 +128,21 @@ export function ActivityRings({
   const rings: RingData[] = [
     {
       value: catchRate,
-      label: "Fangst",
+      label: language === "da" ? "Fangst" : "Catch",
       color: APPLE.ringRed,
       gradientId: "gradRed",
       gradientColors: APPLE.gradientRed as [string, string],
     },
     {
-      value: Math.min(fishPerHour * 50, 100), // Normaliser: 2 fisk/time = 100%
-      label: "Tempo",
+      value: Math.min(fishPerHour * 50, 100),
+      label: language === "da" ? "Tempo" : "Rate",
       color: APPLE.ringGreen,
       gradientId: "gradGreen",
       gradientColors: APPLE.gradientGreen as [string, string],
     },
     {
       value: successRate,
-      label: "Multi",
+      label: language === "da" ? "Multi" : "Multi",
       color: APPLE.ringCyan,
       gradientId: "gradCyan",
       gradientColors: APPLE.gradientCyan as [string, string],
@@ -222,7 +224,7 @@ export function ActivityRings({
       {showLabels && (
         <View style={styles.centerLabels}>
           <Text style={styles.mainValue}>{Math.round(catchRate)}%</Text>
-          <Text style={styles.mainLabel}>Fangstrate</Text>
+          <Text style={styles.mainLabel}>{language === "da" ? "Fangstrate" : "Catch rate"}</Text>
         </View>
       )}
 

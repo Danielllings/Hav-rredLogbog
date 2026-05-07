@@ -6,9 +6,9 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { StyleSheet, View, Text, Pressable, ActivityIndicator } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import Constants from "expo-constants";
 import { ForecastSlider, getForecastValue } from "./ForecastSlider";
 import { useTheme } from "../../lib/theme";
+import { fetchWindGrid } from "../../lib/openMeteoGrid";
 
 interface Props {
   visible: boolean;
@@ -16,10 +16,10 @@ interface Props {
   initialLat?: number;
   initialLng?: number;
   initialZoom?: number;
+  language?: "da" | "en";
 }
 
-const extra = (Constants.expoConfig?.extra as any) || {};
-const DMI_EDR_BASE_URL = (extra.dmiEdrUrl as string | undefined)?.replace(/\/$/, "") || "";
+// Open-Meteo grid fetch (erstatter DMI EDR proxy)
 
 // OPTIMIZED: Memory cache for wind overlay data
 const windDataCache = new Map<string, { velocityData: any[]; windGrid: any; seaGrid: any; ts: number }>();
@@ -46,7 +46,9 @@ function windToVelocityData(
     const uData: number[] = [];
     const vData: number[] = [];
 
-    for (let j = 0; j < ny; j++) {
+    // leaflet-velocity expects data ordered north-to-south (la1=north first)
+    // but Open-Meteo grid is south-to-north, so iterate rows in reverse
+    for (let j = ny - 1; j >= 0; j--) {
       for (let i = 0; i < nx; i++) {
         const idx = j * nx + i;
         const speed = speeds[idx] ?? 0;
@@ -103,6 +105,7 @@ export function WindOverlay({
   initialLat = 55.5,
   initialLng = 11.0,
   initialZoom = 6,
+  language = "da",
 }: Props) {
   const { theme } = useTheme();
   const webViewRef = useRef<WebView>(null);
@@ -125,7 +128,7 @@ export function WindOverlay({
     ny: number;
     yAxisNorthToSouth: boolean;
   } | null>(null);
-  const [forecastHourIndex, setForecastHourIndex] = useState(1);
+  const [forecastHourIndex, setForecastHourIndex] = useState(() => Math.min(1, 168));
 
   const accentColor = theme.primary;
 
@@ -193,6 +196,8 @@ export function WindOverlay({
                       ranges["wind_direction"]?.values ||
                       ranges["wind-direction"]?.values ||
                       ranges["wd"]?.values || [];
+      const gustData = ranges["wind-gusts"]?.values ||
+                       ranges["wind_gusts_10m"]?.values || [];
 
 
       const nx = xAxis.length;
@@ -215,6 +220,7 @@ export function WindOverlay({
       return {
         speeds: speedData,
         directions: dirData,
+        gusts: gustData,
         bounds: {
           west: Math.min(...xAxis),
           east: Math.max(...xAxis),
@@ -231,16 +237,10 @@ export function WindOverlay({
     }
   };
 
-  // Fetch wind data from DMI EDR API - OPTIMIZED with caching
+  // Fetch wind data from Open-Meteo (~400ms)
   const fetchWindData = useCallback(async (hourIndex: number) => {
-    if (!DMI_EDR_BASE_URL) {
-      setError("DMI API ikke konfigureret");
-      setLoading(false);
-      return;
-    }
-
-    const datetime = getForecastValue("hourly", hourIndex) || new Date().toISOString();
-    const cacheKey = `wind_${datetime}`;
+    const datetime = hourIndex > 0 ? getForecastValue("hourly", hourIndex, 168) : undefined;
+    const cacheKey = `wind_${datetime || "now"}`;
 
     // Check cache first
     const cached = windDataCache.get(cacheKey);
@@ -257,83 +257,48 @@ export function WindOverlay({
       setLoading(true);
       setError(null);
 
-      const bbox = "7.5,54.0,16.0,58.5";
+      const grid = await fetchWindGrid(
+        { minLat: 54.0, maxLat: 58.5, minLng: 7.5, maxLng: 16.0 },
+        20,
+        datetime
+      );
 
-      // Fetch BOTH WAM (sea) and HARMONIE (land) in parallel
-      let wamData: any = null;
-      let wamGrid: any = null;
-      let harmonieData: any = null;
-      let harmonieGrid: any = null;
+      if (grid) {
+        const parsed = parseCoverageJson(grid);
 
-      // Fetch WAM (sea data) - OPTIMIZED: parallel fetch with fast timeout
-      const fetchWam = async () => {
-        const wamCollections = ["wam_nsb", "wam_dw"];
+        if (parsed && parsed.speeds.length > 0) {
+          const velocityToUse = windToVelocityData(
+            parsed.speeds, parsed.directions, parsed.bounds, parsed.nx, parsed.ny
+          );
 
-        // Try both collections in parallel, return first success
-        const results = await Promise.all(
-          wamCollections.map(async (collection) => {
-            const wamQuery = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=wind-speed,wind-dir&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-            const wamProxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(wamQuery)}`;
+          if (velocityToUse) {
+            windDataCache.set(cacheKey, {
+              velocityData: velocityToUse,
+              windGrid: parsed,
+              seaGrid: parsed,
+              ts: Date.now(),
+            });
 
-            try {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 8000); // Reduced from 20s to 8s
-              const response = await fetch(wamProxyUrl, { signal: controller.signal });
-              clearTimeout(timeoutId);
-
-              if (response.ok) {
-                const json = await response.json();
-                const parsed = parseCoverageJson(json);
-
-                if (parsed && parsed.speeds.length > 0 && parsed.directions.length > 0) {
-                  return { data: windToVelocityData(parsed.speeds, parsed.directions, parsed.bounds, parsed.nx, parsed.ny), grid: parsed };
-                }
-              }
-            } catch (e: any) {
-              // Ignore errors, try other collection
-            }
-            return null;
-          })
-        );
-
-        // Return first non-null result
-        return results.find(r => r !== null) || null;
-      };
-
-      // Fetch WAM data (HARMONIE doesn't support cube queries)
-      const wamResult = await fetchWam();
-
-      if (wamResult) {
-        wamData = wamResult.data;
-        wamGrid = wamResult.grid;
-      }
-
-      const velocityToUse = wamData;
-      const seaGrid = wamGrid;
-
-      if (velocityToUse) {
-        // Cache the result
-        windDataCache.set(cacheKey, {
-          velocityData: velocityToUse,
-          windGrid: seaGrid, // Use seaGrid for both since we only have WAM
-          seaGrid: seaGrid,
-          ts: Date.now()
-        });
-
-        setVelocityData(velocityToUse);
-        setWindGridData(seaGrid); // Use seaGrid for both
-        setSeaGridData(seaGrid);
-        setError(null);
+            setVelocityData(velocityToUse);
+            setWindGridData(parsed);
+            setSeaGridData(parsed);
+            setError(null);
+          } else {
+            setError(language === "da" ? "Ingen vinddata tilgængelig" : "No wind data available");
+          }
+        } else {
+          setError(language === "da" ? "Ingen vinddata tilgængelig" : "No wind data available");
+        }
       } else {
-        setError("Ingen vinddata tilgængelig fra DMI");
+        setError(language === "da" ? "Ingen vinddata tilgængelig" : "No wind data available");
       }
     } catch (e: any) {
-      setError("Fejl ved hentning af data");
+      setError(language === "da" ? "Fejl ved hentning af data" : "Error fetching data");
       console.error("Wind fetch error:", e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     if (visible) {
@@ -382,7 +347,7 @@ export function WindOverlay({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Vind</title>
+  <title>${language === "da" ? "Vind" : "Wind"}</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -510,52 +475,79 @@ export function WindOverlay({
     .compass-label.e { right: 16px; top: 50%; transform: translateY(-50%); }
     .compass-label.w { left: 16px; top: 50%; transform: translateY(-50%); }
 
-    /* Wind arrow - main wind */
+    /* Wind arrow - clean white */
     .wind-arrow {
       position: absolute;
       top: 50%;
       left: 50%;
-      width: 6px;
-      height: 75px;
-      background: linear-gradient(to top, ${accentColor}66, ${accentColor});
+      width: 5px;
+      height: 65px;
+      background: linear-gradient(to top, rgba(255,255,255,0.2), rgba(255,255,255,0.9));
       transform-origin: center bottom;
       transform: translate(-50%, -100%) rotate(0deg);
       border-radius: 3px;
       transition: transform 0.3s ease;
+      z-index: 5;
     }
     .wind-arrow::before {
       content: '';
       position: absolute;
-      top: -10px;
+      top: -9px;
       left: 50%;
       transform: translateX(-50%);
-      border-left: 10px solid transparent;
-      border-right: 10px solid transparent;
-      border-bottom: 14px solid ${accentColor};
+      border-left: 9px solid transparent;
+      border-right: 9px solid transparent;
+      border-bottom: 12px solid rgba(255,255,255,0.9);
     }
 
-
-    /* Speed label on wind arrow */
-    .wind-speed-label {
+    /* Wind info panel — below compass */
+    .wind-info {
       position: absolute;
-      top: 50%;
+      top: calc(50% + 80px);
       left: 50%;
-      transform: translate(-50%, -130px);
-      background: ${accentColor};
-      color: #000;
+      transform: translateX(-50%);
+      background: rgba(10,10,18,0.8);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 6px 12px;
+      z-index: 1000;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 13px;
-      font-weight: 700;
-      padding: 4px 10px;
-      border-radius: 6px;
-      white-space: nowrap;
-      z-index: 10;
-      transition: transform 0.3s ease;
+      pointer-events: none;
     }
-    .wind-speed-label .unit {
+    .wind-info-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .wind-info-row + .wind-info-row {
+      margin-top: 2px;
+    }
+    .wind-info-label {
+      font-size: 9px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .wind-info-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+    }
+    .wind-info-value .unit {
+      font-size: 9px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.4);
+      margin-left: 1px;
+    }
+    .wind-info-dir {
       font-size: 10px;
       font-weight: 600;
-      margin-left: 2px;
+      color: rgba(255,255,255,0.5);
+      text-align: center;
+      margin-top: 2px;
     }
 
 
@@ -577,7 +569,7 @@ export function WindOverlay({
   <div id="map"></div>
   <div id="loading" class="loading-overlay">
     <div class="spinner"></div>
-    <div>Indlaeser vind...</div>
+    <div id="loading-text">${language === "da" ? "Indlæser vind..." : "Loading wind..."}</div>
   </div>
 
   <!-- Circular compass cursor - Windy style -->
@@ -609,10 +601,17 @@ export function WindOverlay({
       <!-- Center dot -->
       <div class="compass-center"></div>
     </div>
-
-    <!-- Speed label outside circle -->
-    <div id="wind-speed-label" class="wind-speed-label">
-      <span id="wind-speed">--</span><span class="unit">m/s</span>
+    <!-- Wind info below compass -->
+    <div class="wind-info" id="wind-info">
+      <div class="wind-info-row">
+        <span class="wind-info-label">${language === "da" ? "Vind" : "Wind"}</span>
+        <span class="wind-info-value"><span id="wind-speed">--</span><span class="unit">m/s</span></span>
+      </div>
+      <div class="wind-info-row">
+        <span class="wind-info-label">${language === "da" ? "Stød" : "Gust"}</span>
+        <span class="wind-info-value"><span id="gust-speed">--</span><span class="unit">m/s</span></span>
+      </div>
+      <div class="wind-info-dir" id="wind-dir-label">--</div>
     </div>
   </div>
 
@@ -631,6 +630,16 @@ export function WindOverlay({
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-velocity@2.1.2/dist/leaflet-velocity.min.js"></script>
   <script>
+    const i18n = ${JSON.stringify(language === "da" ? {
+      wind: "Vind", gust: "Stød", loading: "Indlæser vind...",
+      noData: "Ingen vinddata", error: "Fejl ved visning",
+      fetchingData: "Henter vinddata...", tryAgain: "Prøv igen", close: "Luk"
+    } : {
+      wind: "Wind", gust: "Gust", loading: "Loading wind...",
+      noData: "No wind data", error: "Display error",
+      fetchingData: "Fetching wind data...", tryAgain: "Try again", close: "Close"
+    })};
+
     const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd',
       maxZoom: 18
@@ -655,7 +664,8 @@ export function WindOverlay({
     const loadingEl = document.getElementById('loading');
     const windArrowEl = document.getElementById('wind-arrow');
     const windSpeedEl = document.getElementById('wind-speed');
-    const windSpeedLabelEl = document.getElementById('wind-speed-label');
+    const gustSpeedEl = document.getElementById('gust-speed');
+    const windDirLabelEl = document.getElementById('wind-dir-label');
 
     let landGridData = null;  // HARMONIE - covers both land AND sea
     let seaGridData = null;   // WAM - fallback (wave model, may not have wind data)
@@ -664,7 +674,7 @@ export function WindOverlay({
     function getWindFromGrid(gridData, lat, lng) {
       if (!gridData) return null;
 
-      const { speeds, directions, bounds, nx, ny, yAxisNorthToSouth } = gridData;
+      const { speeds, directions, gusts, bounds, nx, ny, yAxisNorthToSouth } = gridData;
       if (!speeds || speeds.length === 0) return null;
 
       // Check if point is within bounds (with small margin for edge cases)
@@ -731,7 +741,7 @@ export function WindOverlay({
 
       // If no valid corners, return 0 (calm) instead of null - we're within bounds
       if (validCorners.length === 0) {
-        return { speed: 0, dir: 0 };
+        return { speed: 0, dir: 0, gust: 0 };
       }
 
       // Normalize weights for valid corners only
@@ -741,6 +751,27 @@ export function WindOverlay({
       let speed = 0;
       for (const c of validCorners) {
         speed += c.s * (c.w / totalWeight);
+      }
+
+      // Interpolate gust
+      let gust = 0;
+      if (gusts && gusts.length > 0) {
+        const g00 = gusts[idx00];
+        const g01 = gusts[idx01];
+        const g10 = gusts[idx10];
+        const g11 = gusts[idx11];
+        const gustCorners = [
+          { g: g00, w: (1 - xFrac) * (1 - yFrac) },
+          { g: g01, w: xFrac * (1 - yFrac) },
+          { g: g10, w: (1 - xFrac) * yFrac },
+          { g: g11, w: xFrac * yFrac }
+        ].filter(c => c.g !== null && c.g !== undefined && !isNaN(c.g));
+        if (gustCorners.length > 0) {
+          const gustTotal = gustCorners.reduce((sum, c) => sum + c.w, 0);
+          for (const c of gustCorners) {
+            gust += c.g * (c.w / gustTotal);
+          }
+        }
       }
 
       // Use nearest valid direction
@@ -754,7 +785,7 @@ export function WindOverlay({
         }
       }
 
-      return { speed, dir };
+      return { speed, dir, gust };
     }
 
     // Get wind data at position - HARMONIE covers both land AND sea
@@ -782,21 +813,20 @@ export function WindOverlay({
       if (wind && wind.speed >= 0) {
         // Wind direction is "from" direction - arrow points where wind blows TO
         const blowingTo = (wind.dir + 180) % 360;
-
         windArrowEl.style.transform = 'translate(-50%, -100%) rotate(' + blowingTo + 'deg)';
-        windSpeedEl.textContent = wind.speed.toFixed(1);
-        windSpeedLabelEl.style.opacity = '1';
 
-        // Position speed label at the tip of the arrow
-        const labelAngle = blowingTo * Math.PI / 180;
-        const labelRadius = 90;
-        const labelX = Math.sin(labelAngle) * labelRadius;
-        const labelY = -Math.cos(labelAngle) * labelRadius;
-        windSpeedLabelEl.style.transform = 'translate(calc(-50% + ' + labelX + 'px), calc(-50% + ' + labelY + 'px))';
+        // Update info panel
+        windSpeedEl.textContent = wind.speed.toFixed(1);
+        gustSpeedEl.textContent = (wind.gust && wind.gust > 0) ? wind.gust.toFixed(1) : '--';
+
+        // Cardinal direction label (FROM direction)
+        var dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+        var dirIdx = Math.round(wind.dir / 22.5) % 16;
+        windDirLabelEl.textContent = dirs[dirIdx] + ' ' + Math.round(wind.dir) + '°';
       } else {
         windSpeedEl.textContent = '--';
-        windSpeedLabelEl.style.opacity = '0.5';
-        windSpeedLabelEl.style.transform = 'translate(-50%, -130px)';
+        gustSpeedEl.textContent = '--';
+        windDirLabelEl.textContent = '--';
       }
     }
 
@@ -825,7 +855,7 @@ export function WindOverlay({
       }
 
       if (!velocityData || velocityData.length === 0) {
-        loadingEl.innerHTML = '<div style="color:#ff6b6b;">Ingen vinddata</div>';
+        loadingEl.innerHTML = '<div style="color:#ff6b6b;">' + i18n.noData + '</div>';
         loadingEl.style.display = 'block';
         return;
       }
@@ -878,7 +908,7 @@ export function WindOverlay({
         }
       } catch (e) {
         console.error('Error creating velocity layer:', e);
-        loadingEl.innerHTML = '<div style="color:#ff6b6b;">Fejl ved visning</div>';
+        loadingEl.innerHTML = '<div style="color:#ff6b6b;">' + i18n.error + '</div>';
         loadingEl.style.display = 'block';
       }
     };
@@ -912,7 +942,7 @@ export function WindOverlay({
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={accentColor} />
-          <Text style={styles.loadingText}>Henter vinddata...</Text>
+          <Text style={styles.loadingText}>{language === "da" ? "Henter vinddata..." : "Fetching wind data..."}</Text>
         </View>
       )}
 
@@ -922,10 +952,10 @@ export function WindOverlay({
           <Text style={styles.errorText}>{error}</Text>
           <View style={styles.errorButtons}>
             <Pressable style={styles.retryButton} onPress={() => fetchWindData(forecastHourIndex)}>
-              <Text style={styles.retryButtonText}>Prov igen</Text>
+              <Text style={styles.retryButtonText}>{language === "da" ? "Prøv igen" : "Try again"}</Text>
             </Pressable>
             <Pressable style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeButtonText}>Luk</Text>
+              <Text style={styles.closeButtonText}>{language === "da" ? "Luk" : "Close"}</Text>
             </Pressable>
           </View>
         </View>
@@ -936,6 +966,8 @@ export function WindOverlay({
         value={forecastHourIndex}
         onValueChange={setForecastHourIndex}
         color={accentColor}
+        language={language}
+        maxHours={168}
       />
     </View>
   );

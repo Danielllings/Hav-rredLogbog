@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="da" data-lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slet konto — Havørred Logbog</title>
+  <meta name="theme-color" content="#0D0D0F">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-body">
+  <!-- Nav -->
+  <nav class="nav scrolled" id="nav">
+    <div class="container nav-inner">
+      <a href="/" class="nav-brand">
+        <img src="assets/icon.png" alt="Havørred Logbog" class="nav-icon">
+        <span>Havørred Logbog</span>
+      </a>
+      <div class="nav-links">
+        <button class="lang-toggle" id="langToggle" aria-label="Skift sprog">
+          <span class="lang-flag" id="langFlag">🇩🇰</span>
+          <span class="lang-label" id="langLabel">DA</span>
+        </button>
+        <a href="/#download" class="nav-cta" data-da="Download" data-en="Download">Download</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="page-content">
+    <div class="container">
+      <a href="/" class="back-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        <span data-da="Tilbage" data-en="Back">Tilbage</span>
+      </a>
+
+      <div class="page-card">
+        <div class="page-header">
+          <div class="page-icon-wrap page-icon-danger">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          </div>
+          <h1 data-da="Slet konto" data-en="Delete Account">Slet konto</h1>
+          <p class="page-date" data-da="Sådan sletter du din konto og data" data-en="How to delete your account and data">Sådan sletter du din konto og data</p>
+        </div>
+
+        <!-- DA content -->
+        <div class="lang-content" data-show-lang="da">
+          <section class="policy-section">
+            <h2>Metode 1: I appen (anbefalet)</h2>
+            <div class="steps-list">
+              <div class="step-item">
+                <span class="step-num">1</span>
+                <span>Åbn appen og gå til <strong>Indstillinger</strong></span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">2</span>
+                <span>Tryk på <strong>Data</strong></span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">3</span>
+                <span>Tryk på <strong>Slet konto</strong></span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">4</span>
+                <span>Bekræft ved at skrive <strong>"SLET"</strong></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>Metode 2: Via email</h2>
+            <div class="info-card">
+              <p>Send en mail til <a href="mailto:support@havorredlogbog.dk">support@havorredlogbog.dk</a> med emnet <strong>"Slet min konto"</strong>.</p>
+              <p>Vi behandler anmodningen inden for 7 dage.</p>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>Hvad bliver slettet</h2>
+            <div class="info-card info-card-danger">
+              <p><strong>Denne handling kan ikke fortrydes.</strong></p>
+            </div>
+            <ul class="policy-list">
+              <li>Din brugerkonto</li>
+              <li>Alle fisketure (inkl. GPS-ruter, distance, varighed)</li>
+              <li>Alle fangster (inkl. vægt, mål, noter)</li>
+              <li>Alle billeder</li>
+              <li>Alle gemte spots</li>
+              <li>Vejrdata tilknyttet dine ture</li>
+              <li>Offline-data på enheden</li>
+            </ul>
+          </section>
+        </div>
+
+        <!-- EN content -->
+        <div class="lang-content" data-show-lang="en" style="display:none;">
+          <section class="policy-section">
+            <h2>Method 1: In the app (recommended)</h2>
+            <div class="steps-list">
+              <div class="step-item">
+                <span class="step-num">1</span>
+                <span>Open the app and go to <strong>Settings</strong></span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">2</span>
+                <span>Tap <strong>Data</strong></span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">3</span>
+                <span>Tap <strong>Delete Account</strong></span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">4</span>
+                <span>Confirm by typing <strong>"DELETE"</strong></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>Method 2: Via email</h2>
+            <div class="info-card">
+              <p>Send an email to <a href="mailto:support@havorredlogbog.dk">support@havorredlogbog.dk</a> with the subject <strong>"Delete my account"</strong>.</p>
+              <p>We will process the request within 7 days.</p>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <h2>What gets deleted</h2>
+            <div class="info-card info-card-danger">
+              <p><strong>This action cannot be undone.</strong></p>
+            </div>
+            <ul class="policy-list">
+              <li>Your user account</li>
+              <li>All fishing trips (incl. GPS routes, distance, duration)</li>
+              <li>All catches (incl. weight, measurements, notes)</li>
+              <li>All photos</li>
+              <li>All saved spots</li>
+              <li>Weather data associated with your trips</li>
+              <li>Offline data on the device</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="assets/icon.png" alt="" class="footer-icon">
+        <span>Havørred Logbog</span>
+      </div>
+      <nav class="footer-links">
+        <a href="privacy.html" data-da="Privatlivspolitik" data-en="Privacy Policy">Privatlivspolitik</a>
+        <a href="delete-account.html" data-da="Slet konto" data-en="Delete Account">Slet konto</a>
+        <a href="contact.html" data-da="Kontakt" data-en="Contact">Kontakt</a>
+      </nav>
+      <p class="footer-copy">&copy; 2026 Havørred Logbog</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -26,6 +26,7 @@ import {
   Keyboard,
 } from "react-native";
 import Constants from "expo-constants";
+import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -63,10 +64,18 @@ import {
   type Pt,
 } from "../../shared/utils/geo";
 import { fmtTime, getTripTitleParts, type TranslateFn } from "../../shared/utils/formatters";
+import {
+  analyzeTripEndTime,
+  formatTrimTime,
+  formatDuration,
+  type TrimSuggestion,
+} from "../../lib/tripTrim";
 import { StatBox } from "../../shared/components/StatBox";
 import { TripCard } from "../../shared/components/TripCard";
 import { BentoTrackingDashboard } from "../../shared/components/BentoTrackingDashboard";
-import { ORTO_FORAAR_URL } from "../../lib/maps";
+import { ConditionPickerModal } from "../../components/ConditionPickerModal";
+import { sendTripStatusToWatch, onWatchCatchEvent } from "../../lib/watchBridge";
+import type { FishEventCondition } from "../../lib/tripUtils";
 
 const { width } = Dimensions.get("window");
 
@@ -500,8 +509,12 @@ export default function Track() {
       : undefined;
   const trackingMapType = trackingUsesOsmTiles ? "none" : "standard";
 
-  // Fangst-tidsstempler
-  const [catchMarks, setCatchMarks] = useState<number[]>([]);
+  // Fangst-tidsstempler med valgfri længde og condition
+  const [catchMarks, setCatchMarks] = useState<{ ts: number; length_cm?: number; condition?: FishEventCondition }[]>([]);
+  // Condition picker state
+  const [conditionModalVisible, setConditionModalVisible] = useState(false);
+  const [pendingConditionTs, setPendingConditionTs] = useState<number | null>(null);
+  const [pendingConditionLength, setPendingConditionLength] = useState<number | undefined>(undefined);
   // Cursor til realtime visning
   const [cursorMs, setCursorMs] = useState<number | null>(null);
   // Hvilken markør er valgt til slet
@@ -511,6 +524,8 @@ export default function Track() {
 
   const [fishModal, setFishModal] = useState(false);
   const [savingTrip, setSavingTrip] = useState(false);
+  const [trimSuggestion, setTrimSuggestion] = useState<TrimSuggestion | null>(null);
+  const [trimModalVisible, setTrimModalVisible] = useState(false);
   const [starting, setStarting] = useState(false);
   const [stopConfirmVisible, setStopConfirmVisible] = useState(false);
   const [cancelConfirmVisible, setCancelConfirmVisible] = useState(false);
@@ -532,6 +547,11 @@ export default function Track() {
   const [loadingSpots, setLoadingSpots] = useState(false);
   const lastLiveFetchRef = useRef<number | null>(null);
 
+  // Fangst-længde modal
+  const [catchLengthModalVisible, setCatchLengthModalVisible] = useState(false);
+  const [catchLengthInput, setCatchLengthInput] = useState("");
+  const pendingCatchTsRef = useRef<number | null>(null);
+
   // Selvmålte vandtemperaturer (timestamps ligesom fangster)
   const [waterTempModalVisible, setWaterTempModalVisible] = useState(false);
   const [manualWaterTemps, setManualWaterTemps] = useState<{ ts: number; temp: number }[]>([]);
@@ -542,6 +562,7 @@ export default function Track() {
   // Fail-safe: stop tracking hvis brugeren kører væk
   const [drivingAwayModalVisible, setDrivingAwayModalVisible] = useState(false);
   const highSpeedCountRef = useRef(0);
+  const highSpeedDetectedAtRef = useRef<number | null>(null);
   const CAR_SPEED_THRESHOLD = 12; // m/s (~43 km/h) - hastighed der indikerer kørsel
   const HIGH_SPEED_TRIGGER_COUNT = 4; // Antal consecutive high-speed readings før advarsel
 
@@ -641,6 +662,35 @@ export default function Track() {
 
   const filterOptions = useMemo(() => getFilterOptions(t), [t]);
 
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return language === "da" ? "God morgen" : "Good morning";
+    if (hour >= 12 && hour < 18) return language === "da" ? "God eftermiddag" : "Good afternoon";
+    if (hour >= 18 && hour < 22) return language === "da" ? "God aften" : "Good evening";
+    return language === "da" ? "God nat" : "Good night";
+  }, [language]);
+
+  const formattedDate = useMemo(() => {
+    const d = new Date();
+    const days = language === "da"
+      ? ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"]
+      : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const months = language === "da"
+      ? ["januar", "februar", "marts", "april", "maj", "juni", "juli", "august", "september", "oktober", "november", "december"]
+      : ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return `${days[d.getDay()]}, ${d.getDate()}. ${months[d.getMonth()]}`;
+  }, [language]);
+
+  const totalFish = useMemo(
+    () => recent.reduce((sum, trip) => sum + (trip.fish_count || 0), 0),
+    [recent]
+  );
+
+  const totalHours = useMemo(() => {
+    const totalSec = recent.reduce((sum, trip) => sum + (trip.duration_sec || 0), 0);
+    return Math.round(totalSec / 3600);
+  }, [recent]);
+
   const reminderIdRef = useRef<string | null>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -716,8 +766,11 @@ export default function Track() {
         highSpeedCountRef.current += 1;
         // Hvis vi har set høj hastighed flere gange i træk, vis advarsel
         if (highSpeedCountRef.current >= HIGH_SPEED_TRIGGER_COUNT) {
-          // Kun vis modal én gang
+          // Kun vis modal én gang + gem tidspunkt for trim-forslag
           if (highSpeedCountRef.current === HIGH_SPEED_TRIGGER_COUNT) {
+            if (!highSpeedDetectedAtRef.current) {
+              highSpeedDetectedAtRef.current = Date.now();
+            }
             setDrivingAwayModalVisible(true);
           }
         }
@@ -932,6 +985,7 @@ export default function Track() {
       return;
     }
 
+    let watchUpdateCounter = 0;
     const update = () => {
       if (!startIsoRef.current) return;
       const startMs = new Date(startIsoRef.current).getTime();
@@ -940,6 +994,17 @@ export default function Track() {
         Math.floor((Date.now() - startMs) / 1000)
       );
       setSec(diffSec);
+
+      // Send status to Apple Watch every 5 seconds
+      watchUpdateCounter++;
+      if (watchUpdateCounter % 5 === 0) {
+        sendTripStatusToWatch({
+          running: true,
+          elapsedSec: diffSec,
+          distanceM,
+          catchCount: catchMarks.length,
+        }).catch(() => {});
+      }
     };
 
     update();
@@ -952,6 +1017,32 @@ export default function Track() {
         timerRef.current = null;
       }
     };
+  }, [running]);
+
+  // Listen for catch events from Apple Watch
+  useEffect(() => {
+    if (!running) return;
+    const unsub = onWatchCatchEvent((event) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setCatchMarks((prev) => [...prev, {
+        ts: event.ts,
+        condition: event.condition as FishEventCondition | undefined,
+      }]);
+      setCatchToastVisible(true);
+      if (catchToastTimerRef.current) clearTimeout(catchToastTimerRef.current);
+      catchToastTimerRef.current = setTimeout(() => {
+        setCatchToastVisible(false);
+        catchToastTimerRef.current = null;
+      }, 1200);
+    });
+    return unsub;
+  }, [running]);
+
+  // Send trip stopped to watch
+  useEffect(() => {
+    if (!running) {
+      sendTripStatusToWatch({ running: false, elapsedSec: 0, distanceM: 0, catchCount: 0 }).catch(() => {});
+    }
   }, [running]);
 
   async function scheduleReminder(hours: number) {
@@ -1089,6 +1180,7 @@ export default function Track() {
         setCursorMs(null);
         setSelectedCatchIndex(null);
         highSpeedCountRef.current = 0; // Reset fail-safe counter
+        highSpeedDetectedAtRef.current = null; // Reset trim timestamp
 
         let loc: Location.LocationObject | null = null;
         try {
@@ -1244,11 +1336,52 @@ export default function Track() {
     const now = Date.now();
     const startMs = new Date(startIsoRef.current).getTime();
     if (now <= startMs) return;
-    setCatchMarks((prev) => [...prev, now]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    pendingCatchTsRef.current = now;
+    setCatchLengthInput("");
+    setCatchLengthModalVisible(true);
+  }
+
+  function saveCatchLength() {
+    Keyboard.dismiss();
+    const ts = pendingCatchTsRef.current;
+    if (!ts) return;
+
+    const parsed = parseFloat(catchLengthInput.replace(",", "."));
+    const hasLength = !isNaN(parsed) && parsed >= 10 && parsed <= 150;
+
+    // Open condition picker instead of saving directly
+    setPendingConditionTs(ts);
+    setPendingConditionLength(hasLength ? parsed : undefined);
+    setCatchLengthModalVisible(false);
+    pendingCatchTsRef.current = null;
+    setConditionModalVisible(true);
+  }
+
+  function skipCatchLength() {
+    Keyboard.dismiss();
+    const ts = pendingCatchTsRef.current;
+    if (!ts) return;
+
+    // Open condition picker instead of saving directly
+    setPendingConditionTs(ts);
+    setPendingConditionLength(undefined);
+    setCatchLengthModalVisible(false);
+    pendingCatchTsRef.current = null;
+    setConditionModalVisible(true);
+  }
+
+  function finalizeCatch(condition?: FishEventCondition) {
+    const ts = pendingConditionTs;
+    if (!ts) return;
+
+    setCatchMarks((prev) => [...prev, { ts, length_cm: pendingConditionLength, condition }]);
+    setConditionModalVisible(false);
+    setPendingConditionTs(null);
+    setPendingConditionLength(undefined);
+
     setCatchToastVisible(true);
-    if (catchToastTimerRef.current) {
-      clearTimeout(catchToastTimerRef.current);
-    }
+    if (catchToastTimerRef.current) clearTimeout(catchToastTimerRef.current);
     catchToastTimerRef.current = setTimeout(() => {
       setCatchToastVisible(false);
       catchToastTimerRef.current = null;
@@ -1316,6 +1449,26 @@ export default function Track() {
     if (endIsoRef.current) {
       setCursorMs(new Date(endIsoRef.current).getTime());
     }
+
+    // Smart Trim: Analyser om turen reelt sluttede tidligere
+    try {
+      const merged = await getMergedPoints();
+      const actualEndMs = new Date(endIsoRef.current).getTime();
+      const suggestion = analyzeTripEndTime({
+        points: merged,
+        actualEndMs,
+        catchMarks,
+        highSpeedDetectedAt: highSpeedDetectedAtRef.current,
+      });
+      if (suggestion) {
+        setTrimSuggestion(suggestion);
+        setTrimModalVisible(true);
+        return; // Vis trim-modal først, derefter fish-modal
+      }
+    } catch (_e) {
+      // Analyse fejlede — spring trim over, gå direkte til fish modal
+    }
+
     setFishModal(true);
   }
 
@@ -1354,7 +1507,9 @@ export default function Track() {
       meta_json: null,
       needs_dmi: true,
       // vigtig: gem rå fangst-tidsstempler (ms) så fiskemønster kan bruge dem
-      catch_marks_ms: catchMarks,
+      catch_marks_ms: catchMarks.map((m) => m.ts),
+      catch_lengths: catchMarks.filter((m) => m.length_cm != null).map((m) => ({ ts: m.ts, length_cm: m.length_cm! })),
+      catch_conditions: catchMarks.filter((m) => m.condition != null).map((m) => ({ ts: m.ts, condition: m.condition! })),
       // selvmålte vandtemperaturer (bruges i stedet for DMI hvis der er målinger)
       manual_water_temps: manualWaterTemps.length > 0 ? manualWaterTemps : undefined,
     };
@@ -1513,20 +1668,20 @@ export default function Track() {
     <>
       <StatusBar barStyle="light-content" backgroundColor="#0D0D0F" />
       {catchToastVisible && (
-        <View pointerEvents="box-none" style={styles.toastOverlay}>
+        <View pointerEvents="none" style={styles.toastOverlay}>
           <View style={styles.toastBox}>
             <View style={styles.toastIcon}>
-              <Ionicons name="checkmark" size={18} color={THEME.bg} />
+              <Ionicons name="fish" size={14} color="#FFF" />
             </View>
             <Text style={styles.toastText}>{t("catchRegistered")}</Text>
           </View>
         </View>
       )}
       {waterTempToastVisible && (
-        <View pointerEvents="box-none" style={styles.toastOverlay}>
-          <View style={[styles.toastBox, { backgroundColor: THEME.graphBlue }]}>
-            <View style={styles.toastIcon}>
-              <Ionicons name="thermometer" size={18} color={THEME.bg} />
+        <View pointerEvents="none" style={styles.toastOverlay}>
+          <View style={[styles.toastBox, styles.toastBoxBlue]}>
+            <View style={[styles.toastIcon, styles.toastIconBlue]}>
+              <Ionicons name="thermometer" size={14} color="#FFF" />
             </View>
             <Text style={styles.toastText}>{t("waterTempSaved")}</Text>
           </View>
@@ -1557,60 +1712,82 @@ export default function Track() {
             t={t}
           />
         ) : (
-          /* Start Trip Card */
-          <View style={styles.heroCard}>
-            <View style={styles.heroHeader}>
-              <View style={styles.heroTitleRow}>
-                <AnimatedStatusIndicator active={running} />
-                <Text style={styles.heroTitle}>{t("liveTracking")}</Text>
-              </View>
+          /* ── Greeting + Map + Start ── */
+          <>
+            {/* Header */}
+            <View style={styles.greetingSection}>
+              <Text style={styles.greetingText}>{language === "da" ? "Tracking" : "Tracking"}</Text>
             </View>
 
-            {/* Kort preview */}
-            <View style={styles.mapContainer}>
+            {/* Map Hero */}
+            <View style={styles.mapHero}>
               <MapView
-                style={{ flex: 1 }}
+                style={styles.mapFull}
                 initialRegion={DEFAULT_TRACK_REGION}
                 region={region}
                 onRegionChangeComplete={setRegion}
                 userInterfaceStyle={MAP_UI_STYLE}
                 provider={trackingMapProvider}
-                mapType="none"
+                mapType="satellite"
               >
-                <UrlTile
-                  urlTemplate={ORTO_FORAAR_URL}
-                  maximumZ={21}
-                  tileSize={256}
-                />
               </MapView>
-            </View>
 
-            {/* Start knap */}
-            <View style={styles.heroActions}>
-              <Pressable
-                style={[
-                  styles.startButton,
-                  (savingTrip || starting) && { opacity: 0.6 },
-                ]}
-                onPress={confirmStart}
-                disabled={savingTrip || starting}
-              >
-                <View style={styles.startButtonInner}>
-                  <View style={styles.startIconCircle}>
-                    <Ionicons name="play" size={28} color="#000" />
-                  </View>
-                  <View style={styles.startTextContainer}>
-                    <Text style={styles.startButtonText}>
-                      {starting ? t("starting") : t("startFishingTrip")}
-                    </Text>
-                    <Text style={styles.startButtonSubtext}>
-                      {t("tapToStartTracking")}
-                    </Text>
+              {/* Weather chips floating on map */}
+              {liveWeather && !liveFetching && (
+                <View style={styles.mapWeatherRow}>
+                  {liveWeather.tempC != null && (
+                    <View style={styles.weatherChip}>
+                      <Ionicons name="thermometer-outline" size={12} color="#F59E0B" />
+                      <Text style={styles.weatherChipText}>{Math.round(liveWeather.tempC)}°</Text>
+                    </View>
+                  )}
+                  {liveWeather.windMS != null && (
+                    <View style={styles.weatherChip}>
+                      <Ionicons name="flag-outline" size={12} color="#3B82F6" />
+                      <Text style={styles.weatherChipText}>{liveWeather.windMS.toFixed(1)} m/s</Text>
+                    </View>
+                  )}
+                  {liveWeather.waveHeightM != null && liveWeather.waveHeightM > 0 && (
+                    <View style={styles.weatherChip}>
+                      <Ionicons name="analytics-outline" size={12} color="#8B5CF6" />
+                      <Text style={styles.weatherChipText}>{liveWeather.waveHeightM.toFixed(1)} m</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              {liveFetching && (
+                <View style={styles.mapWeatherRow}>
+                  <View style={styles.weatherChip}>
+                    <ActivityIndicator size="small" color="#F59E0B" />
                   </View>
                 </View>
-              </Pressable>
+              )}
             </View>
-          </View>
+
+            {/* Start Button */}
+            <Pressable
+              style={[
+                styles.startButton,
+                (savingTrip || starting) && { opacity: 0.6 },
+              ]}
+              onPress={confirmStart}
+              disabled={savingTrip || starting}
+            >
+              <View style={styles.startButtonIconWrap}>
+                <Ionicons name="play" size={22} color="#000" />
+              </View>
+              <View style={styles.startTextContainer}>
+                <Text style={styles.startButtonText}>
+                  {starting ? t("starting") : t("startFishingTrip")}
+                </Text>
+                <Text style={styles.startButtonSubtext}>
+                  {t("tapToStartTracking")}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="rgba(13, 13, 15, 0.4)" />
+            </Pressable>
+
+          </>
         )}
 
         {/* === SENESTE TURE === */}
@@ -1681,11 +1858,24 @@ export default function Track() {
               {/* Header med ikon og tæller */}
               <View style={styles.endTripHeader}>
                 <View style={styles.endTripTitleRow}>
-                  <Ionicons name="flag" size={24} color={theme.primary} />
+                  <Ionicons name="flag" size={22} color={theme.primary} />
                   <Text style={styles.endTripTitle}>{t("finishTrip")}</Text>
                 </View>
                 <View style={styles.endTripCountBadge}>
+                  <Ionicons name="fish" size={14} color="#0D0D0F" />
                   <Text style={styles.endTripCountText}>{catchMarks.length}</Text>
+                </View>
+              </View>
+
+              {/* Tur-summary badges */}
+              <View style={styles.endTripSummaryRow}>
+                <View style={styles.endTripSummaryBadge}>
+                  <Ionicons name="time-outline" size={13} color={THEME.textSec} />
+                  <Text style={styles.endTripSummaryText}>{fmtTime(sec)}</Text>
+                </View>
+                <View style={styles.endTripSummaryBadge}>
+                  <Ionicons name="walk-outline" size={13} color={THEME.textSec} />
+                  <Text style={styles.endTripSummaryText}>{(distanceM / 1000).toFixed(1)} km</Text>
                 </View>
               </View>
 
@@ -1734,26 +1924,26 @@ export default function Track() {
                     })()}
 
                   {/* markører */}
-                  {catchMarks.map((t, idx) => {
+                  {catchMarks.map((mark, idx) => {
                     if (tripStartMs == null || tripEndMs == null) return null;
-                    const rel = (t - tripStartMs) / durationMs;
+                    const rel = (mark.ts - tripStartMs) / durationMs;
                     const clamped = Math.min(1, Math.max(0, rel));
                     const usableWidth = timelineWidth - 24;
                     const left = 12 + clamped * usableWidth;
                     const isSelected = selectedCatchIndex === idx;
 
-                    const label = new Date(t).toLocaleTimeString([], {
+                    const label = new Date(mark.ts).toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
                     });
 
                     return (
                       <Pressable
-                        key={`${t}-${idx}`}
+                        key={`${mark.ts}-${idx}`}
                         style={[styles.endTripMarker, { left }]}
                         onPress={() => {
                           setSelectedCatchIndex(idx);
-                          setCursorMs(t);
+                          setCursorMs(mark.ts);
                         }}
                       >
                         <View
@@ -1842,6 +2032,10 @@ export default function Track() {
 
               {/* Footer buttons */}
               <View style={styles.endTripFooter}>
+                <Pressable style={styles.endTripSaveBtn} onPress={confirmFish}>
+                  <Ionicons name="checkmark" size={20} color="#000" />
+                  <Text style={styles.endTripSaveBtnText}>{t("saveTrip")}</Text>
+                </Pressable>
                 <Pressable
                   style={styles.endTripCancelBtn}
                   onPress={() => {
@@ -1849,44 +2043,45 @@ export default function Track() {
                     setCancelConfirmVisible(true);
                   }}
                 >
+                  <Ionicons name="close" size={18} color="#A0A0A8" />
                   <Text style={styles.endTripCancelBtnText}>{t("cancel")}</Text>
-                </Pressable>
-                <Pressable style={styles.endTripSaveBtn} onPress={confirmFish}>
-                  <Ionicons name="checkmark" size={20} color="#000" />
-                  <Text style={styles.endTripSaveBtnText}>{t("saveTrip")}</Text>
                 </Pressable>
               </View>
             </View>
           </View>
         </Modal>
 
-        {/* === STOP-BEKRÆFTELSE (før vi åbner afslut modal) === */}
+        {/* === STOP-BEKRÆFTELSE === */}
         <Modal
           visible={stopConfirmVisible}
           transparent
           animationType="fade"
         >
           <View style={styles.modalBackdrop}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>{t("finishTripQuestion")}</Text>
-              <Text style={styles.modalText}>
+            <View style={styles.confirmModal}>
+              <View style={styles.confirmIconCircle}>
+                <Ionicons name="flag" size={28} color={theme.primary} />
+              </View>
+              <Text style={styles.confirmTitle}>{t("finishTripQuestion")}</Text>
+              <Text style={styles.confirmText}>
                 {t("stopTrackingConfirm")}
               </Text>
-              <View style={styles.modalBtnRow}>
+              <View style={styles.confirmButtons}>
                 <Pressable
-                  style={[styles.btn, styles.ghost]}
-                  onPress={() => setStopConfirmVisible(false)}
-                >
-                  <Text style={styles.ghostText}>{t("continueTrip")}</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.btn, styles.stopButton]}
+                  style={styles.confirmButtonPrimary}
                   onPress={() => {
                     setStopConfirmVisible(false);
                     stop();
                   }}
                 >
-                  <Text style={styles.stopButtonText}>{t("yesStop")}</Text>
+                  <Ionicons name="checkmark-circle" size={18} color="#000" />
+                  <Text style={styles.confirmButtonPrimaryText}>{t("yesStop")}</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.confirmButtonSecondary}
+                  onPress={() => setStopConfirmVisible(false)}
+                >
+                  <Text style={styles.confirmButtonSecondaryText}>{t("continueTrip")}</Text>
                 </Pressable>
               </View>
             </View>
@@ -1900,30 +2095,40 @@ export default function Track() {
           animationType="fade"
         >
           <View style={styles.modalBackdrop}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>Annullér tur</Text>
-              <Text style={styles.modalText}>
-                Er du sikker på at du vil annullere turen?
+            <View style={styles.confirmModal}>
+              <View style={[styles.confirmIconCircle, styles.confirmIconDanger]}>
+                <Ionicons name="warning" size={28} color={THEME.danger} />
+              </View>
+              <Text style={styles.confirmTitle}>
+                {language === "da" ? "Annullér tur" : "Cancel trip"}
               </Text>
-              <View style={styles.modalBtnRow}>
+              <Text style={styles.confirmText}>
+                {language === "da"
+                  ? "Er du sikker? Alle data fra denne tur vil gå tabt."
+                  : "Are you sure? All data from this trip will be lost."}
+              </Text>
+              <View style={styles.confirmButtons}>
                 <Pressable
-                  style={[styles.btn, styles.ghost]}
-                  onPress={() => {
-                    setCancelConfirmVisible(false);
-                    setFishModal(true);
-                  }}
-                >
-                  <Text style={styles.ghostText}>Tilbage</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.btn, styles.stopButton]}
+                  style={[styles.confirmButtonPrimary, styles.confirmButtonDanger]}
                   onPress={() => {
                     setCancelConfirmVisible(false);
                     cancelFish();
                   }}
                 >
-                  <Text style={styles.stopButtonText}>
-                    Ja, annullér
+                  <Ionicons name="trash-outline" size={18} color="#FFF" />
+                  <Text style={styles.confirmButtonDangerText}>
+                    {language === "da" ? "Ja, slet turen" : "Yes, discard trip"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.confirmButtonSecondary}
+                  onPress={() => {
+                    setCancelConfirmVisible(false);
+                    setFishModal(true);
+                  }}
+                >
+                  <Text style={styles.confirmButtonSecondaryText}>
+                    {language === "da" ? "Tilbage" : "Go back"}
                   </Text>
                 </Pressable>
               </View>
@@ -1938,18 +2143,24 @@ export default function Track() {
           animationType="fade"
         >
           <View style={styles.modalBackdrop}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>Adgang nægtet</Text>
-              <Text style={styles.modalText}>
-                Appen skal bruge din position for at tracke en tur. Gå
-                til dine indstillinger for at give adgang.
+            <View style={styles.confirmModal}>
+              <View style={[styles.confirmIconCircle, styles.confirmIconDanger]}>
+                <Ionicons name="location-outline" size={28} color={THEME.danger} />
+              </View>
+              <Text style={styles.confirmTitle}>
+                {language === "da" ? "Adgang nægtet" : "Access denied"}
               </Text>
-              <View style={styles.modalBtnRow}>
+              <Text style={styles.confirmText}>
+                {language === "da"
+                  ? "Appen skal bruge din position for at tracke en tur. Gå til dine indstillinger for at give adgang."
+                  : "The app needs your location to track a trip. Go to your settings to grant access."}
+              </Text>
+              <View style={styles.confirmButtons}>
                 <Pressable
-                  style={[styles.btn, styles.primary]}
+                  style={styles.confirmButtonPrimary}
                   onPress={() => setPermissionModalVisible(false)}
                 >
-                  <Text style={styles.primaryText}>OK</Text>
+                  <Text style={styles.confirmButtonPrimaryText}>OK</Text>
                 </Pressable>
               </View>
             </View>
@@ -2232,6 +2443,101 @@ export default function Track() {
           </View>
         </Modal>
 
+        {/* === SMART TRIM MODAL === */}
+        <Modal
+          visible={trimModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setTrimModalVisible(false);
+            setTrimSuggestion(null);
+            setFishModal(true);
+          }}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.drivingAwayModal}>
+              {/* Ikon */}
+              <View style={[styles.drivingAwayIconCircle, { backgroundColor: "#F59E0B18" }]}>
+                <Ionicons name="cut-outline" size={28} color={THEME.accent} />
+              </View>
+
+              {/* Titel */}
+              <Text style={styles.drivingAwayTitle}>
+                {language === "da" ? "Trim din tur?" : "Trim your trip?"}
+              </Text>
+
+              {/* Beskrivelse */}
+              <Text style={styles.drivingAwayDescription}>
+                {language === "da"
+                  ? `Det ser ud til at du stoppede med at fiske kl. ${trimSuggestion ? formatTrimTime(trimSuggestion.suggestedEndMs, "da") : ""}.${
+                      trimSuggestion?.reason === "speed_detected" || trimSuggestion?.reason === "high_speed"
+                        ? " Vi detekterede at du kørte væk."
+                        : " Du bevægede dig ikke i lang tid."
+                    }`
+                  : `It looks like you stopped fishing at ${trimSuggestion ? formatTrimTime(trimSuggestion.suggestedEndMs, "en") : ""}.${
+                      trimSuggestion?.reason === "speed_detected" || trimSuggestion?.reason === "high_speed"
+                        ? " We detected you driving away."
+                        : " You were idle for a long time."
+                    }`}
+              </Text>
+
+              {/* Trim detaljer */}
+              {trimSuggestion && (
+                <View style={styles.drivingAwaySpeedBadge}>
+                  <Ionicons name="timer-outline" size={16} color={THEME.accent} />
+                  <Text style={[styles.drivingAwaySpeedText, { color: THEME.accent }]}>
+                    {language === "da"
+                      ? `Fjerner ${formatDuration(trimSuggestion.trimmedSec, "da")} fra turen`
+                      : `Removes ${formatDuration(trimSuggestion.trimmedSec, "en")} from trip`}
+                  </Text>
+                </View>
+              )}
+
+              {/* Knapper */}
+              <View style={styles.drivingAwayButtons}>
+                <Pressable
+                  style={[styles.drivingAwayButtonDanger, { backgroundColor: THEME.accent }]}
+                  onPress={() => {
+                    // Anvend trim
+                    if (trimSuggestion) {
+                      endIsoRef.current = trimSuggestion.suggestedEndIso;
+                      setCursorMs(trimSuggestion.suggestedEndMs);
+                      setDistanceM(trimSuggestion.trimmedDistanceM);
+                      setCatchMarks(trimSuggestion.validCatchMarks);
+                      const startMs = new Date(startIsoRef.current || "").getTime();
+                      setSec(Math.round((trimSuggestion.suggestedEndMs - startMs) / 1000));
+                    }
+                    setTrimModalVisible(false);
+                    setTrimSuggestion(null);
+                    setFishModal(true);
+                  }}
+                >
+                  <Ionicons name="cut-outline" size={18} color="#000" />
+                  <Text style={[styles.drivingAwayButtonDangerText, { color: "#000" }]}>
+                    {language === "da"
+                      ? `Trim til ${trimSuggestion ? formatTrimTime(trimSuggestion.suggestedEndMs, "da") : ""}`
+                      : `Trim to ${trimSuggestion ? formatTrimTime(trimSuggestion.suggestedEndMs, "en") : ""}`}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.drivingAwayButtonSecondary}
+                  onPress={() => {
+                    // Behold fuld tur
+                    setTrimModalVisible(false);
+                    setTrimSuggestion(null);
+                    setFishModal(true);
+                  }}
+                >
+                  <Text style={styles.drivingAwayButtonSecondaryText}>
+                    {language === "da" ? "Behold fuld tur" : "Keep full trip"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         {/* === VANDTEMPERATUR MODAL === */}
         <Modal
           visible={waterTempModalVisible}
@@ -2292,6 +2598,76 @@ export default function Track() {
             </View>
           </KeyboardAvoidingView>
         </Modal>
+
+        {/* Fangst-længde modal */}
+        <Modal
+          visible={catchLengthModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            Keyboard.dismiss();
+            skipCatchLength();
+          }}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.modalBackdrop}
+          >
+            <View style={styles.waterTempModal}>
+              <View style={[styles.waterTempIconCircle, { backgroundColor: "rgba(245,158,11,0.15)" }]}>
+                <Ionicons name="fish" size={28} color={THEME.graphYellow} />
+              </View>
+
+              <Text style={styles.waterTempModalTitle}>
+                {t("catchRegisteredTitle")}
+              </Text>
+              <Text style={styles.waterTempModalHint}>
+                {t("enterLengthOptional")}
+              </Text>
+
+              <View style={styles.waterTempInputRow}>
+                <TextInput
+                  style={styles.waterTempInput}
+                  value={catchLengthInput}
+                  onChangeText={setCatchLengthInput}
+                  keyboardType="number-pad"
+                  placeholder="45"
+                  placeholderTextColor={THEME.textTertiary}
+                  maxLength={3}
+                  autoFocus
+                />
+                <Text style={styles.waterTempUnit}>cm</Text>
+              </View>
+
+              <View style={styles.waterTempButtons}>
+                <Pressable
+                  style={styles.waterTempButtonPrimary}
+                  onPress={saveCatchLength}
+                >
+                  <Ionicons name="checkmark" size={20} color="#000" />
+                  <Text style={styles.waterTempButtonPrimaryText}>{t("save")}</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.waterTempButtonSecondary}
+                  onPress={skipCatchLength}
+                >
+                  <Text style={styles.waterTempButtonSecondaryText}>
+                    {t("skip")}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* Condition picker modal (after length input) */}
+        <ConditionPickerModal
+          visible={conditionModalVisible}
+          onSave={(condition) => finalizeCatch(condition as FishEventCondition)}
+          onSkip={() => finalizeCatch(undefined)}
+          t={t}
+        />
       </ScrollView>
 
       {/* Loading overlay - udenfor ScrollView så den dækker hele skærmen */}
@@ -2427,39 +2803,35 @@ const styles = StyleSheet.create({
   },
   startButton: {
     backgroundColor: "#F59E0B",
-    height: 56,
-    borderRadius: 16,
+    height: 64,
+    borderRadius: 20,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    gap: 14,
   },
-  startButtonInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-  },
-  startIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "rgba(13, 13, 15, 0.15)",
+  startButtonIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(13, 13, 15, 0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   startTextContainer: {
-    flexDirection: "column",
+    flex: 1,
   },
   startButtonText: {
     color: "#0D0D0F",
     fontSize: 17,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   startButtonSubtext: {
-    color: "rgba(13, 13, 15, 0.6)",
+    color: "rgba(13, 13, 15, 0.5)",
     fontSize: 12,
     fontWeight: "500",
-    marginTop: 2,
+    marginTop: 1,
   },
 
   runningActions: {
@@ -3440,6 +3812,9 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   endTripCountBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     backgroundColor: "#F59E0B",
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -3448,7 +3823,27 @@ const styles = StyleSheet.create({
   endTripCountText: {
     color: "#0D0D0F",
     fontSize: 16,
+    fontWeight: "700",
+  },
+  endTripSummaryRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  endTripSummaryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#1E1E21",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  endTripSummaryText: {
+    fontSize: 13,
     fontWeight: "600",
+    color: "#A0A0A8",
+    fontVariant: ["tabular-nums"],
   },
   endTripTimeSelector: {
     alignItems: "center",
@@ -3470,9 +3865,10 @@ const styles = StyleSheet.create({
   },
   endTripTimeCurrentValue: {
     fontSize: 32,
-    fontWeight: "200",
+    fontWeight: "300",
     color: "#FFFFFF",
     fontVariant: ["tabular-nums"],
+    letterSpacing: 1,
   },
   endTripTimelineContainer: {
     marginBottom: 20,
@@ -3624,19 +4020,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
-  endTripCancelBtn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: "#1E1E21",
-  },
-  endTripCancelBtnText: {
-    color: "#A0A0A8",
-    fontSize: 15,
-    fontWeight: "600",
-  },
   endTripSaveBtn: {
     flex: 1,
     flexDirection: "row",
@@ -3652,38 +4035,63 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
   },
+  endTripCancelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 56,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: "#1E1E21",
+  },
+  endTripCancelBtnText: {
+    color: "#A0A0A8",
+    fontSize: 15,
+    fontWeight: "600",
+  },
 
   toastOverlay: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 60,
+    left: 20,
+    right: 20,
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(13, 13, 15, 0.6)",
     zIndex: 20,
   },
   toastBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#161618",
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    backgroundColor: "#1C1C1E",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  toastBoxBlue: {
+    borderColor: "rgba(59, 130, 246, 0.2)",
   },
   toastIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: "#F59E0B",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 10,
+  },
+  toastIconBlue: {
+    backgroundColor: "#3B82F6",
   },
   toastText: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
   },
   seasonBtn: {
@@ -3839,6 +4247,178 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+
+  // ── Confirmation Modal Styles ──
+  confirmModal: {
+    width: "100%",
+    backgroundColor: "#161618",
+    borderRadius: 24,
+    padding: 28,
+    alignItems: "center",
+  },
+  confirmIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  confirmIconDanger: {
+    backgroundColor: "rgba(255, 59, 48, 0.12)",
+  },
+  confirmTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  confirmText: {
+    fontSize: 15,
+    color: "#A0A0A8",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  confirmButtons: {
+    width: "100%",
+    gap: 10,
+  },
+  confirmButtonPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#F59E0B",
+    height: 52,
+    borderRadius: 14,
+  },
+  confirmButtonPrimaryText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0D0D0F",
+  },
+  confirmButtonDanger: {
+    backgroundColor: "#FF3B30",
+  },
+  confirmButtonDangerText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  confirmButtonSecondary: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: 48,
+    borderRadius: 14,
+  },
+  confirmButtonSecondaryText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#606068",
+  },
+
+  // ── New Start Screen Styles ──
+  greetingSection: {
+    marginBottom: 20,
+  },
+  greetingText: {
+    fontSize: 28,
+    fontWeight: "300",
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
+  },
+  greetingDate: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#606068",
+    marginTop: 4,
+    letterSpacing: 0.1,
+  },
+  mapHero: {
+    height: 240,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: "#1E1E21",
+    marginBottom: 16,
+    position: "relative",
+  },
+  mapFull: {
+    flex: 1,
+  },
+  mapWeatherRow: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    right: 12,
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  weatherChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(22, 22, 24, 0.85)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  weatherChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    fontVariant: ["tabular-nums"],
+  },
+  quickStatsCard: {
+    flexDirection: "row",
+    backgroundColor: "#161618",
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "#2A2A2E",
+  },
+  quickStatItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  quickStatIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  quickStatValue: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
+    fontVariant: ["tabular-nums"],
+  },
+  quickStatLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#606068",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  quickStatDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: "#2A2A2E",
+    alignSelf: "center",
   },
 });
 

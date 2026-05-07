@@ -7,15 +7,22 @@ import {
   onAuthStateChanged,
   signOut,
   deleteUser,
+  browserLocalPersistence,
   type User,
 } from "firebase/auth";
-// @ts-ignore - React Native specific export
-import { getReactNativePersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+
+// React Native persistence — only available on native platforms
+let getReactNativePersistence: any;
+let ReactNativeAsyncStorage: any;
+if (Platform.OS !== "web") {
+  // @ts-ignore - React Native specific export
+  getReactNativePersistence = require("firebase/auth").getReactNativePersistence;
+  ReactNativeAsyncStorage = require("@react-native-async-storage/async-storage").default;
+}
 
 const extra = (Constants.expoConfig?.extra as any) || {};
 
@@ -73,7 +80,9 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+  persistence: Platform.OS === "web"
+    ? browserLocalPersistence
+    : getReactNativePersistence(ReactNativeAsyncStorage),
 });
 
 const db = getFirestore(app);

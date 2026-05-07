@@ -6,19 +6,57 @@ export type TripRowBase = {
   path_json?: string | null;
 };
 
+export type FishEventCondition = {
+  color?: "blank" | "farvet";
+  seaLice?: "ingen" | "faa" | "mange";
+  released?: boolean;
+};
+
+export type FishEvent = {
+  ts: number;       // milliseconds
+  length_cm?: number;
+  condition?: FishEventCondition;
+};
+
+/** Parse fish_events_json til strukturerede events (håndterer begge formater) */
+export function parseFishEvents(fish_events_json?: string | null): FishEvent[] {
+  if (!fish_events_json) return [];
+  try {
+    const parsed = JSON.parse(fish_events_json);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((ev: any): FishEvent => {
+      if (typeof ev === "string") {
+        return { ts: new Date(ev).getTime() };
+      } else if (typeof ev === "number") {
+        return { ts: ev };
+      } else if (ev && typeof ev === "object" && ev.ts) {
+        return {
+          ts: typeof ev.ts === "string" ? new Date(ev.ts).getTime() : ev.ts,
+          length_cm: typeof ev.length_cm === "number" ? ev.length_cm : undefined,
+          condition: ev.condition || undefined,
+        };
+      }
+      return { ts: 0 };
+    }).filter((e: FishEvent) => e.ts > 0);
+  } catch {
+    return [];
+  }
+}
+
 /** Hjælp: antal fisk ud fra events, fallback til fish_count */
 export function getFishEventsCount(t: TripRowBase): number {
   if (t.fish_events_json) {
-    try {
-      const parsed = JSON.parse(t.fish_events_json);
-      if (Array.isArray(parsed)) {
-        return parsed.length;
-      }
-    } catch {
-      // ignorer parse-fejl og brug fish_count
-    }
+    const events = parseFishEvents(t.fish_events_json);
+    if (events.length > 0) return events.length;
   }
   return t.fish_count ?? 0;
+}
+
+/** Hent alle længder fra fish_events_json */
+export function getFishLengths(fish_events_json?: string | null): number[] {
+  return parseFishEvents(fish_events_json)
+    .filter((e) => e.length_cm != null && e.length_cm > 0)
+    .map((e) => e.length_cm!);
 }
 
 // Haversine distance i meter

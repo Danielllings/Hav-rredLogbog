@@ -9,3 +9,5 @@ export { QuickStatsGrid, HeroStatCard, InlineStat } from "./QuickStatsGrid";
 export { TrendChart, BarChart } from "./TrendChart";
 export { AdvancedBarChart } from "./AdvancedBarChart";
 export { MoonPhaseCard } from "./MoonPhaseCard";
+export { SeasonGoalsSection } from "./SeasonGoalsSection";
+export { GoalEditorModal } from "./GoalEditorModal";

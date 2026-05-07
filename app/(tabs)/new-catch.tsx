@@ -11,6 +11,7 @@ import {
   Modal,
   StatusBar,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { addCatch } from "../../lib/catches";
@@ -61,6 +62,7 @@ export default function NewCatch() {
   const [len, setLen] = useState("");
   const [kg, setKg] = useState("");
   const [bait, setBait] = useState("");
+  const [baitPhoto, setBaitPhoto] = useState<string | undefined>();
   const [locationDesc, setLocationDesc] = useState("");
   const [pos, setPos] = useState<LatLng | null>(null);
   const [showPicker, setShowPicker] = useState(false);
@@ -114,6 +116,7 @@ export default function NewCatch() {
     setLen("");
     setKg("");
     setBait("");
+    setBaitPhoto(undefined);
     setLocationDesc("");
     setPos(null);
     setShowPicker(false);
@@ -153,6 +156,49 @@ export default function NewCatch() {
     }
   }
 
+  function pickBaitPhoto() {
+    Alert.alert(t("baitPhoto"), undefined, [
+      {
+        text: t("baitPhotoFromCamera"),
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== "granted") {
+            Alert.alert(t("accessDenied"), t("appNeedsPhotoAccess"));
+            return;
+          }
+          const res = await ImagePicker.launchCameraAsync({
+            quality: 0.8,
+            allowsEditing: true,
+            aspect: [1, 1],
+          });
+          if (!res.canceled && res.assets?.length) {
+            setBaitPhoto(res.assets[0].uri);
+          }
+        },
+      },
+      {
+        text: t("baitPhotoFromGallery"),
+        onPress: async () => {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== "granted") {
+            Alert.alert(t("accessDenied"), t("appNeedsPhotoAccess"));
+            return;
+          }
+          const res = await ImagePicker.launchImageLibraryAsync({
+            quality: 0.8,
+            allowsEditing: true,
+            aspect: [1, 1],
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          });
+          if (!res.canceled && res.assets?.length) {
+            setBaitPhoto(res.assets[0].uri);
+          }
+        },
+      },
+      { text: t("cancel"), style: "cancel" },
+    ]);
+  }
+
   async function save() {
     try {
       if (!photo) {
@@ -174,6 +220,7 @@ export default function NewCatch() {
           ? (parsedWeight as number)
           : null,
         bait: bait.trim() !== "" ? bait : null,
+        bait_photo_uri: baitPhoto ?? null,
         notes: locationDesc.trim() !== "" ? locationDesc : null,
         photo_uri: photo,
         lat: pos?.latitude ?? null,
@@ -465,6 +512,38 @@ export default function NewCatch() {
           delay={300}
         />
 
+        {/* AGN-FOTO */}
+        <Animated.View entering={FadeInUp.delay(350).duration(400).springify()}>
+          <GlassCard style={styles.baitPhotoCard}>
+            <Text style={styles.sectionLabel}>{t("baitPhoto")}</Text>
+            {baitPhoto ? (
+              <View style={styles.baitPhotoPreview}>
+                <Image source={{ uri: baitPhoto }} style={styles.baitPhotoImage} />
+                <View style={styles.baitPhotoActions}>
+                  <Pressable style={styles.baitPhotoBtn} onPress={pickBaitPhoto}>
+                    <Ionicons name="camera-outline" size={16} color={APPLE.accent} />
+                    <Text style={styles.baitPhotoBtnText}>{t("changeBaitPhoto")}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.baitPhotoBtn, styles.baitPhotoRemoveBtn]}
+                    onPress={() => setBaitPhoto(undefined)}
+                  >
+                    <Ionicons name="close-circle-outline" size={16} color="#FF3B30" />
+                    <Text style={[styles.baitPhotoBtnText, { color: "#FF3B30" }]}>
+                      {t("removeBaitPhoto")}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable style={styles.baitPhotoPlaceholder} onPress={pickBaitPhoto}>
+                <Ionicons name="camera-outline" size={24} color={APPLE.accent} />
+                <Text style={styles.baitPhotoPlaceholderText}>{t("addBaitPhoto")}</Text>
+              </Pressable>
+            )}
+          </GlassCard>
+        </Animated.View>
+
         {/* SPOT SELECTOR */}
         <Animated.View entering={FadeInUp.delay(400).duration(400).springify()}>
           <GlassCard style={styles.locationCard}>
@@ -599,6 +678,61 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "500",
     flex: 1,
+  },
+
+  // Bait photo
+  baitPhotoCard: {
+    marginBottom: 12,
+  },
+  baitPhotoPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  baitPhotoImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: APPLE.glass,
+  },
+  baitPhotoActions: {
+    flex: 1,
+    gap: 8,
+  },
+  baitPhotoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: APPLE.accentMuted,
+    alignSelf: "flex-start",
+  },
+  baitPhotoRemoveBtn: {
+    backgroundColor: "rgba(255, 59, 48, 0.12)",
+  },
+  baitPhotoBtnText: {
+    color: APPLE.accent,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  baitPhotoPlaceholder: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: APPLE.glass,
+    borderRadius: 14,
+    height: 56,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: APPLE.glassBorder,
+    borderStyle: "dashed",
+  },
+  baitPhotoPlaceholderText: {
+    color: APPLE.accent,
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   // Location card

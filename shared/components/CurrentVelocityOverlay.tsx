@@ -6,9 +6,9 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { StyleSheet, View, Text, Pressable, ActivityIndicator } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import Constants from "expo-constants";
 import { ForecastSlider, getForecastValue } from "./ForecastSlider";
 import { useTheme } from "../../lib/theme";
+import { fetchCurrentGrid } from "../../lib/openMeteoGrid";
 
 interface Props {
   visible: boolean;
@@ -16,10 +16,8 @@ interface Props {
   initialLat?: number;
   initialLng?: number;
   initialZoom?: number;
+  language?: "da" | "en";
 }
-
-const extra = (Constants.expoConfig?.extra as any) || {};
-const DMI_EDR_BASE_URL = (extra.dmiEdrUrl as string | undefined)?.replace(/\/$/, "") || "";
 
 // Convert CoverageJSON to leaflet-velocity format
 function coverageJsonToVelocityData(coverageJson: any): any[] | null {
@@ -82,8 +80,8 @@ function coverageJsonToVelocityData(coverageJson: any): any[] | null {
 
     // Reorganize data for leaflet-velocity
     // leaflet-velocity expects: row-major, north to south, west to east
-    const uReorganized: number[] = [];
-    const vReorganized: number[] = [];
+    const uReorganized: (number | null)[] = [];
+    const vReorganized: (number | null)[] = [];
 
     for (let j = 0; j < ny; j++) {
       // If y is increasing (south-to-north), reverse the row index
@@ -93,9 +91,9 @@ function coverageJsonToVelocityData(coverageJson: any): any[] | null {
         const idx = srcJ * nx + i;
         const u = uData[idx];
         const v = vData[idx];
-        // Replace null/NaN with 0 (land areas)
-        uReorganized.push(u === null || u === undefined || isNaN(u) ? 0 : u);
-        vReorganized.push(v === null || v === undefined || isNaN(v) ? 0 : v);
+        // Keep null for land areas so leaflet-velocity skips them
+        uReorganized.push(u == null || isNaN(u as number) ? null : u);
+        vReorganized.push(v == null || isNaN(v as number) ? null : v);
       }
     }
 
@@ -149,6 +147,7 @@ export function CurrentVelocityOverlay({
   initialLat = 55.5,
   initialLng = 11.0,
   initialZoom = 6,
+  language = "da",
 }: Props) {
   const { theme } = useTheme();
   const webViewRef = useRef<WebView>(null);
@@ -160,62 +159,31 @@ export function CurrentVelocityOverlay({
   // Theme color for cursor and UI elements
   const accentColor = theme.primary;
 
-  // Fetch current data from DMI EDR API
+  // Fetch current data from Open-Meteo Marine API
   const fetchCurrentData = useCallback(async (hourIndex: number) => {
-    if (!DMI_EDR_BASE_URL) {
-      setError("DMI API ikke konfigureret");
-      setLoading(false);
-      return;
-    }
-
+    const datetime = hourIndex > 0 ? getForecastValue("hourly", hourIndex, 168) : undefined;
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch a larger area covering Danish waters
-      const bbox = "7.5,54.0,16.0,58.5";
+      const grid = await fetchCurrentGrid(
+        { minLat: 54.0, maxLat: 58.5, minLng: 7.5, maxLng: 16.0 },
+        20,
+        datetime
+      );
 
-      // Use selected forecast time
-      const datetime = getForecastValue("hourly", hourIndex) || new Date().toISOString();
-
-      // Fetch from primary DKSS collection only (dkss_nsbs has best coverage)
-      const collection = "dkss_nsbs";
-      const allData: any[] = [];
-      const query = `/collections/${collection}/cube?bbox=${bbox}&parameter-name=current-u,current-v&datetime=${datetime}/${datetime}&crs=crs84&f=CoverageJSON`;
-      const proxyUrl = `${DMI_EDR_BASE_URL}?target=${encodeURIComponent(query)}`;
-
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-        const response = await fetch(proxyUrl, {
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const json = await response.json();
-          const converted = coverageJsonToVelocityData(json);
-          if (converted) {
-            allData.push(...converted);
-          }
+      if (grid) {
+        const converted = coverageJsonToVelocityData(grid);
+        if (converted && converted.length >= 2) {
+          setVelocityData(converted.slice(0, 2));
         } else {
-          const text = await response.text();
-          console.warn(`${collection} error response:`, text.substring(0, 200));
+          setError(language === "da" ? "Ingen str\u00f8mdata tilg\u00e6ngelig" : "No current data available");
         }
-      } catch (e) {
-        console.warn(`Failed to fetch ${collection}:`, e);
-      }
-
-      if (allData.length > 0) {
-        // Merge data from both collections (take first valid set)
-        setVelocityData(allData.slice(0, 2));
       } else {
-        setError("Ingen strømdata tilgængelig");
+        setError(language === "da" ? "Ingen str\u00f8mdata tilg\u00e6ngelig" : "No current data available");
       }
     } catch (e) {
-      setError("Fejl ved hentning af data");
+      setError(language === "da" ? "Fejl ved hentning af data" : "Error fetching data");
       console.error(e);
     } finally {
       setLoading(false);
@@ -271,7 +239,7 @@ export function CurrentVelocityOverlay({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Havstrøm</title>
+  <title>${language === "da" ? "Havstrøm" : "Ocean current"}</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -430,7 +398,7 @@ export function CurrentVelocityOverlay({
   <div id="map"></div>
   <div id="loading" class="loading-overlay">
     <div class="spinner"></div>
-    <div>Indlæser havstrøm...</div>
+    <div>${language === "da" ? "Indlæser havstrøm..." : "Loading ocean current..."}</div>
   </div>
 
   <!-- Center crosshair -->
@@ -511,7 +479,7 @@ export function CurrentVelocityOverlay({
       loadingEl.style.display = 'none';
 
       if (!data || data.length < 2) {
-        loadingEl.innerHTML = '<div style="color:#ff6b6b;">Ingen data tilgængelig</div>';
+        loadingEl.innerHTML = '<div style="color:#ff6b6b;">${language === "da" ? "Ingen data tilgængelig" : "No data available"}</div>';
         loadingEl.style.display = 'block';
         return;
       }
@@ -521,19 +489,19 @@ export function CurrentVelocityOverlay({
         map.removeLayer(velocityLayer);
       }
 
-      // Create velocity layer with high precision settings
+      // Create velocity layer
       velocityLayer = L.velocityLayer({
         displayValues: false,
         data: data,
         minVelocity: 0,
-        maxVelocity: 0.8,             // Max current speed in m/s
-        velocityScale: 0.015,         // Particle speed (higher = faster particles)
-        particleAge: 50,              // Shorter life = more responsive
-        lineWidth: 1.2,               // Thinner lines for precision
-        particleMultiplier: 1/100,    // More particles for detail
-        frameRate: 30,                // Higher FPS for smooth animation
+        maxVelocity: 0.8,
+        velocityScale: 0.008,
+        particleAge: 40,
+        lineWidth: 1.2,
+        particleMultiplier: 1/120,
+        frameRate: 25,
         colorScale: colorScale,
-        opacity: 0.95
+        opacity: 0.92
       });
 
       velocityLayer.addTo(map);
@@ -605,33 +573,32 @@ export function CurrentVelocityOverlay({
       const xFrac = xPos - x0;
       const yFrac = yPos - y0;
 
-      // Get u values at corners
-      const u00 = currentData.uData[y0 * nx + x0] || 0;
-      const u01 = currentData.uData[y0 * nx + x1] || 0;
-      const u10 = currentData.uData[y1 * nx + x0] || 0;
-      const u11 = currentData.uData[y1 * nx + x1] || 0;
+      // Get u values at corners (null = land)
+      const u00 = currentData.uData[y0 * nx + x0];
+      const u01 = currentData.uData[y0 * nx + x1];
+      const u10 = currentData.uData[y1 * nx + x0];
+      const u11 = currentData.uData[y1 * nx + x1];
 
       // Get v values at corners
-      const v00 = currentData.vData[y0 * nx + x0] || 0;
-      const v01 = currentData.vData[y0 * nx + x1] || 0;
-      const v10 = currentData.vData[y1 * nx + x0] || 0;
-      const v11 = currentData.vData[y1 * nx + x1] || 0;
+      const v00 = currentData.vData[y0 * nx + x0];
+      const v01 = currentData.vData[y0 * nx + x1];
+      const v10 = currentData.vData[y1 * nx + x0];
+      const v11 = currentData.vData[y1 * nx + x1];
 
-      // Bilinear interpolation for u
-      const u0 = u00 * (1 - xFrac) + u01 * xFrac;
-      const u1 = u10 * (1 - xFrac) + u11 * xFrac;
-      const u = u0 * (1 - yFrac) + u1 * yFrac;
+      // Weighted interpolation — use only valid (non-null) corners
+      // Require at least 3 valid corners to avoid showing data deep on land
+      const corners = [
+        { u: u00, v: v00, w: (1 - xFrac) * (1 - yFrac) },
+        { u: u01, v: v01, w: xFrac * (1 - yFrac) },
+        { u: u10, v: v10, w: (1 - xFrac) * yFrac },
+        { u: u11, v: v11, w: xFrac * yFrac },
+      ];
+      const valid = corners.filter(c => c.u != null && c.v != null && !isNaN(c.u) && !isNaN(c.v));
+      if (valid.length < 3) return null;
 
-      // Bilinear interpolation for v
-      const v0 = v00 * (1 - xFrac) + v01 * xFrac;
-      const v1 = v10 * (1 - xFrac) + v11 * xFrac;
-      const v = v0 * (1 - yFrac) + v1 * yFrac;
-
-      // Check if this is land (all corners are 0)
-      if (u00 === 0 && u01 === 0 && u10 === 0 && u11 === 0 &&
-          v00 === 0 && v01 === 0 && v10 === 0 && v11 === 0) {
-        return null;
-      }
+      const totalW = valid.reduce((s, c) => s + c.w, 0);
+      const u = valid.reduce((s, c) => s + c.u * c.w, 0) / totalW;
+      const v = valid.reduce((s, c) => s + c.v * c.w, 0) / totalW;
 
       // Calculate speed and direction
       const speed = Math.sqrt(u * u + v * v);
@@ -644,7 +611,7 @@ export function CurrentVelocityOverlay({
     function updateCenterSpeed() {
       if (!currentData) {
         speedValueEl.textContent = '--';
-        speedDirEl.textContent = 'ingen data';
+        speedDirEl.textContent = '${language === "da" ? "ingen data" : "no data"}';
         return;
       }
 
@@ -654,30 +621,30 @@ export function CurrentVelocityOverlay({
       // Debug: Check if we're within bounds
       if (!h || h.lo1 === undefined) {
         speedValueEl.textContent = '--';
-        speedDirEl.textContent = 'header fejl';
+        speedDirEl.textContent = '${language === "da" ? "header fejl" : "header error"}';
         return;
       }
 
       const result = getSpeedAt(center.lat, center.lng);
 
       if (result && result.speed > 0.001) {
-        const dirNames = ['N', 'NØ', 'Ø', 'SØ', 'S', 'SV', 'V', 'NV'];
+        const dirNames = ${language === "da" ? "['N', 'NØ', 'Ø', 'SØ', 'S', 'SV', 'V', 'NV']" : "['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']"};
         const dirName = dirNames[Math.round(result.dir / 45) % 8];
 
         speedValueEl.textContent = result.speed.toFixed(2);
-        speedDirEl.textContent = 'mod ' + dirName + ' (' + Math.round(result.dir) + '°)';
+        speedDirEl.textContent = '${language === "da" ? "mod " : "towards "}' + dirName + ' (' + Math.round(result.dir) + '°)';
       } else if (result === null) {
         // Check if outside bounds
         if (center.lng < h.lo1 || center.lng > h.lo2 || center.lat < h.la2 || center.lat > h.la1) {
           speedValueEl.textContent = '--';
-          speedDirEl.textContent = 'uden for område';
+          speedDirEl.textContent = '${language === "da" ? "uden for område" : "outside area"}';
         } else {
           speedValueEl.textContent = '--';
-          speedDirEl.textContent = 'land';
+          speedDirEl.textContent = '${language === "da" ? "land" : "land"}';
         }
       } else {
         speedValueEl.textContent = '0.00';
-        speedDirEl.textContent = 'stille';
+        speedDirEl.textContent = '${language === "da" ? "stille" : "calm"}';
       }
     }
 
@@ -716,7 +683,7 @@ export function CurrentVelocityOverlay({
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={accentColor} />
-          <Text style={styles.loadingText}>Henter strømdata fra DMI...</Text>
+          <Text style={styles.loadingText}>{language === "da" ? "Henter str\u00f8mdata fra DMI..." : "Fetching current data..."}</Text>
         </View>
       )}
 
@@ -727,10 +694,10 @@ export function CurrentVelocityOverlay({
           <Text style={styles.errorText}>{error}</Text>
           <View style={styles.errorButtons}>
             <Pressable style={styles.retryButton} onPress={() => fetchCurrentData(forecastHourIndex)}>
-              <Text style={styles.retryButtonText}>Prøv igen</Text>
+              <Text style={styles.retryButtonText}>{language === "da" ? "Prøv igen" : "Try again"}</Text>
             </Pressable>
             <Pressable style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeButtonText}>Luk</Text>
+              <Text style={styles.closeButtonText}>{language === "da" ? "Luk" : "Close"}</Text>
             </Pressable>
           </View>
         </View>
@@ -742,6 +709,8 @@ export function CurrentVelocityOverlay({
         value={forecastHourIndex}
         onValueChange={setForecastHourIndex}
         color={accentColor}
+        language={language}
+        maxHours={168}
       />
 
     </View>
